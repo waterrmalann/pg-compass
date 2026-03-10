@@ -4,15 +4,14 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "dev:desktop": "turbo run dev --filter desktop",
+    "dev:desktop": "turbo run dev --filter @pg-compass/desktop",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
-    "turbo": "^2.8.14",
-    "typescript": "5.9.2"
+    "turbo": "^2.8.14"
   },
   "packageManager": "pnpm@9.0.0",
   "pnpm": {

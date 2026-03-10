@@ -1,4 +1,5 @@
-import { type PointerEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Database, Plus, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -105,7 +106,7 @@ export function Sidebar() {
     setSidebarWidth(clampSidebarWidth(persistedWidth));
   }, [loading, settings.appearance.sidebarWidth]);
 
-  function handleResizeStart(event: PointerEvent<HTMLButtonElement>) {
+  function handleResizeStart(event: ReactPointerEvent<HTMLButtonElement>) {
     event.preventDefault();
     setIsResizing(true);
   }

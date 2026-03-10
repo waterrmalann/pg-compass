@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, LayoutList, Table2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SqlEditor, type CompletionSchema } from '@/components/sql-editor/SqlEditor';
 import { DataPagination } from '@/components/workspace/table-viewer/data-pagination';
 import { TableDataView } from '@/components/workspace/table-viewer/table-data-view';
 import { CardDataView } from '@/components/workspace/table-viewer/card-data-view';
+import { useWorkspace } from '@/hooks/use-workspace';
 import type { ColumnInfo } from '@/shared/types/table-data';
 
 type ViewMode = 'table' | 'card';
@@ -28,6 +29,7 @@ interface DataTabProps {
 }
 
 export function DataTab({ connectionId, schema, table }: Readonly<DataTabProps>) {
+  const { schemaCache } = useWorkspace();
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -37,6 +39,33 @@ export function DataTab({ connectionId, schema, table }: Readonly<DataTabProps>)
   const [pendingWhere, setPendingWhere] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
+
+  const completionSchema = useMemo<CompletionSchema>(() => {
+    const schemas: string[] = [];
+    const tables: Record<string, string[]> = {};
+    const cols: Record<string, { name: string; type?: string }[]> = {};
+
+    for (const [connId, dbSchemas] of Object.entries(schemaCache)) {
+      if (connId !== connectionId) continue;
+      for (const s of dbSchemas) {
+        schemas.push(s.name);
+        tables[s.name] = s.tables;
+      }
+    }
+
+    if (columns.length > 0) {
+      const key = `${schema}.${table}`;
+      cols[key] = columns.map((c) => ({ name: c.name, type: c.dataType }));
+    }
+
+    return {
+      schemas,
+      tables,
+      columns: cols,
+      defaultTable: table,
+      defaultSchema: schema,
+    };
+  }, [schemaCache, connectionId, schema, table, columns]);
 
   const fetchRows = useCallback(
     async (p: number, ps: number, where: string) => {
@@ -90,12 +119,15 @@ export function DataTab({ connectionId, schema, table }: Readonly<DataTabProps>)
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <form onSubmit={handleWhereSubmit} className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="WHERE clause — e.g. id > 10 AND status = 'active'"
-              className="h-8 pl-7 font-mono text-xs"
+            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+            <SqlEditor
               value={pendingWhere}
-              onChange={(e) => setPendingWhere(e.target.value)}
+              onChange={setPendingWhere}
+              placeholder="WHERE clause — e.g. id > 10 AND status = 'active'"
+              schema={completionSchema}
+              singleLine
+              minHeight="32px"
+              className="h-8 pl-5"
             />
           </div>
           <Button type="submit" variant="outline" size="sm" className="h-8 text-xs">
