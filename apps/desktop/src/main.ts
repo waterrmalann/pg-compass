@@ -12,10 +12,41 @@ if (started) {
   app.quit();
 }
 
+app.commandLine.appendSwitch(
+  'disable-features',
+  // No Chromecast routing, no Google Translate, no cloud autofill,
+  // no media-key interception, no Windows occlusion-check CPU overhead,
+  // no BFCache memory overhead (SPA — no navigation history to cache).
+  'MediaRouter,TranslateUI,AutofillServerCommunication,HardwareMediaKeyHandling,CalculateNativeWinOcclusion,BackForwardCache',
+);
+// No auto-updating Chromium components at runtime.
+app.commandLine.appendSwitch('disable-component-update');
+// No domain reliability telemetry pings.
+app.commandLine.appendSwitch('disable-domain-reliability');
+// Disables all background network activity: translate, safe-browsing,
+// autofill-server, reporting — none of which apply to a local DB tool.
+app.commandLine.appendSwitch('disable-background-networking');
+// Keep the renderer at full priority when the window is backgrounded.
+// Critical for long-running queries the user starts then alt-tabs away from.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+// Prevent JS timer throttling in background windows (same reason as above).
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+// Remove the IPC message rate-limiter. Large result sets stream many rapid
+// main→renderer IPC messages; flooding protection adds latency for no gain.
+app.commandLine.appendSwitch('disable-ipc-flooding-protection');
+// Skip Chromium first-run initialization tasks.
+app.commandLine.appendSwitch('no-first-run');
+// No Chrome profile sync.
+app.commandLine.appendSwitch('disable-sync');
+
+// Cache settings to avoid reading from disk on every keystroke.
+let cachedSettings = getSettings();
+
 // Register IPC handlers before window creation.
 registerConnectionHandlers();
 registerTableDataHandlers();
 registerSettingsHandlers((settings) => {
+  cachedSettings = settings;
   if (!settings.general.enableDevTools) {
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.webContents.isDevToolsOpened()) {
@@ -60,7 +91,7 @@ const createWindow = () => {
     }
 
     event.preventDefault();
-    const devToolsEnabled = getSettings().general.enableDevTools;
+    const devToolsEnabled = cachedSettings.general.enableDevTools;
 
     if (!devToolsEnabled) {
       return;
