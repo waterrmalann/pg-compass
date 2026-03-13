@@ -120,7 +120,7 @@ export function QueryTab({ connectionId, schema, table }: Readonly<QueryTabProps
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Editor area */}
-      <div className="flex flex-col gap-2 border-b border-border p-3">
+      <div className="flex flex-col gap-2 border-b border-border p-3" data-query-editor>
         <SqlEditor
           value={sql}
           onChange={setSql}

@@ -182,7 +182,10 @@ export function useCodemirror(
       ? keymap.of([
           {
             key: 'Enter',
-            run: () => true, // consume Enter to prevent newlines, but autocomplete still works
+            run: () => {
+              onSubmitRef.current?.();
+              return true;
+            },
           },
         ])
       : [];

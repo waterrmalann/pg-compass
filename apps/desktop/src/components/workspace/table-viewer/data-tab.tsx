@@ -123,6 +123,10 @@ export function DataTab({ connectionId, schema, table }: Readonly<DataTabProps>)
             <SqlEditor
               value={pendingWhere}
               onChange={setPendingWhere}
+              onSubmit={() => {
+                setPage(1);
+                setWhereClause(pendingWhere);
+              }}
               placeholder="WHERE clause — e.g. id > 10 AND status = 'active'"
               schema={completionSchema}
               singleLine

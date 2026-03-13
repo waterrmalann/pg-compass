@@ -6,6 +6,7 @@ import { ConnectionChannels } from './shared/types/connection';
 import { SettingsChannels } from './shared/types/settings';
 import { TableDataChannels } from './shared/types/table-data';
 import { HelpChannels } from './shared/constants/help';
+import { WorkspaceChannels } from './shared/constants/workspace';
 import type {
   ConnectionConfig,
   ConnectionInput,
@@ -101,7 +102,28 @@ const helpApi = {
   },
 };
 
+const workspaceApi = {
+  onCloseTab: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(WorkspaceChannels.CLOSE_TAB, listener);
+    return () => { ipcRenderer.removeListener(WorkspaceChannels.CLOSE_TAB, listener); };
+  },
+
+  onNextTab: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(WorkspaceChannels.NEXT_TAB, listener);
+    return () => { ipcRenderer.removeListener(WorkspaceChannels.NEXT_TAB, listener); };
+  },
+
+  onPrevTab: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(WorkspaceChannels.PREV_TAB, listener);
+    return () => { ipcRenderer.removeListener(WorkspaceChannels.PREV_TAB, listener); };
+  },
+};
+
 contextBridge.exposeInMainWorld('connectionApi', connectionApi);
 contextBridge.exposeInMainWorld('settingsApi', settingsApi);
 contextBridge.exposeInMainWorld('tableDataApi', tableDataApi);
 contextBridge.exposeInMainWorld('helpApi', helpApi);
+contextBridge.exposeInMainWorld('workspaceApi', workspaceApi);

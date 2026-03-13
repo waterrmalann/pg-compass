@@ -5,6 +5,7 @@ import {
   GITHUB_REPO_URL,
   HelpChannels,
 } from '../shared/constants/help';
+import { WorkspaceChannels } from '../shared/constants/workspace';
 
 function sendToFocusedWindow(channel: string) {
   const win = BrowserWindow.getFocusedWindow();
@@ -68,10 +69,15 @@ export function buildAppMenu(): Menu {
     {
       label: 'Window',
       submenu: [
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => sendToFocusedWindow(WorkspaceChannels.CLOSE_TAB),
+        },
         { role: 'minimize' },
         ...(isMac
           ? [{ type: 'separator' as const }, { role: 'front' as const }]
-          : [{ role: 'close' as const }]),
+          : []),
       ],
     },
 

@@ -7,6 +7,7 @@ import { registerTableDataHandlers } from './main/table-data-ipc';
 import { destroyAllPools } from './main/pg-utils';
 import { getSettings } from './main/settings-store';
 import { buildAppMenu } from './main/app-menu';
+import { WorkspaceChannels } from './shared/constants/workspace';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -87,21 +88,29 @@ const createWindow = () => {
   }
 
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (!isDevToolsShortcut(input)) {
+    if (isDevToolsShortcut(input)) {
+      event.preventDefault();
+      const devToolsEnabled = cachedSettings.general.enableDevTools;
+
+      if (!devToolsEnabled) {
+        return;
+      }
+
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+      }
       return;
     }
 
-    event.preventDefault();
-    const devToolsEnabled = cachedSettings.general.enableDevTools;
-
-    if (!devToolsEnabled) {
-      return;
-    }
-
-    if (mainWindow.webContents.isDevToolsOpened()) {
-      mainWindow.webContents.closeDevTools();
-    } else {
-      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // Ctrl+Tab / Ctrl+Shift+Tab: switch between workspace tabs
+    if (input.type === 'keyDown' && input.control && input.key === 'Tab') {
+      event.preventDefault();
+      const channel = input.shift
+        ? WorkspaceChannels.PREV_TAB
+        : WorkspaceChannels.NEXT_TAB;
+      mainWindow.webContents.send(channel);
     }
   });
 };
