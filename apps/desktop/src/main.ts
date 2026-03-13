@@ -1,4 +1,4 @@
-import { app, BrowserWindow, type Input } from 'electron';
+import { app, BrowserWindow, Menu, type Input } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { registerConnectionHandlers } from './main/connection-ipc';
@@ -6,6 +6,7 @@ import { registerSettingsHandlers } from './main/settings-ipc';
 import { registerTableDataHandlers } from './main/table-data-ipc';
 import { destroyAllPools } from './main/pg-utils';
 import { getSettings } from './main/settings-store';
+import { buildAppMenu } from './main/app-menu';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -108,7 +109,10 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+  Menu.setApplicationMenu(buildAppMenu());
+  createWindow();
+});
 
 app.on('will-quit', () => {
   destroyAllPools();

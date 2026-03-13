@@ -51,10 +51,16 @@ interface TableDataApi {
   executeQuery(params: ExecuteQueryParams): Promise<IpcResult<TableRowsResult>>;
 }
 
+interface HelpApi {
+  onShowLicense(callback: () => void): () => void;
+  onShowAbout(callback: () => void): () => void;
+}
+
 declare global {
   interface Window {
     connectionApi: ConnectionApi;
     settingsApi: SettingsApi;
     tableDataApi: TableDataApi;
+    helpApi: HelpApi;
   }
 }
