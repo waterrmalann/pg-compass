@@ -29,7 +29,7 @@ interface PgTableStatsRow {
   size_on_disk: string | null;
 }
 
-function parseEstimatedRowCount(value: number | string | null): number | null {
+export function parseEstimatedRowCount(value: number | string | null): number | null {
   if (value == null) {
     return null;
   }
@@ -46,7 +46,7 @@ interface PgSchemaRow {
   schema_name: string;
 }
 
-function getSchemaFilterSql(
+export function getSchemaFilterSql(
   includeInternalSchemas: boolean,
   column: string,
 ): string {

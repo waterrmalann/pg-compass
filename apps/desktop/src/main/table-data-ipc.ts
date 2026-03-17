@@ -22,7 +22,7 @@ import { quoteIdent, withPoolClient } from './pg-utils';
  * a JS array, depending on the `pg` type-parser configuration.  This helper
  * normalises the value to a proper string array.
  */
-function ensureArray(value: unknown): string[] {
+export function ensureArray(value: unknown): string[] {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') {
     const inner = value.replace(/^\{|\}$/g, '');
@@ -301,7 +301,7 @@ async function getConstraints(params: TableMetaParams): Promise<ConstraintInfo[]
 
 const ALLOWED_QUERY_PREFIXES = ['select', 'with'];
 
-function isReadOnlyQuery(sql: string): boolean {
+export function isReadOnlyQuery(sql: string): boolean {
   const trimmed = sql.trim().toLowerCase();
   return ALLOWED_QUERY_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
 }
