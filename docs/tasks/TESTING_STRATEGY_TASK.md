@@ -16,15 +16,11 @@ apps/desktop/
 ├── vitest.config.ts              # Multi-project vitest config
 ├── playwright.config.ts          # Playwright E2E config
 ├── tests/
-│   ├── setup/
-│   │   └── main-setup.ts         # Shared mock helpers (for reference)
-│   ├── mocks/
-│   │   └── electron-store.ts     # In-memory electron-store mock reference
 │   ├── unit/
 │   │   ├── main/
 │   │   │   ├── pg-utils.test.ts        (14 tests)
 │   │   │   ├── connection-store.test.ts (18 tests)
-│   │   │   ├── settings-store.test.ts   (18 tests)
+│   │   │   ├── settings-store.test.ts   (9 tests)
 │   │   │   ├── connection-ipc.test.ts   (24 tests)
 │   │   │   └── table-data-ipc.test.ts   (26 tests)
 │   │   └── preload/
@@ -34,13 +30,13 @@ apps/desktop/
 │       └── app-launch.spec.ts    # App smoke tests
 ```
 
-### Test Coverage (115 unit tests)
+### Test Coverage (106 unit tests)
 
 | Module | Tests | Coverage Areas |
 |--------|-------|----------------|
 | `pg-utils.ts` | 14 | `buildPgConfig` (URI/fields/SSL), `quoteIdent` escaping, pool management |
 | `connection-store.ts` | 18 | CRUD operations, encryption bypass in tests, URI mode |
-| `settings-store.ts` | 18 | Get/update settings, partial patches, persistence |
+| `settings-store.ts` | 9 | Get/update settings, partial patches, persistence |
 | `connection-ipc.ts` | 24 | Handler registration, `parseEstimatedRowCount`, `getSchemaFilterSql`, IPC responses |
 | `table-data-ipc.ts` | 26 | `ensureArray`, `isReadOnlyQuery`, handler registration, read-only guard |
 | `preload.ts` | 15 | `contextBridge` exposure, all API channel forwarding |
@@ -63,6 +59,8 @@ The following private helpers were exported to enable direct unit testing:
 - `isReadOnlyQuery` in `table-data-ipc.ts`
 
 ### Mocking Strategy
+Each test file defines its own `vi.mock()` calls. `vi.hoisted()` is used for mock state variables (e.g., `storeData`) that need to exist inside hoisted `vi.mock()` factory closures.
+
 - `electron`: Mocked via `vi.mock('electron', ...)` with `vi.hoisted()` for stable references
 - `electron-store`: Mocked with an in-memory `Map`-based implementation via `vi.hoisted()`
 - `pg`: Mocked with `vi.fn()` constructors to prevent actual DB connections
