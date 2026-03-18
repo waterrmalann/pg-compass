@@ -9,11 +9,10 @@ import { TableListViewer } from '@/components/workspace/table-list-viewer';
 import { TableDetailsViewer } from '@/components/workspace/table-details-viewer';
 import { ViewListViewer } from '@/components/workspace/view-list-viewer';
 import { ViewDetailsViewer } from '@/components/workspace/view-details-viewer';
+import type { WorkspaceTab, WorkspaceTabView } from '@/shared/types/workspace';
 
 export function Workspace() {
   const { tabs, activeTabId, setActiveTab, closeTab } = useWorkspace();
-
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
 
   // Stable refs to avoid stale closures in IPC callbacks
   const tabsRef = useRef(tabs);
@@ -83,7 +82,11 @@ export function Workspace() {
         onSelectTab={setActiveTab}
         onCloseTab={closeTab}
       />
-      <WorkspaceContent activeTab={activeTab} />
+      {tabs.length === 0 ? (
+        <WelcomeScreen />
+      ) : (
+        <WorkspaceTabPanels tabs={tabs} activeTabId={activeTabId} />
+      )}
     </main>
   );
 }
@@ -147,54 +150,86 @@ function WorkspaceTabBar({
   );
 }
 
-function WorkspaceContent({
-  activeTab,
-}: Readonly<{
-  activeTab: ReturnType<typeof useWorkspace>['tabs'][number] | null;
-}>) {
-  if (!activeTab) {
-    return (
-      <div className="flex flex-1 items-center justify-center bg-background">
-        <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-          <div className="rounded-xl bg-muted p-4">
-            <Compass className="size-10 text-muted-foreground" />
-          </div>
-          <div className="space-y-1.5">
-            <h2 className="text-lg font-semibold text-foreground">
-              Welcome to PG Compass
-            </h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Connect to a PostgreSQL database using the sidebar to start
-              exploring your schemas and tables.
-            </p>
-          </div>
+function WelcomeScreen() {
+  return (
+    <div className="flex flex-1 items-center justify-center bg-background">
+      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+        <div className="rounded-xl bg-muted p-4">
+          <Compass className="size-10 text-muted-foreground" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-semibold text-foreground">
+            Welcome to PG Compass
+          </h2>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Connect to a PostgreSQL database using the sidebar to start
+            exploring your schemas and tables.
+          </p>
         </div>
       </div>
-    );
+    </div>
+  );
+}
+
+function WorkspaceTabPanels({
+  tabs,
+  activeTabId,
+}: Readonly<{
+  tabs: WorkspaceTab[];
+  activeTabId: string | null;
+}>) {
+  return (
+    <div className="relative flex-1 overflow-hidden">
+      {tabs.map((tab) => (
+        <TabPanel key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
+      ))}
+    </div>
+  );
+}
+
+function TabPanel({
+  tab,
+  isActive,
+}: Readonly<{
+  tab: WorkspaceTab;
+  isActive: boolean;
+}>) {
+  return (
+    <div
+      className={cn(
+        'absolute inset-0',
+        isActive ? 'z-10 visible' : 'z-0 invisible',
+      )}
+      aria-hidden={!isActive}
+    >
+      <TabViewRenderer view={tab.view} />
+    </div>
+  );
+}
+
+function TabViewRenderer({ view }: Readonly<{ view: WorkspaceTabView }>) {
+  if (view.type === 'schema') {
+    return <SchemaViewer path={view.path} />;
   }
 
-  if (activeTab.view.type === 'schema') {
-    return <SchemaViewer path={activeTab.view.path} />;
+  if (view.type === 'schema-list') {
+    return <SchemaListViewer path={view.path} />;
   }
 
-  if (activeTab.view.type === 'schema-list') {
-    return <SchemaListViewer path={activeTab.view.path} />;
+  if (view.type === 'table-list') {
+    return <TableListViewer path={view.path} />;
   }
 
-  if (activeTab.view.type === 'table-list') {
-    return <TableListViewer path={activeTab.view.path} />;
+  if (view.type === 'table-details') {
+    return <TableDetailsViewer path={view.path} />;
   }
 
-  if (activeTab.view.type === 'table-details') {
-    return <TableDetailsViewer path={activeTab.view.path} />;
+  if (view.type === 'view-list') {
+    return <ViewListViewer path={view.path} />;
   }
 
-  if (activeTab.view.type === 'view-list') {
-    return <ViewListViewer path={activeTab.view.path} />;
-  }
-
-  if (activeTab.view.type === 'view-details') {
-    return <ViewDetailsViewer path={activeTab.view.path} />;
+  if (view.type === 'view-details') {
+    return <ViewDetailsViewer path={view.path} />;
   }
 
   return (

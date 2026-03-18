@@ -16,7 +16,7 @@ interface SchemaListViewerProps {
 }
 
 export function SchemaListViewer({ path }: Readonly<SchemaListViewerProps>) {
-  const { schemaCache, refreshSchemaTree, openSchemaViewer, navigateToView } = useWorkspace();
+  const { schemaCache, refreshSchemaTree, openTab, navigateToView } = useWorkspace();
 
   const rows = useMemo(() => schemaCache[path.connectionId] ?? [], [
     schemaCache,
@@ -28,9 +28,9 @@ export function SchemaListViewer({ path }: Readonly<SchemaListViewerProps>) {
   }
 
   function handleOpenSchema(schemaName: string) {
-    openSchemaViewer({
-      ...path,
-      schemaName,
+    openTab({
+      type: 'schema',
+      path: { ...path, schemaName },
     }).catch(() => undefined);
   }
 

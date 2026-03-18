@@ -12,10 +12,6 @@ import { useConnections } from '@/hooks/use-connections';
 import { useSettings } from '@/hooks/use-settings';
 import type { DatabaseSchema } from '@/shared/types/connection';
 import type {
-  DatabaseViewerPath,
-  SchemaViewerPath,
-  TableListViewerPath,
-  ViewListViewerPath,
   WorkspaceTab,
   WorkspaceTabView,
 } from '@/shared/types/workspace';
@@ -26,78 +22,29 @@ interface WorkspaceContextValue {
   schemaCache: Record<string, DatabaseSchema[]>;
   setActiveTab: (id: string) => void;
   closeTab: (id: string) => void;
-  openSchemaListViewer: (path: DatabaseViewerPath, color?: string) => Promise<void>;
-  openSchemaViewer: (path: SchemaViewerPath, color?: string) => Promise<void>;
-  openTableListViewer: (path: TableListViewerPath, color?: string) => Promise<void>;
-  openTableDetailsViewer: (path: TableListViewerPath, color?: string) => Promise<void>;
-  openViewListViewer: (path: ViewListViewerPath, color?: string) => Promise<void>;
-  openViewDetailsViewer: (path: ViewListViewerPath, color?: string) => Promise<void>;
+  openTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
   navigateToView: (view: WorkspaceTabView) => Promise<void>;
   refreshSchemaTree: (connectionId: string, force?: boolean) => Promise<DatabaseSchema[]>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-function buildSchemaTabId(path: SchemaViewerPath): string {
-  return `${path.connectionId}:schema:${path.schemaName}`;
-}
-
-function buildSchemaListTabId(path: DatabaseViewerPath): string {
-  return `${path.connectionId}:schema-list`;
-}
-
-function buildTableListTabId(path: TableListViewerPath): string {
-  return `${path.connectionId}:table-list:${path.schemaName}:${path.tableName}`;
-}
-
-function buildTableDetailsTabId(path: TableListViewerPath): string {
-  return `${path.connectionId}:table-details:${path.schemaName}:${path.tableName}`;
-}
-
-function buildViewListTabId(path: ViewListViewerPath): string {
-  return `${path.connectionId}:view-list:${path.schemaName}:${path.viewName}`;
-}
-
-function buildViewDetailsTabId(path: ViewListViewerPath): string {
-  return `${path.connectionId}:view-details:${path.schemaName}:${path.viewName}`;
-}
-
 function buildTabId(view: WorkspaceTabView): string {
-  if (view.type === 'schema-list') {
-    return buildSchemaListTabId(view.path);
-  }
+  const base = `${view.path.connectionId}:${view.type}`;
 
-  if (view.type === 'schema') {
-    return buildSchemaTabId(view.path);
-  }
+  if (view.type === 'schema-list') return base;
+  if (view.type === 'schema') return `${base}:${view.path.schemaName}`;
+  if (view.type === 'table-list' || view.type === 'table-details')
+    return `${base}:${view.path.schemaName}:${view.path.tableName}`;
 
-  if (view.type === 'table-list') {
-    return buildTableListTabId(view.path);
-  }
-
-  if (view.type === 'table-details') {
-    return buildTableDetailsTabId(view.path);
-  }
-
-  if (view.type === 'view-list') {
-    return buildViewListTabId(view.path);
-  }
-
-  return buildViewDetailsTabId(view.path);
+  // view-list or view-details
+  return `${base}:${view.path.schemaName}:${view.path.viewName}`;
 }
 
 function buildTabTitle(view: WorkspaceTabView): string {
-  if (view.type === 'schema-list') {
-    return view.path.connectionLabel;
-  }
-
-  if (view.type === 'schema') {
-    return view.path.schemaName;
-  }
-
-  if (view.type === 'table-list' || view.type === 'table-details') {
-    return view.path.tableName;
-  }
+  if (view.type === 'schema-list') return view.path.connectionLabel;
+  if (view.type === 'schema') return view.path.schemaName;
+  if (view.type === 'table-list' || view.type === 'table-details') return view.path.tableName;
 
   // view-list or view-details
   return view.path.viewName;
@@ -169,137 +116,14 @@ export function WorkspaceProvider({ children }: Readonly<{ children: ReactNode }
     [],
   );
 
-  const openSchemaViewer = useCallback(
-    async (path: SchemaViewerPath, color?: string) => {
-      await refreshSchemaTree(path.connectionId);
+  const openTab = useCallback(
+    async (view: WorkspaceTabView, color?: string) => {
+      await refreshSchemaTree(view.path.connectionId);
 
-      const nextTab = buildWorkspaceTab(
-        {
-          type: 'schema',
-          path,
-        },
-        color,
-      );
+      const nextTab = buildWorkspaceTab(view, color);
       setTabs((prev) => {
         const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) {
-          return prev;
-        }
-        return [...prev, nextTab];
-      });
-      setActiveTabId(nextTab.id);
-    },
-    [refreshSchemaTree],
-  );
-
-  const openSchemaListViewer = useCallback(
-    async (path: DatabaseViewerPath, color?: string) => {
-      await refreshSchemaTree(path.connectionId);
-
-      const nextTab = buildWorkspaceTab(
-        {
-          type: 'schema-list',
-          path,
-        },
-        color,
-      );
-      setTabs((prev) => {
-        const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) {
-          return prev;
-        }
-        return [...prev, nextTab];
-      });
-      setActiveTabId(nextTab.id);
-    },
-    [refreshSchemaTree],
-  );
-
-  const openTableListViewer = useCallback(
-    async (path: TableListViewerPath, color?: string) => {
-      await refreshSchemaTree(path.connectionId);
-
-      const nextTab = buildWorkspaceTab(
-        {
-          type: 'table-list',
-          path,
-        },
-        color,
-      );
-      setTabs((prev) => {
-        const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) {
-          return prev;
-        }
-        return [...prev, nextTab];
-      });
-      setActiveTabId(nextTab.id);
-    },
-    [refreshSchemaTree],
-  );
-
-  const openTableDetailsViewer = useCallback(
-    async (path: TableListViewerPath, color?: string) => {
-      await refreshSchemaTree(path.connectionId);
-
-      const nextTab = buildWorkspaceTab(
-        {
-          type: 'table-details',
-          path,
-        },
-        color,
-      );
-      setTabs((prev) => {
-        const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) {
-          return prev;
-        }
-        return [...prev, nextTab];
-      });
-      setActiveTabId(nextTab.id);
-    },
-    [refreshSchemaTree],
-  );
-
-  const openViewListViewer = useCallback(
-    async (path: ViewListViewerPath, color?: string) => {
-      await refreshSchemaTree(path.connectionId);
-
-      const nextTab = buildWorkspaceTab(
-        {
-          type: 'view-list',
-          path,
-        },
-        color,
-      );
-      setTabs((prev) => {
-        const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) {
-          return prev;
-        }
-        return [...prev, nextTab];
-      });
-      setActiveTabId(nextTab.id);
-    },
-    [refreshSchemaTree],
-  );
-
-  const openViewDetailsViewer = useCallback(
-    async (path: ViewListViewerPath, color?: string) => {
-      await refreshSchemaTree(path.connectionId);
-
-      const nextTab = buildWorkspaceTab(
-        {
-          type: 'view-details',
-          path,
-        },
-        color,
-      );
-      setTabs((prev) => {
-        const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) {
-          return prev;
-        }
+        if (existing) return prev;
         return [...prev, nextTab];
       });
       setActiveTabId(nextTab.id);
@@ -344,12 +168,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: ReactNode }
       schemaCache,
       setActiveTab,
       closeTab,
-      openSchemaListViewer,
-      openSchemaViewer,
-      openTableListViewer,
-      openTableDetailsViewer,
-      openViewListViewer,
-      openViewDetailsViewer,
+      openTab,
       navigateToView,
       refreshSchemaTree,
     }),
@@ -359,12 +178,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: ReactNode }
       schemaCache,
       setActiveTab,
       closeTab,
-      openSchemaListViewer,
-      openSchemaViewer,
-      openTableListViewer,
-      openTableDetailsViewer,
-      openViewListViewer,
-      openViewDetailsViewer,
+      openTab,
       navigateToView,
       refreshSchemaTree,
     ],
