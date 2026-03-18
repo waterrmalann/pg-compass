@@ -67,7 +67,7 @@ async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
     const countResult = await client.query<{ count: string }>(
       `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`,
     );
-    const totalCount = Number.parseInt(countResult.rows[0].count, 10);
+    const totalCount = Number.parseInt(countResult.rows[0]!.count, 10);
 
     const dataResult = await client.query(
       `SELECT * FROM ${qualifiedTable} ${whereFragment} LIMIT $1 OFFSET $2`,
@@ -322,7 +322,7 @@ async function executeQuery(params: ExecuteQueryParams): Promise<TableRowsResult
       const countResult = await client.query<{ count: string }>(
         `SELECT count(*) AS count FROM (${wrappedSql}) AS __count_subquery`,
       );
-      const totalCount = Number.parseInt(countResult.rows[0].count, 10);
+      const totalCount = Number.parseInt(countResult.rows[0]!.count, 10);
 
       const dataResult = await client.query(
         `SELECT * FROM (${wrappedSql}) AS __data_subquery LIMIT $1 OFFSET $2`,

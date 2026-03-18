@@ -1,4 +1,4 @@
-import { app, BrowserWindow, type Input } from 'electron';
+import { app, BrowserWindow, Menu, type Input } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { registerConnectionHandlers } from './main/connection-ipc';
@@ -6,16 +6,49 @@ import { registerSettingsHandlers } from './main/settings-ipc';
 import { registerTableDataHandlers } from './main/table-data-ipc';
 import { destroyAllPools } from './main/pg-utils';
 import { getSettings } from './main/settings-store';
+import { buildAppMenu } from './main/app-menu';
+import { WorkspaceChannels } from './shared/constants/workspace';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
+app.commandLine.appendSwitch(
+  'disable-features',
+  // No Chromecast routing, no Google Translate, no cloud autofill,
+  // no media-key interception, no Windows occlusion-check CPU overhead,
+  // no BFCache memory overhead (SPA — no navigation history to cache).
+  'MediaRouter,TranslateUI,AutofillServerCommunication,HardwareMediaKeyHandling,CalculateNativeWinOcclusion,BackForwardCache',
+);
+// No auto-updating Chromium components at runtime.
+app.commandLine.appendSwitch('disable-component-update');
+// No domain reliability telemetry pings.
+app.commandLine.appendSwitch('disable-domain-reliability');
+// Disables all background network activity: translate, safe-browsing,
+// autofill-server, reporting — none of which apply to a local DB tool.
+app.commandLine.appendSwitch('disable-background-networking');
+// Keep the renderer at full priority when the window is backgrounded.
+// Critical for long-running queries the user starts then alt-tabs away from.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+// Prevent JS timer throttling in background windows (same reason as above).
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+// Remove the IPC message rate-limiter. Large result sets stream many rapid
+// main→renderer IPC messages; flooding protection adds latency for no gain.
+app.commandLine.appendSwitch('disable-ipc-flooding-protection');
+// Skip Chromium first-run initialization tasks.
+app.commandLine.appendSwitch('no-first-run');
+// No Chrome profile sync.
+app.commandLine.appendSwitch('disable-sync');
+
+// Cache settings to avoid reading from disk on every keystroke.
+let cachedSettings = getSettings();
+
 // Register IPC handlers before window creation.
 registerConnectionHandlers();
 registerTableDataHandlers();
 registerSettingsHandlers((settings) => {
+  cachedSettings = settings;
   if (!settings.general.enableDevTools) {
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.webContents.isDevToolsOpened()) {
@@ -55,21 +88,29 @@ const createWindow = () => {
   }
 
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (!isDevToolsShortcut(input)) {
+    if (isDevToolsShortcut(input)) {
+      event.preventDefault();
+      const devToolsEnabled = cachedSettings.general.enableDevTools;
+
+      if (!devToolsEnabled) {
+        return;
+      }
+
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+      }
       return;
     }
 
-    event.preventDefault();
-    const devToolsEnabled = getSettings().general.enableDevTools;
-
-    if (!devToolsEnabled) {
-      return;
-    }
-
-    if (mainWindow.webContents.isDevToolsOpened()) {
-      mainWindow.webContents.closeDevTools();
-    } else {
-      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // Ctrl+Tab / Ctrl+Shift+Tab: switch between workspace tabs
+    if (input.type === 'keyDown' && input.control && input.key === 'Tab') {
+      event.preventDefault();
+      const channel = input.shift
+        ? WorkspaceChannels.PREV_TAB
+        : WorkspaceChannels.NEXT_TAB;
+      mainWindow.webContents.send(channel);
     }
   });
 };
@@ -77,7 +118,10 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+  Menu.setApplicationMenu(buildAppMenu());
+  createWindow();
+});
 
 app.on('will-quit', () => {
   destroyAllPools();

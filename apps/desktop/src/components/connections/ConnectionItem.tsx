@@ -108,9 +108,7 @@ export function ConnectionItem({ connection, onEdit }: Readonly<ConnectionItemPr
   const {
     schemaCache,
     refreshSchemaTree,
-    openSchemaListViewer,
-    openSchemaViewer,
-    openTableDetailsViewer,
+    openTab,
   } = useWorkspace();
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -167,11 +165,14 @@ export function ConnectionItem({ connection, onEdit }: Readonly<ConnectionItemPr
 
   function handleOpenSchemaViewer(schemaName: string) {
     const connectionLabel = getDatabaseName();
-    openSchemaViewer(
+    openTab(
       {
-        connectionId: connection.id,
-        connectionLabel,
-        schemaName,
+        type: 'schema',
+        path: {
+          connectionId: connection.id,
+          connectionLabel,
+          schemaName,
+        },
       },
       connection.color,
     ).catch(() => undefined);
@@ -179,12 +180,15 @@ export function ConnectionItem({ connection, onEdit }: Readonly<ConnectionItemPr
 
   function handleOpenTableViewer(schemaName: string, tableName: string) {
     const connectionLabel = getDatabaseName();
-    openTableDetailsViewer(
+    openTab(
       {
-        connectionId: connection.id,
-        connectionLabel,
-        schemaName,
-        tableName,
+        type: 'table-details',
+        path: {
+          connectionId: connection.id,
+          connectionLabel,
+          schemaName,
+          tableName,
+        },
       },
       connection.color,
     ).catch(() => undefined);
@@ -244,10 +248,13 @@ export function ConnectionItem({ connection, onEdit }: Readonly<ConnectionItemPr
       setExpanded(true);
     }
 
-    openSchemaListViewer(
+    openTab(
       {
-        connectionId: connection.id,
-        connectionLabel: connection.label,
+        type: 'schema-list',
+        path: {
+          connectionId: connection.id,
+          connectionLabel: connection.label,
+        },
       },
       connection.color,
     ).catch(() => undefined);

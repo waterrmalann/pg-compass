@@ -51,10 +51,23 @@ interface TableDataApi {
   executeQuery(params: ExecuteQueryParams): Promise<IpcResult<TableRowsResult>>;
 }
 
+interface HelpApi {
+  onShowLicense(callback: () => void): () => void;
+  onShowAbout(callback: () => void): () => void;
+}
+
+interface WorkspaceApi {
+  onCloseTab(callback: () => void): () => void;
+  onNextTab(callback: () => void): () => void;
+  onPrevTab(callback: () => void): () => void;
+}
+
 declare global {
   interface Window {
     connectionApi: ConnectionApi;
     settingsApi: SettingsApi;
     tableDataApi: TableDataApi;
+    helpApi: HelpApi;
+    workspaceApi: WorkspaceApi;
   }
 }

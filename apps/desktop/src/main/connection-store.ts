@@ -130,7 +130,8 @@ export function toggleFavourite(
   const index = connections.findIndex((c) => c.id === id);
   if (index === -1) return undefined;
 
-  connections[index].favourite = !connections[index].favourite;
+  const connection = connections[index]!;
+  connection.favourite = !connection.favourite;
   store.set('connections', connections);
-  return connections[index];
+  return connection;
 }

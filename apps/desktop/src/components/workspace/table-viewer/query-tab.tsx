@@ -1,10 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Loader2, Play, Table2, LayoutList } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { SqlEditor, type CompletionSchema } from '@/components/sql-editor/SqlEditor';
 import { DataPagination } from '@/components/workspace/table-viewer/data-pagination';
 import { TableDataView } from '@/components/workspace/table-viewer/table-data-view';
 import { CardDataView } from '@/components/workspace/table-viewer/card-data-view';
+import { useWorkspace } from '@/hooks/use-workspace';
 import type { ColumnInfo } from '@/shared/types/table-data';
 
 type ViewMode = 'table' | 'card';
@@ -27,6 +29,7 @@ interface QueryTabProps {
 }
 
 export function QueryTab({ connectionId, schema, table }: Readonly<QueryTabProps>) {
+  const { schemaCache } = useWorkspace();
   const [sql, setSql] = useState(`SELECT * FROM "${schema}"."${table}" LIMIT 100;`);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -37,6 +40,33 @@ export function QueryTab({ connectionId, schema, table }: Readonly<QueryTabProps
   const [hasRun, setHasRun] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [error, setError] = useState<string | null>(null);
+
+  const completionSchema = useMemo<CompletionSchema>(() => {
+    const schemas: string[] = [];
+    const tables: Record<string, string[]> = {};
+    const cols: Record<string, { name: string; type?: string }[]> = {};
+
+    for (const [connId, dbSchemas] of Object.entries(schemaCache)) {
+      if (connId !== connectionId) continue;
+      for (const s of dbSchemas) {
+        schemas.push(s.name);
+        tables[s.name] = s.tables;
+      }
+    }
+
+    // Add columns from query results if available
+    if (columns.length > 0) {
+      const key = `${schema}.${table}`;
+      cols[key] = columns.map((c) => ({ name: c.name, type: c.dataType }));
+    }
+
+    return {
+      schemas,
+      tables,
+      columns: cols,
+      defaultSchema: schema,
+    };
+  }, [schemaCache, connectionId, schema, table, columns]);
 
   const executeQuery = useCallback(
     async (p: number, ps: number) => {
@@ -87,24 +117,17 @@ export function QueryTab({ connectionId, schema, table }: Readonly<QueryTabProps
     executeQuery(1, ps);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleRun();
-    }
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Editor area */}
-      <div className="flex flex-col gap-2 border-b border-border p-3">
-        <textarea
-          className="min-h-24 w-full resize-y rounded-md border border-input bg-background p-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          placeholder="Write a SELECT query…"
+      <div className="flex flex-col gap-2 border-b border-border p-3" data-query-editor>
+        <SqlEditor
           value={sql}
-          onChange={(e) => setSql(e.target.value)}
-          onKeyDown={handleKeyDown}
-          spellCheck={false}
+          onChange={setSql}
+          onSubmit={handleRun}
+          placeholder="Write a SELECT query…"
+          schema={completionSchema}
+          minHeight="96px"
         />
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">
