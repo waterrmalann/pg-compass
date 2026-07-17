@@ -1,7 +1,7 @@
 {
   "name": "@pg-compass/landing",
   "type": "module",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
