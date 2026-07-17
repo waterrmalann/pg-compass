@@ -88,7 +88,8 @@ export function ConnectionItem({
 
   const selection = deriveActiveSelection(tabs, activeTabId);
   const isConnectionActive = selection?.connectionId === connection.id;
-  const isConnectionLeaf = isConnectionActive && selection?.kind === "connection";
+  const isConnectionLeaf =
+    isConnectionActive && selection?.kind === "connection";
   // Only project the selection onto this connection's tree when it owns it.
   const treeSelection = isConnectionActive ? selection : null;
 
@@ -318,7 +319,9 @@ export function ConnectionItem({
           <div
             className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary"
             style={
-              connection.color ? { backgroundColor: connection.color } : undefined
+              connection.color
+                ? { backgroundColor: connection.color }
+                : undefined
             }
           />
         )}

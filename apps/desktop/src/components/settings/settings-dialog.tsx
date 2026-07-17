@@ -223,9 +223,7 @@ function AppearanceSettingsPanel() {
         </div>
         <DensitySelector
           value={density}
-          onChange={(next) =>
-            updateSettings({ appearance: { density: next } })
-          }
+          onChange={(next) => updateSettings({ appearance: { density: next } })}
         />
       </div>
     </div>
@@ -245,7 +243,11 @@ function DensitySelector({
   onChange: (value: DensityPreference) => void;
 }>) {
   return (
-    <div role="radiogroup" aria-label="Density" className="flex shrink-0 gap-1.5">
+    <div
+      role="radiogroup"
+      aria-label="Density"
+      className="flex shrink-0 gap-1.5"
+    >
       {DENSITY_OPTIONS.map((option) => {
         const selected = value === option.value;
         return (

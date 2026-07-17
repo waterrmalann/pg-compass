@@ -61,7 +61,10 @@ export function Workspace() {
   }, []);
 
   return (
-    <main className="flex flex-1 flex-col overflow-hidden" data-density={density}>
+    <main
+      className="flex flex-1 flex-col overflow-hidden"
+      data-density={density}
+    >
       <ApplicationTitle>{buildWindowTitle(activeTab?.view)}</ApplicationTitle>
       <WorkspaceTabBar
         tabs={tabs}
