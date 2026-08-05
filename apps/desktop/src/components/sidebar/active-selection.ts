@@ -12,7 +12,8 @@ export interface ActiveSelection {
   schemaName?: string;
   tableName?: string;
   viewName?: string;
-  kind: "connection" | "schema" | "table" | "view";
+  selectedRole?: string;
+  kind: "connection" | "schema" | "table" | "view" | "users";
 }
 
 export function deriveActiveSelection(
@@ -24,6 +25,7 @@ export function deriveActiveSelection(
   if (!tab) return null;
 
   const { view } = tab;
+  if (view.type === "database-manager") return null;
   const connectionId = view.path.connectionId;
 
   switch (view.type) {
@@ -46,6 +48,12 @@ export function deriveActiveSelection(
         schemaName: view.path.schemaName,
         viewName: view.path.viewName,
         kind: "view",
+      };
+    case "users":
+      return {
+        connectionId,
+        selectedRole: view.path.selectedRole,
+        kind: "users",
       };
   }
 }

@@ -30,4 +30,16 @@ describe("buildWindowTitle", () => {
     expect(buildWindowTitle(schemaView)).toBe("PG Compass - Local/app");
     expect(buildWindowTitle(tableView)).toBe("PG Compass - Local/app/users");
   });
+
+  it("builds a title for the users view", () => {
+    const usersView: WorkspaceTabView = {
+      type: "users",
+      path: {
+        connectionId: "c1",
+        connectionLabel: "Local",
+        selectedRole: "reader",
+      },
+    };
+    expect(buildWindowTitle(usersView)).toBe("PG Compass - Local · Users");
+  });
 });

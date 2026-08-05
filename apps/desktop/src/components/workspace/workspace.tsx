@@ -15,6 +15,8 @@ import { TableListViewer } from "@/components/workspace/table-list-viewer";
 import { TableDetailsViewer } from "@/components/workspace/table-details-viewer";
 import { ViewListViewer } from "@/components/workspace/view-list-viewer";
 import { ViewDetailsViewer } from "@/components/workspace/view-details-viewer";
+import { UsersViewer } from "@/components/workspace/users-viewer";
+import { DatabaseManagerViewer } from "@/components/workspace/database-manager-viewer";
 import type { WorkspaceTab, WorkspaceTabView } from "@/shared/types/workspace";
 import { WelcomeScreen } from "./welcome-screen";
 import { ApplicationTitle } from "../topbar/application-title";
@@ -231,6 +233,12 @@ function TabViewRenderer({ tab }: Readonly<{ tab: WorkspaceTab }>) {
   }
   if (view.type === "view-details") {
     return <ViewDetailsViewer tabId={tab.id} path={view.path} />;
+  }
+  if (view.type === "users") {
+    return <UsersViewer path={view.path} />;
+  }
+  if (view.type === "database-manager") {
+    return <DatabaseManagerViewer />;
   }
 
   return (

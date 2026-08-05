@@ -50,7 +50,8 @@ function buildFieldPgConfig(
   };
 }
 
-function buildPgSslConfig(
+/** Resolve a connection's SSL settings to actual PEM content (ca/cert/key). */
+export function buildPgSslConfig(
   connection: ConnectionConfig,
 ): Record<string, unknown> {
   const ssl = connection.ssl;

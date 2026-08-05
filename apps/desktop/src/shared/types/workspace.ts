@@ -17,6 +17,11 @@ export interface ViewListViewerPath extends WorkspacePath {
   viewName: string;
 }
 
+export interface UsersViewerPath extends DatabaseViewerPath {
+  /** Optional role name to focus in the RBAC viewer on open. */
+  selectedRole?: string;
+}
+
 export type WorkspaceTabView =
   | {
       type: "schema-list";
@@ -41,6 +46,14 @@ export type WorkspaceTabView =
   | {
       type: "view-details";
       path: ViewListViewerPath;
+    }
+  | {
+      type: "users";
+      path: UsersViewerPath;
+    }
+  | {
+      /** Global tool — not scoped to a single connection, so no `path`. */
+      type: "database-manager";
     };
 
 export interface WorkspaceTab {

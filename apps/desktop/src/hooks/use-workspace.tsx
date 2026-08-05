@@ -26,6 +26,7 @@ interface WorkspaceContextValue {
   closeTab: (id: string) => void;
   closeConnectionTabs: (connectionId: string) => void;
   openTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
+  forceOpenTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
   navigateToView: (view: WorkspaceTabView) => Promise<void>;
   refreshSchemaTree: (
     connectionId: string,
@@ -50,22 +51,27 @@ interface WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 function buildTabId(view: WorkspaceTabView): string {
+  if (view.type === "database-manager") return "database-manager";
+
   const base = `${view.path.connectionId}:${view.type}`;
 
   if (view.type === "schema-list") return base;
   if (view.type === "schema") return `${base}:${view.path.schemaName}`;
   if (view.type === "table-list" || view.type === "table-details")
     return `${base}:${view.path.schemaName}:${view.path.tableName}`;
+  if (view.type === "users") return `${base}:${view.path.selectedRole ?? ""}`;
 
   // view-list or view-details
   return `${base}:${view.path.schemaName}:${view.path.viewName}`;
 }
 
 function buildTabTitle(view: WorkspaceTabView): string {
+  if (view.type === "database-manager") return "Database Manager";
   if (view.type === "schema-list") return view.path.connectionLabel;
   if (view.type === "schema") return view.path.schemaName;
   if (view.type === "table-list" || view.type === "table-details")
     return view.path.tableName;
+  if (view.type === "users") return `${view.path.connectionLabel} · Users`;
 
   // view-list or view-details
   return view.path.viewName;
@@ -150,6 +156,7 @@ export function WorkspaceProvider({
     (connectionId: string, patch: { connectionLabel?: string }) => {
       setTabs((prevTabs) =>
         prevTabs.map((tab) => {
+          if (tab.view.type === "database-manager") return tab;
           if (tab.view.path.connectionId !== connectionId) return tab;
           const updatedView = {
             ...tab.view,
@@ -191,11 +198,17 @@ export function WorkspaceProvider({
     setTabs((prevTabs) => {
       const removedIds = new Set(
         prevTabs
-          .filter((tab) => tab.view.path.connectionId === connectionId)
+          .filter(
+            (tab) =>
+              tab.view.type !== "database-manager" &&
+              tab.view.path.connectionId === connectionId,
+          )
           .map((tab) => tab.id),
       );
       const nextTabs = prevTabs.filter(
-        (tab) => tab.view.path.connectionId !== connectionId,
+        (tab) =>
+          tab.view.type === "database-manager" ||
+          tab.view.path.connectionId !== connectionId,
       );
       if (activeTabIdRef.current && removedIds.has(activeTabIdRef.current)) {
         setActiveTabId(nextTabs.at(-1)?.id ?? null);
@@ -230,7 +243,9 @@ export function WorkspaceProvider({
 
   const openTab = useCallback(
     async (view: WorkspaceTabView, color?: string) => {
-      await refreshSchemaTree(view.path.connectionId);
+      if (view.type !== "database-manager") {
+        await refreshSchemaTree(view.path.connectionId);
+      }
 
       const nextTab = buildWorkspaceTab(view, color);
       setTabs((prev) => {
@@ -243,9 +258,25 @@ export function WorkspaceProvider({
     [refreshSchemaTree],
   );
 
+  const forceOpenTab = useCallback(
+    async (view: WorkspaceTabView, color?: string) => {
+      if (view.type !== "database-manager") {
+        await refreshSchemaTree(view.path.connectionId);
+      }
+
+      const nextTab = buildWorkspaceTab(view, color);
+      const uniqueId = `${nextTab.id}:${Date.now()}`;
+      setTabs((prev) => [...prev, { ...nextTab, id: uniqueId }]);
+      setActiveTabId(uniqueId);
+    },
+    [refreshSchemaTree],
+  );
+
   const navigateToView = useCallback(
     async (view: WorkspaceTabView) => {
-      await refreshSchemaTree(view.path.connectionId);
+      if (view.type !== "database-manager") {
+        await refreshSchemaTree(view.path.connectionId);
+      }
 
       const targetTabId = buildTabId(view);
       setTabs((prevTabs) => {
@@ -295,6 +326,7 @@ export function WorkspaceProvider({
       closeTab,
       closeConnectionTabs,
       openTab,
+      forceOpenTab,
       navigateToView,
       refreshSchemaTree,
       refreshSchemaTreeWithStatus,
@@ -310,6 +342,7 @@ export function WorkspaceProvider({
       closeTab,
       closeConnectionTabs,
       openTab,
+      forceOpenTab,
       navigateToView,
       refreshSchemaTree,
       refreshSchemaTreeWithStatus,
