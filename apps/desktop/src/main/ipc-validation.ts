@@ -12,6 +12,7 @@ import type {
   DbAccessInput,
   DbReadonlyGrantInput,
   DropTriggerInput,
+  SetTriggerEnabledInput,
   MembershipInput,
   RenameRoleInput,
   SetDbAccessLevelInput,
@@ -21,7 +22,9 @@ import type { AppSettingsPatch } from "../shared/types/settings";
 import type {
   DbSyncBackupInput,
   DbSyncCancelInput,
+  DbSyncDeleteBackupInput,
   DbSyncEndpoint,
+  DbSyncInspectBackupInput,
   DbSyncListDatabasesInput,
   DbSyncMode,
   DbSyncRestoreInput,
@@ -957,6 +960,33 @@ export function validateAlterRolePasswordInput(value: unknown): {
   return value as { connectionId: string; name: string; password: string };
 }
 
+export function validateAlterRoleCommentInput(value: unknown): {
+  connectionId: string;
+  name: string;
+  comment: string | null;
+} {
+  assertSerializedSize(value, "alterRoleCommentInput");
+  const input = asRecord(value, "alterRoleCommentInput");
+  assertAllowedKeys(input, "alterRoleCommentInput", [
+    "connectionId",
+    "name",
+    "comment",
+  ]);
+  asString(input.connectionId, "alterRoleCommentInput.connectionId");
+  asRoleName(input.name, "alterRoleCommentInput.name");
+  if (input.comment !== null) {
+    asString(input.comment, "alterRoleCommentInput.comment", {
+      maxLength: 10_000,
+      allowEmpty: true,
+    });
+  }
+  return value as {
+    connectionId: string;
+    name: string;
+    comment: string | null;
+  };
+}
+
 export function validateRolesSnapshotInput(value: unknown): {
   connectionId: string;
   targetUser?: string;
@@ -1172,6 +1202,32 @@ export function validateDropTriggerInput(value: unknown): DropTriggerInput {
   return value as DropTriggerInput;
 }
 
+export function validateSetTriggerEnabledInput(
+  value: unknown,
+): SetTriggerEnabledInput {
+  assertSerializedSize(value, "setTriggerEnabledInput");
+  const input = asRecord(value, "setTriggerEnabledInput");
+  assertAllowedKeys(input, "setTriggerEnabledInput", [
+    "connectionId",
+    "databaseName",
+    "schemaName",
+    "tableName",
+    "triggerName",
+    "enabled",
+  ]);
+  asString(input.connectionId, "setTriggerEnabledInput.connectionId");
+  asDatabaseName(input.databaseName, "setTriggerEnabledInput.databaseName");
+  asSchemaName(input.schemaName, "setTriggerEnabledInput.schemaName");
+  asString(input.tableName, "setTriggerEnabledInput.tableName", {
+    maxLength: 63,
+  });
+  asString(input.triggerName, "setTriggerEnabledInput.triggerName", {
+    maxLength: 63,
+  });
+  asBoolean(input.enabled, "setTriggerEnabledInput.enabled");
+  return value as SetTriggerEnabledInput;
+}
+
 export function validateCreateTriggerFunctionInput(
   value: unknown,
 ): CreateTriggerFunctionInput {
@@ -1313,6 +1369,24 @@ export function validateDbSyncBackupInput(value: unknown): DbSyncBackupInput {
   asRunId(record.runId, "dbSyncBackupInput.runId");
   asDbSyncEndpoint(record.source, "dbSyncBackupInput.source");
   return value as DbSyncBackupInput;
+}
+
+export function validateDbSyncDeleteBackupInput(
+  value: unknown,
+): DbSyncDeleteBackupInput {
+  const record = asRecord(value, "dbSyncDeleteBackupInput");
+  assertAllowedKeys(record, "dbSyncDeleteBackupInput", ["path"]);
+  asString(record.path, "dbSyncDeleteBackupInput.path", { maxLength: MAX_PATH_LENGTH });
+  return value as DbSyncDeleteBackupInput;
+}
+
+export function validateDbSyncInspectBackupInput(
+  value: unknown,
+): DbSyncInspectBackupInput {
+  const record = asRecord(value, "dbSyncInspectBackupInput");
+  assertAllowedKeys(record, "dbSyncInspectBackupInput", ["path"]);
+  asString(record.path, "dbSyncInspectBackupInput.path", { maxLength: MAX_PATH_LENGTH });
+  return value as DbSyncInspectBackupInput;
 }
 
 export function validateDbSyncRestoreInput(value: unknown): DbSyncRestoreInput {

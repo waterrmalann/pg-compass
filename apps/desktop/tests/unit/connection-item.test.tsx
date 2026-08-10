@@ -69,6 +69,7 @@ describe("ConnectionItem", () => {
       setActiveTab: vi.fn(),
       closeTab: vi.fn(),
       closeConnectionTabs: vi.fn(),
+      closeAllTabs: vi.fn(),
       openTab: vi.fn(),
       forceOpenTab: vi.fn(),
       navigateToView: vi.fn(),

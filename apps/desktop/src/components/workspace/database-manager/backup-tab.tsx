@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Ban, HardDriveDownload, RotateCcw } from "lucide-react";
+import {
+  Ban,
+  ChevronDown,
+  ChevronRight,
+  HardDriveDownload,
+  Loader2,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useConnections } from "@/hooks/use-connections";
-import type { BackupFileInfo } from "@/shared/types/db-sync";
+import type { BackupFileInfo, BackupInspection } from "@/shared/types/db-sync";
 import {
   EndpointFields,
   RunLog,
@@ -13,6 +29,11 @@ import {
   useDatabaseList,
   useRunLog,
 } from "./shared";
+
+type InspectionState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ok"; data: BackupInspection };
 
 interface BackupTabProps {
   onUseForRestore: (path: string) => void;
@@ -27,6 +48,10 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
   const runLog = useRunLog();
   const [backups, setBackups] = useState<BackupFileInfo[]>([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
+  const [expandedPath, setExpandedPath] = useState<string | null>(null);
+  const [inspections, setInspections] = useState<Record<string, InspectionState>>({});
+  const [deleteTarget, setDeleteTarget] = useState<BackupFileInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { databases, loading: loadingDatabases } = useDatabaseList(connectionId);
 
@@ -96,6 +121,38 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
     globalThis.window.dbSyncApi.cancel({ runId: runIdRef.current }).catch(() => undefined);
   }
 
+  async function handleToggleDetails(backup: BackupFileInfo) {
+    if (expandedPath === backup.path) {
+      setExpandedPath(null);
+      return;
+    }
+    setExpandedPath(backup.path);
+    if (inspections[backup.path]) return;
+
+    setInspections((prev) => ({ ...prev, [backup.path]: { status: "loading" } }));
+    const result = await globalThis.window.dbSyncApi.inspectBackup(backup.path);
+    setInspections((prev) => ({
+      ...prev,
+      [backup.path]: result.success
+        ? { status: "ok", data: result.data }
+        : { status: "error", message: result.error },
+    }));
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const result = await globalThis.window.dbSyncApi.deleteBackup(deleteTarget.path);
+    setDeleting(false);
+    if (result.success) {
+      toast.success("Backup removed");
+      setDeleteTarget(null);
+      await refreshBackups();
+    } else {
+      toast.error("Failed to remove backup", { description: result.error });
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3">
@@ -154,30 +211,160 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
           <p className="text-xs text-muted-foreground">No backups yet.</p>
         ) : (
           <div className="flex flex-col gap-1">
-            {backups.map((backup) => (
-              <div
-                key={backup.path}
-                className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-mono">{backup.fileName}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {formatBytes(backup.sizeBytes)} · {formatRelativeTime(backup.mtimeMs)}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => onUseForRestore(backup.path)}
+            {backups.map((backup) => {
+              const expanded = expandedPath === backup.path;
+              const inspection = inspections[backup.path];
+              return (
+                <div
+                  key={backup.path}
+                  className="rounded-md border border-border bg-card text-xs"
                 >
-                  Restore from this
-                </Button>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+                    <button
+                      type="button"
+                      className="flex min-w-0 items-center gap-1.5 text-left"
+                      onClick={() => {
+                        handleToggleDetails(backup).catch(() => undefined);
+                      }}
+                    >
+                      {expanded ? (
+                        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="min-w-0">
+                        <p className="truncate font-mono">{backup.fileName}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {formatBytes(backup.sizeBytes)} ·{" "}
+                          {formatRelativeTime(backup.mtimeMs)}
+                        </p>
+                      </span>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onUseForRestore(backup.path)}
+                      >
+                        Restore from this
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove backup"
+                        onClick={() => setDeleteTarget(backup)}
+                      >
+                        <Trash2 className="size-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-rows] duration-200 ease-out",
+                      expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                    )}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 px-2.5 py-1.5 text-muted-foreground">
+                        <span>
+                          <span className="font-medium text-foreground">Time:</span>{" "}
+                          {new Date(backup.createdAt ?? backup.mtimeMs).toLocaleString()}
+                        </span>
+                        <span>
+                          <span className="font-medium text-foreground">Target:</span>{" "}
+                          {backup.target ?? "—"}
+                        </span>
+                        {!inspection || inspection.status === "loading" ? (
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 className="size-3 animate-spin" />
+                            Reading backup contents…
+                          </span>
+                        ) : inspection.status === "error" ? (
+                          <span className="text-destructive">{inspection.message}</span>
+                        ) : (
+                          <>
+                            <span>
+                              <span className="font-medium text-foreground">
+                                {inspection.data.schemas}
+                              </span>{" "}
+                              schema{inspection.data.schemas === 1 ? "" : "s"}
+                            </span>
+                            <span>
+                              <span className="font-medium text-foreground">
+                                {inspection.data.tables}
+                              </span>{" "}
+                              table{inspection.data.tables === 1 ? "" : "s"}
+                            </span>
+                            <span>
+                              <span className="font-medium text-foreground">
+                                {inspection.data.views}
+                              </span>{" "}
+                              view{inspection.data.views === 1 ? "" : "s"}
+                            </span>
+                            <span>
+                              <span className="font-medium text-foreground">
+                                {inspection.data.sequences}
+                              </span>{" "}
+                              sequence{inspection.data.sequences === 1 ? "" : "s"}
+                            </span>
+                            <span>
+                              <span className="font-medium text-foreground">
+                                {inspection.data.functions}
+                              </span>{" "}
+                              function{inspection.data.functions === 1 ? "" : "s"}
+                            </span>
+                            <span>
+                              <span className="font-medium text-foreground">
+                                {formatBytes(backup.sizeBytes)}
+                              </span>{" "}
+                              on disk
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !deleting && !open && setDeleteTarget(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove this backup?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes{" "}
+              <span className="font-mono">{deleteTarget?.fileName}</span> from
+              disk. It cannot be restored from afterward.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => {
+                handleConfirmDelete().catch(() => undefined);
+              }}
+            >
+              {deleting && <Loader2 className="size-3.5 animate-spin" />}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

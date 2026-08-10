@@ -89,4 +89,25 @@ export interface BackupFileInfo {
   fileName: string;
   sizeBytes: number;
   mtimeMs: number;
+  /** "<connection label>:<database>" the backup was taken from, when known. */
+  target: string | null;
+  /** ISO timestamp of the backup run, when known (older backups fall back to file mtime). */
+  createdAt: string | null;
+}
+
+export interface DbSyncDeleteBackupInput {
+  path: string;
+}
+
+export interface DbSyncInspectBackupInput {
+  path: string;
+}
+
+/** Object counts read from a backup file's own table of contents (`pg_restore --list`). */
+export interface BackupInspection {
+  schemas: number;
+  tables: number;
+  views: number;
+  sequences: number;
+  functions: number;
 }

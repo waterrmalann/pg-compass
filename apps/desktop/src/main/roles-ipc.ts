@@ -20,6 +20,7 @@ import type {
   RenameRoleInput,
   RolesSnapshot,
   SetDbAccessLevelInput,
+  SetTriggerEnabledInput,
   TableRestrictionInput,
 } from "../shared/types/roles";
 import { buildPgConfig, withPoolClient, quoteIdent } from "./pg-utils";
@@ -31,6 +32,7 @@ import {
   logAudit,
 } from "./audit-store";
 import {
+  validateAlterRoleCommentInput,
   validateAlterRoleInput,
   validateAlterRolePasswordInput,
   validateCloneRoleInput,
@@ -47,6 +49,7 @@ import {
   validateRenameRoleInput,
   validateRolesSnapshotInput,
   validateSetDbAccessLevelInput,
+  validateSetTriggerEnabledInput,
   validateTableRestrictionInput,
   validateTriggerListInput,
 } from "./ipc-validation";
@@ -75,6 +78,7 @@ interface PgRoleRow {
   rolpassword: string | null;
   rolreplication: boolean;
   rolbypassrls: boolean;
+  description: string | null;
 }
 
 interface PgMembershipRow {
@@ -182,6 +186,7 @@ function rolesFromRows(rows: PgRoleRow[]): PgRole[] {
     hasPassword: row.rolpassword !== null,
     canReplicate: row.rolreplication,
     canBypassRls: row.rolbypassrls,
+    description: row.description,
   }));
 }
 
@@ -201,7 +206,8 @@ async function fetchRoles(
       rolvaliduntil,
       rolpassword,
       rolreplication,
-      rolbypassrls
+      rolbypassrls,
+      pg_catalog.shobj_description(oid, 'pg_authid') AS description
     FROM pg_roles
     ${filterToUser ? "WHERE rolname = $1" : ""}
     ORDER BY rolcanlogin DESC, rolname
@@ -746,6 +752,24 @@ async function alterRolePasswordInternal(input: {
   });
 }
 
+async function alterRoleCommentInternal(input: {
+  connectionId: string;
+  name: string;
+  comment: string | null;
+}): Promise<void> {
+  return withPoolClient(input.connectionId, async (client) => {
+    await requireSuperuser(client);
+    if (input.comment === null || input.comment.length === 0) {
+      await client.query(`COMMENT ON ROLE ${quoteIdent(input.name)} IS NULL;`);
+    } else {
+      const escaped = input.comment.replaceAll("'", "''");
+      await client.query(
+        `COMMENT ON ROLE ${quoteIdent(input.name)} IS '${escaped}';`,
+      );
+    }
+  });
+}
+
 async function dropRole(connectionId: string, name: string): Promise<void> {
   return withPoolClient(connectionId, async (client) => {
     await requireSuperuser(client);
@@ -1195,6 +1219,19 @@ async function dropTrigger(input: DropTriggerInput): Promise<void> {
   );
 }
 
+async function setTriggerEnabled(input: SetTriggerEnabledInput): Promise<void> {
+  return runInDatabase(
+    input.connectionId,
+    input.databaseName,
+    async (client) => {
+      const verb = input.enabled ? "ENABLE" : "DISABLE";
+      await client.query(
+        `ALTER TABLE ${quoteIdent(input.schemaName)}.${quoteIdent(input.tableName)} ${verb} TRIGGER ${quoteIdent(input.triggerName)};`,
+      );
+    },
+  );
+}
+
 async function listTriggerFunctions(
   connectionId: string,
   database: string,
@@ -1409,6 +1446,28 @@ export function registerRolesHandlers(): void {
               connectionId: input.connectionId,
               name: input.name,
               password: input.password,
+            }),
+        );
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  registerIpcHandler(
+    RolesChannels.ALTER_ROLE_COMMENT,
+    async (_event, rawInput: unknown) => {
+      try {
+        const input = validateAlterRoleCommentInput(rawInput);
+        return await runMutation(
+          input.connectionId,
+          "alter-role-comment",
+          `role "${input.name}"`,
+          () =>
+            alterRoleCommentInternal({
+              connectionId: input.connectionId,
+              name: input.name,
+              comment: input.comment,
             }),
         );
       } catch (err) {
@@ -1647,6 +1706,23 @@ export function registerRolesHandlers(): void {
           "drop-trigger",
           `${input.schemaName}.${input.tableName}.${input.triggerName}`,
           () => dropTrigger(input),
+        );
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  registerIpcHandler(
+    RolesChannels.SET_TRIGGER_ENABLED,
+    async (_event, rawInput: unknown) => {
+      try {
+        const input = validateSetTriggerEnabledInput(rawInput);
+        return await runMutation(
+          input.connectionId,
+          input.enabled ? "enable-trigger" : "disable-trigger",
+          `${input.schemaName}.${input.tableName}.${input.triggerName}`,
+          () => setTriggerEnabled(input),
         );
       } catch (err) {
         return { success: false, error: (err as Error).message };

@@ -21,6 +21,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
+import { toast } from "sonner";
 import {
   Accordion,
   AccordionContent,
@@ -75,6 +76,8 @@ import type {
   TableRestrictionInput,
 } from "@/shared/types/roles";
 import type { IpcResult } from "@/shared/types/ipc";
+import { useSettings } from "@/hooks/use-settings";
+import { BUILTIN_ROLE_DESCRIPTIONS } from "@/shared/constants/builtin-roles";
 import {
   Field,
   LoadingState,
@@ -103,20 +106,30 @@ export function RolesPane({
 }: Readonly<RolesPaneProps>) {
   const { run } = useRbacMutation(onAfterMutation);
   const [search, setSearch] = useState("");
+  const { settings } = useSettings();
 
   const isAdmin = Boolean(snapshot.currentUser.isSuperuser);
 
+  const showInternalRoles = !settings.general.hideInternalSchemas;
+  const visibleRoles = useMemo(
+    () =>
+      showInternalRoles
+        ? snapshot.roles
+        : snapshot.roles.filter((role) => !role.name.startsWith("pg_")),
+    [snapshot.roles, showInternalRoles],
+  );
+
   const filteredRoles = useMemo(() => {
     const trimmed = search.trim().toLowerCase();
-    return snapshot.roles.filter(
+    return visibleRoles.filter(
       (role) => !trimmed || role.name.toLowerCase().includes(trimmed),
     );
-  }, [snapshot.roles, search]);
+  }, [visibleRoles, search]);
 
   const selectedRole = useMemo<PgRole | null>(
     () =>
-      snapshot.roles.find((role) => role.name === selectedRoleName) ?? null,
-    [snapshot.roles, selectedRoleName],
+      visibleRoles.find((role) => role.name === selectedRoleName) ?? null,
+    [visibleRoles, selectedRoleName],
   );
 
   return (
@@ -134,7 +147,7 @@ export function RolesPane({
         role={selectedRole}
         memberships={snapshot.memberships}
         databases={snapshot.databases}
-        allRoles={snapshot.roles}
+        allRoles={visibleRoles}
         isAdmin={isAdmin}
         currentUser={snapshot.currentUser}
         onMutation={run}
@@ -414,7 +427,9 @@ function RoleDetailPane({
   const activeRole = role;
   const isSelf = activeRole.name === currentUser.name;
   const parentsForRole = memberships.filter((m) => m.memberName === role.name);
-  const candidateParents = allRoles.filter((other) => other.name !== role.name);
+  const candidateParents = allRoles.filter(
+    (other) => other.name !== role.name && !other.canLogin,
+  );
 
   async function handleCreate(input: CreateRoleInput): Promise<boolean> {
     setBusy(true);
@@ -433,6 +448,21 @@ function RoleDetailPane({
     );
     setBusy(false);
     if (ok) setEditOpen(false);
+    return ok;
+  }
+
+  async function handleSaveComment(comment: string | null): Promise<boolean> {
+    setBusy(true);
+    const ok = await onMutation(
+      `Updated description for "${activeRole.name}"`,
+      () =>
+        globalThis.window.rolesApi.alterRoleComment(
+          connectionId,
+          activeRole.name,
+          comment,
+        ),
+    );
+    setBusy(false);
     return ok;
   }
 
@@ -612,7 +642,7 @@ function RoleDetailPane({
                 onClick={() => setCreateOpen(true)}
               >
                 <UserPlus className="size-3.5" />
-                New Role
+                New
               </Button>
               <Button
                 variant="ghost"
@@ -695,6 +725,7 @@ function RoleDetailPane({
                   role.canLogin ? () => setResetPasswordOpen(true) : undefined
                 }
                 onEdit={() => setEditOpen(true)}
+                onSaveComment={handleSaveComment}
               />
             </TabsContent>
             <TabsContent value="memberships" className="mt-0">
@@ -835,15 +866,23 @@ function RoleAttributes({
   isSelf,
   onChangePassword,
   onEdit,
+  onSaveComment,
 }: Readonly<{
   role: PgRole;
   isAdmin: boolean;
   isSelf: boolean;
   onChangePassword?: () => void;
   onEdit: () => void;
+  onSaveComment: (comment: string | null) => Promise<boolean>;
 }>) {
   return (
     <div className="flex max-w-2xl flex-col gap-4">
+      <RoleDescriptionField
+        key={role.name}
+        description={role.description}
+        isAdmin={isAdmin}
+        onSave={onSaveComment}
+      />
       <AttributeGrid role={role} />
       <div className="flex flex-wrap gap-2">
         {isSelf && onChangePassword && (
@@ -856,6 +895,89 @@ function RoleAttributes({
             <Shield className="size-3.5" /> Edit attributes
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function RoleDescriptionField({
+  description,
+  isAdmin,
+  onSave,
+}: Readonly<{
+  description: string | null;
+  isAdmin: boolean;
+  onSave: (comment: string | null) => Promise<boolean>;
+}>) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(description ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    const trimmed = value.trim();
+    const ok = await onSave(trimmed.length === 0 ? null : trimmed);
+    setSaving(false);
+    if (ok) setEditing(false);
+  }
+
+  function handleCancel() {
+    setValue(description ?? "");
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex flex-col gap-1 rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Description
+          </span>
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setEditing(true)}
+            >
+              <Pencil className="size-3" />
+              Edit
+            </Button>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {description ?? "No description set."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border p-3">
+      <Label htmlFor="role-description">Description</Label>
+      <textarea
+        id="role-description"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        disabled={saving}
+        placeholder="What is this role for?"
+        className="min-h-20 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+      />
+      <div className="flex gap-2">
+        <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
+          {saving && <Loader2 className="size-3.5 animate-spin" />}
+          Save
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={saving}
+          onClick={handleCancel}
+        >
+          Cancel
+        </Button>
       </div>
     </div>
   );
@@ -946,11 +1068,18 @@ function RoleMembershipsTab({
             <ul className="flex flex-col divide-y divide-border">
               {Array.from(parentSet.values()).map((m) => (
                 <li key={m.parentName} className="px-3 py-2 text-sm">
-                  {m.parentName}
-                  {m.withAdminOption && (
-                    <Badge variant="secondary" className="ml-2 uppercase">
-                      Admin
-                    </Badge>
+                  <div className="flex items-center">
+                    {m.parentName}
+                    {m.withAdminOption && (
+                      <Badge variant="secondary" className="ml-2 uppercase">
+                        Admin
+                      </Badge>
+                    )}
+                  </div>
+                  {BUILTIN_ROLE_DESCRIPTIONS[m.parentName] && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {BUILTIN_ROLE_DESCRIPTIONS[m.parentName]}
+                    </p>
                   )}
                 </li>
               ))}
@@ -971,14 +1100,16 @@ function RoleMembershipsTab({
           <TableHeader className="bg-card">
             <TableRow>
               <TableHead>Role</TableHead>
-              <TableHead>Member</TableHead>
-              <TableHead>Admin option</TableHead>
+              <TableHead>Granted</TableHead>
+              <TableHead>Can re-grant</TableHead>
+              <TableHead>Use</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {candidateParents.map((parent) => {
               const membership = parentSet.get(parent.name);
               const isMember = Boolean(membership);
+              const description = BUILTIN_ROLE_DESCRIPTIONS[parent.name];
               return (
                 <TableRow key={parent.name}>
                   <TableCell className="font-medium">{parent.name}</TableCell>
@@ -1000,6 +1131,9 @@ function RoleMembershipsTab({
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
+                  </TableCell>
+                  <TableCell className="max-w-xs whitespace-normal text-xs text-muted-foreground">
+                    {description ?? "—"}
                   </TableCell>
                 </TableRow>
               );
@@ -1046,7 +1180,7 @@ function DatabaseAccessTab({
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-2">
+    <div className="flex max-w-5xl flex-col gap-2">
       <p className="text-sm text-muted-foreground">
         Each database grants one of three access levels for{" "}
         <span className="font-medium text-foreground">{role.name}</span>. Read
@@ -1586,13 +1720,15 @@ function PermissionList({
       {items.length === 0 ? (
         <p className="text-xs text-muted-foreground">{emptyText}</p>
       ) : (
-        <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
-          {items.map((item) => (
-            <li key={item} className="font-mono text-xs">
-              {item}
-            </li>
-          ))}
-        </ul>
+        <ScrollArea className="h-48" orientation="both">
+          <ul className="flex flex-col gap-0.5">
+            {items.map((item) => (
+              <li key={item} className="whitespace-nowrap font-mono text-xs">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
       )}
     </div>
   );
@@ -1619,12 +1755,10 @@ function CreateRoleDialog({
 }>) {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [login, setLogin] = useState(true);
-  const [createRole, setCreateRole] = useState(false);
-  const [createDb, setCreateDb] = useState(false);
+  const [autoGenerated, setAutoGenerated] = useState(false);
+  const [login, setLogin] = useState(false);
   const [inherit, setInherit] = useState(true);
   const [connectionLimit, setConnectionLimit] = useState<number | "">("");
-  const [memberships, setMemberships] = useState<string[]>([]);
 
   const trimmedName = name.trim();
   const nameConflict = existingRoles.some((role) => role.name === trimmedName);
@@ -1636,12 +1770,33 @@ function CreateRoleDialog({
   function reset() {
     setName("");
     setPassword("");
-    setLogin(true);
-    setCreateRole(false);
-    setCreateDb(false);
+    setAutoGenerated(false);
+    setLogin(false);
     setInherit(true);
     setConnectionLimit("");
-    setMemberships([]);
+  }
+
+  function handlePasswordChange(value: string) {
+    setPassword(value);
+    setAutoGenerated(false);
+  }
+
+  function handleGenerate() {
+    const generated = generateSecurePassword();
+    setPassword(generated);
+    setAutoGenerated(true);
+  }
+
+  async function handleCopy() {
+    try {
+      const result = await globalThis.window.clipboardApi.writeText(password);
+      if (!result.success) {
+        throw new Error(result.error ?? "Clipboard write failed.");
+      }
+      toast.success("Password copied to clipboard.");
+    } catch (error) {
+      toast.error("Copy failed", { description: (error as Error).message });
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -1652,19 +1807,12 @@ function CreateRoleDialog({
       name: trimmedName,
       password: password || undefined,
       login,
-      createRole,
-      createDb,
       inherit,
       connectionLimit:
         connectionLimit === "" ? undefined : Number(connectionLimit),
-      membershipRoles: memberships.length ? memberships : undefined,
     };
     if (await onSubmit(input)) reset();
   }
-
-  const candidateParents = existingRoles.filter(
-    (role) => role.name !== trimmedName,
-  );
 
   return (
     <Dialog
@@ -1676,11 +1824,10 @@ function CreateRoleDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create role</DialogTitle>
+          <DialogTitle>Create</DialogTitle>
           <DialogDescription>
-            A role with the <strong>Login</strong> attribute is a user that can
-            connect. Without it, the role acts as a group other roles can be
-            granted membership in.
+            Without <strong>Login</strong>, this creates a role. With it
+            enabled, this creates a user that can connect.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -1701,28 +1848,44 @@ function CreateRoleDialog({
           </Field>
           {login && (
             <Field label="Password" htmlFor="create-role-password">
-              <Input
-                id="create-role-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                placeholder="Leave empty to skip"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="create-role-password"
+                  type={autoGenerated ? "text" : "password"}
+                  className={autoGenerated ? "font-mono text-sm" : undefined}
+                  value={password}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  autoComplete="new-password"
+                />
+                {autoGenerated ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Copy password"
+                    title="Copy password"
+                    onClick={handleCopy}
+                  >
+                    <Copy className="size-4" />
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={handleGenerate}>
+                    Generate
+                  </Button>
+                )}
+              </div>
+              {autoGenerated && (
+                <p className="text-xs text-muted-foreground">
+                  Generated password shown above — copy it now, it won&apos;t
+                  be shown again.
+                </p>
+              )}
             </Field>
           )}
           <div className="flex flex-wrap gap-4">
             <Label className="gap-2 text-sm">
               <Switch checked={login} onCheckedChange={setLogin} />
               Login
-            </Label>
-            <Label className="gap-2 text-sm">
-              <Switch checked={createRole} onCheckedChange={setCreateRole} />
-              Create role
-            </Label>
-            <Label className="gap-2 text-sm">
-              <Switch checked={createDb} onCheckedChange={setCreateDb} />
-              Create database
             </Label>
             <Label className="gap-2 text-sm">
               <Switch checked={inherit} onCheckedChange={setInherit} />
@@ -1746,28 +1909,6 @@ function CreateRoleDialog({
               placeholder="-1 for unlimited"
             />
           </Field>
-          <Field
-            label="Member of (choose roles to grant)"
-            htmlFor="create-role-memberships"
-          >
-            <select
-              id="create-role-memberships"
-              multiple
-              value={memberships}
-              onChange={(e) =>
-                setMemberships(
-                  Array.from(e.target.selectedOptions).map((o) => o.value),
-                )
-              }
-              className="h-24 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-            >
-              {candidateParents.map((role) => (
-                <option key={role.name} value={role.name}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-          </Field>
           <DialogFooter>
             <Button
               type="button"
@@ -1779,7 +1920,7 @@ function CreateRoleDialog({
             </Button>
             <Button type="submit" disabled={busy || !valid}>
               {busy && <Loader2 className="size-4 animate-spin" />}
-              Create role
+              Create
             </Button>
           </DialogFooter>
         </form>
@@ -1890,6 +2031,18 @@ function EditRoleDialog({
   );
 }
 
+const PASSWORD_CHARSET =
+  "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+";
+
+function generateSecurePassword(length = 20): string {
+  const values = new Uint32Array(length);
+  globalThis.crypto.getRandomValues(values);
+  return Array.from(
+    values,
+    (n) => PASSWORD_CHARSET[n % PASSWORD_CHARSET.length],
+  ).join("");
+}
+
 function ResetPasswordDialog({
   open,
   onOpenChange,
@@ -1905,11 +2058,37 @@ function ResetPasswordDialog({
 }>) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const mismatch = password !== confirm;
+  const [autoGenerated, setAutoGenerated] = useState(false);
+  const mismatch = !autoGenerated && password !== confirm;
 
   function reset() {
     setPassword("");
     setConfirm("");
+    setAutoGenerated(false);
+  }
+
+  function handlePasswordChange(value: string) {
+    setPassword(value);
+    setAutoGenerated(false);
+  }
+
+  function handleGenerate() {
+    const generated = generateSecurePassword();
+    setPassword(generated);
+    setConfirm(generated);
+    setAutoGenerated(true);
+  }
+
+  async function handleCopy() {
+    try {
+      const result = await globalThis.window.clipboardApi.writeText(password);
+      if (!result.success) {
+        throw new Error(result.error ?? "Clipboard write failed.");
+      }
+      toast.success("Password copied to clipboard.");
+    } catch (error) {
+      toast.error("Copy failed", { description: (error as Error).message });
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -1936,31 +2115,57 @@ function ResetPasswordDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <Field label="New password" htmlFor="reset-password">
-            <Input
-              id="reset-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
+            <div className="flex gap-2">
+              <Input
+                id="reset-password"
+                type={autoGenerated ? "text" : "password"}
+                className={autoGenerated ? "font-mono text-sm" : undefined}
+                value={password}
+                onChange={(e) => handlePasswordChange(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+              {autoGenerated ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Copy password"
+                  title="Copy password"
+                  onClick={handleCopy}
+                >
+                  <Copy className="size-4" />
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" onClick={handleGenerate}>
+                  Generate
+                </Button>
+              )}
+            </div>
           </Field>
-          <Field label="Confirm password" htmlFor="reset-password-confirm">
-            <Input
-              id="reset-password-confirm"
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              autoComplete="new-password"
-              required
-              aria-invalid={mismatch}
-            />
-            {mismatch && (
-              <p className="text-xs text-destructive">
-                Passwords do not match.
-              </p>
-            )}
-          </Field>
+          {autoGenerated ? (
+            <p className="text-xs text-muted-foreground">
+              Generated password shown above — copy it now, it won&apos;t be
+              shown again. No confirmation needed.
+            </p>
+          ) : (
+            <Field label="Confirm password" htmlFor="reset-password-confirm">
+              <Input
+                id="reset-password-confirm"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                required
+                aria-invalid={mismatch}
+              />
+              {mismatch && (
+                <p className="text-xs text-destructive">
+                  Passwords do not match.
+                </p>
+              )}
+            </Field>
+          )}
           <DialogFooter>
             <Button
               type="button"

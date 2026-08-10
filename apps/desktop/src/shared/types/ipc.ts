@@ -22,11 +22,13 @@ import type {
   RenameRoleInput,
   RolesSnapshot,
   SetDbAccessLevelInput,
+  SetTriggerEnabledInput,
   TableRestrictionInput,
 } from "./roles";
 import type { AppSettings, AppSettingsPatch } from "./settings";
 import type {
   BackupFileInfo,
+  BackupInspection,
   DbSyncBackupInput,
   DbSyncCancelInput,
   DbSyncListDatabasesInput,
@@ -159,6 +161,11 @@ export interface RolesApi {
     name: string,
     password: string,
   ): Promise<IpcResult<void>>;
+  alterRoleComment(
+    connectionId: string,
+    name: string,
+    comment: string | null,
+  ): Promise<IpcResult<void>>;
   setDbAccessLevel(input: SetDbAccessLevelInput): Promise<IpcResult<void>>;
   setTableRestrictions(
     input: TableRestrictionInput,
@@ -171,6 +178,7 @@ export interface RolesApi {
   ): Promise<IpcResult<PgTriggerInfo[]>>;
   createTrigger(input: CreateTriggerInput): Promise<IpcResult<void>>;
   dropTrigger(input: DropTriggerInput): Promise<IpcResult<void>>;
+  setTriggerEnabled(input: SetTriggerEnabledInput): Promise<IpcResult<void>>;
   listTriggerFunctions(
     connectionId: string,
     databaseName: string,
@@ -198,4 +206,6 @@ export interface DbSyncApi {
   listBackups(): Promise<IpcResult<BackupFileInfo[]>>;
   backup(input: DbSyncBackupInput): Promise<IpcResult<DbSyncResult>>;
   restore(input: DbSyncRestoreInput): Promise<IpcResult<DbSyncResult>>;
+  deleteBackup(path: string): Promise<IpcResult<void>>;
+  inspectBackup(path: string): Promise<IpcResult<BackupInspection>>;
 }

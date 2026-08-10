@@ -2,6 +2,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { ConnectionFields } from "@/shared/types/connection";
+import { ConnectionEnvImport } from "./connection-env-import";
+import type { ParsedEnvConnection } from "./parse-env-block";
 
 interface ConnectionBasicFieldsProps {
   mode: "uri" | "fields";
@@ -11,6 +13,7 @@ interface ConnectionBasicFieldsProps {
   fields: ConnectionFields;
   onFieldsChange: (updater: (f: ConnectionFields) => ConnectionFields) => void;
   errors: Record<string, string>;
+  onEnvExtract: (parsed: ParsedEnvConnection) => void;
 }
 
 export function ConnectionBasicFields({
@@ -21,11 +24,15 @@ export function ConnectionBasicFields({
   fields,
   onFieldsChange,
   errors,
+  onEnvExtract,
 }: Readonly<ConnectionBasicFieldsProps>) {
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <Label>Connection Mode</Label>
+        <div className="flex items-center justify-between">
+          <Label>Connection Mode</Label>
+          <ConnectionEnvImport onExtract={onEnvExtract} />
+        </div>
         <div className="flex gap-2">
           <Button
             type="button"

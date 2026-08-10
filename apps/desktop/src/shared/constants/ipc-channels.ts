@@ -67,6 +67,7 @@ export const RolesChannels = {
   GRANT_DB_READONLY: "roles:grant-db-readonly",
   REVOKE_DB_READONLY: "roles:revoke-db-readonly",
   ALTER_ROLE_PASSWORD: "roles:alter-role-password",
+  ALTER_ROLE_COMMENT: "roles:alter-role-comment",
   SET_DB_ACCESS_LEVEL: "roles:set-db-access-level",
   SET_TABLE_RESTRICTIONS: "roles:set-table-restrictions",
   CLONE_ROLE: "roles:clone-role",
@@ -74,6 +75,7 @@ export const RolesChannels = {
   LIST_TRIGGERS: "roles:list-triggers",
   CREATE_TRIGGER: "roles:create-trigger",
   DROP_TRIGGER: "roles:drop-trigger",
+  SET_TRIGGER_ENABLED: "roles:set-trigger-enabled",
   LIST_TRIGGER_FUNCTIONS: "roles:list-trigger-functions",
   CREATE_TRIGGER_FUNCTION: "roles:create-trigger-function",
   GET_EFFECTIVE_PERMISSIONS: "roles:get-effective-permissions",
@@ -91,4 +93,6 @@ export const DbSyncChannels = {
   LIST_BACKUPS: "db-sync:list-backups",
   BACKUP: "db-sync:backup",
   RESTORE: "db-sync:restore",
+  DELETE_BACKUP: "db-sync:delete-backup",
+  INSPECT_BACKUP: "db-sync:inspect-backup",
 } as const;

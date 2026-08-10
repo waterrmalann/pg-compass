@@ -25,6 +25,7 @@ interface WorkspaceContextValue {
   setActiveTab: (id: string) => void;
   closeTab: (id: string) => void;
   closeConnectionTabs: (connectionId: string) => void;
+  closeAllTabs: () => void;
   openTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
   forceOpenTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
   navigateToView: (view: WorkspaceTabView) => Promise<void>;
@@ -228,6 +229,12 @@ export function WorkspaceProvider({
     });
   }, []);
 
+  const closeAllTabs = useCallback(() => {
+    setTabs([]);
+    setActiveTabId(null);
+    setRelationSessions({});
+  }, []);
+
   const updateRelationSession = useCallback(
     (tabId: string, patch: Partial<RelationSessionState>) => {
       setRelationSessions((prev) => ({
@@ -325,6 +332,7 @@ export function WorkspaceProvider({
       setActiveTab,
       closeTab,
       closeConnectionTabs,
+      closeAllTabs,
       openTab,
       forceOpenTab,
       navigateToView,
@@ -341,6 +349,7 @@ export function WorkspaceProvider({
       setActiveTab,
       closeTab,
       closeConnectionTabs,
+      closeAllTabs,
       openTab,
       forceOpenTab,
       navigateToView,

@@ -8,6 +8,7 @@ import { Client } from "pg";
 import { DbSyncChannels } from "../shared/constants/ipc-channels";
 import type {
   BackupFileInfo,
+  BackupInspection,
   DbSyncBackupInput,
   DbSyncEndpoint,
   DbSyncLogLevel,
@@ -29,6 +30,8 @@ import { getProdGuardState, setProdGuardEnabled } from "./db-sync-prod-guard";
 import {
   validateDbSyncBackupInput,
   validateDbSyncCancelInput,
+  validateDbSyncDeleteBackupInput,
+  validateDbSyncInspectBackupInput,
   validateDbSyncListDatabasesInput,
   validateDbSyncRestoreInput,
   validateDbSyncRunInput,
@@ -354,6 +357,39 @@ function backupsDir(): string {
   return path.join(app.getPath("userData"), "backups");
 }
 
+interface BackupMetadata {
+  connectionLabel: string;
+  database: string;
+  createdAt: string;
+}
+
+function metadataPath(backupPath: string): string {
+  return `${backupPath}.json`;
+}
+
+async function writeBackupMetadata(
+  backupPath: string,
+  endpoint: DbSyncEndpoint,
+): Promise<void> {
+  const metadata: BackupMetadata = {
+    connectionLabel: resolveConnectionLabel(endpoint.connectionId),
+    database: endpoint.database,
+    createdAt: new Date().toISOString(),
+  };
+  await fsp
+    .writeFile(metadataPath(backupPath), JSON.stringify(metadata), "utf8")
+    .catch(() => undefined);
+}
+
+async function readBackupMetadata(backupPath: string): Promise<BackupMetadata | null> {
+  try {
+    const raw = await fsp.readFile(metadataPath(backupPath), "utf8");
+    return JSON.parse(raw) as BackupMetadata;
+  } catch {
+    return null;
+  }
+}
+
 /** Dumps `endpoint` to a timestamped file. Throws (aborting the caller) on failure. */
 async function backupDatabase(
   endpoint: DbSyncEndpoint,
@@ -388,6 +424,7 @@ async function backupDatabase(
     if (dumpRun.code !== 0) {
       throw new Error(dumpRun.error ?? `pg_dump exited with code ${dumpRun.code}`);
     }
+    await writeBackupMetadata(backupPath, endpoint);
     emit(sender, runId, `Backup saved to ${backupPath}.`);
     return backupPath;
   } catch (err) {
@@ -408,15 +445,137 @@ async function listBackups(): Promise<BackupFileInfo[]> {
       .map(async (fileName) => {
         const filePath = path.join(dir, fileName);
         const stat = await fsp.stat(filePath);
+        const metadata = await readBackupMetadata(filePath);
         return {
           path: filePath,
           fileName,
           sizeBytes: stat.size,
           mtimeMs: stat.mtimeMs,
+          target: metadata ? `${metadata.connectionLabel}:${metadata.database}` : null,
+          createdAt: metadata?.createdAt ?? null,
         };
       }),
   );
   return infos.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+/** Resolves `filePath` and throws unless it stays inside the backups directory. */
+function resolveBackupPath(filePath: string): string {
+  const dir = backupsDir();
+  const resolved = path.resolve(filePath);
+  const relative = path.relative(dir, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Invalid backup path.");
+  }
+  return resolved;
+}
+
+async function deleteBackup(filePath: string): Promise<void> {
+  const resolved = resolveBackupPath(filePath);
+  await fsp.unlink(resolved);
+  await fsp.unlink(metadataPath(resolved)).catch(() => undefined);
+}
+
+function runProcessCapture(
+  cmd: string,
+  args: string[],
+): Promise<{ code: number; stdout: string; stderr: string; error?: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { shell: false });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf-8");
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf-8");
+    });
+    child.on("error", (err) => {
+      const code = (err as NodeJS.ErrnoException).code;
+      const message =
+        code === "ENOENT"
+          ? `${cmd} not found. Install the PostgreSQL client tools (pg_dump/pg_restore) and ensure they're on your PATH.`
+          : err.message;
+      resolve({ code: -1, stdout, stderr, error: message });
+    });
+    child.on("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
+  });
+}
+
+/**
+ * TOC "description" tokens `pg_restore --list` prints, longest/most-specific
+ * first so e.g. "TABLE DATA" (a data-copy entry) isn't mistaken for "TABLE"
+ * (the table's own definition entry).
+ */
+const TOC_TYPE_TOKENS = [
+  "MATERIALIZED VIEW",
+  "TABLE DATA",
+  "FK CONSTRAINT",
+  "DEFAULT ACL",
+  "SEQUENCE OWNED BY",
+  "SEQUENCE SET",
+  "TABLE",
+  "SCHEMA",
+  "VIEW",
+  "SEQUENCE",
+  "FUNCTION",
+  "INDEX",
+  "CONSTRAINT",
+  "TRIGGER",
+  "COMMENT",
+  "ACL",
+];
+
+const TOC_LINE_PATTERN = /^\d+;\s+\d+\s+\d+\s+(.+)$/;
+
+function parseTocDesc(remainder: string): string | null {
+  for (const token of TOC_TYPE_TOKENS) {
+    if (remainder === token || remainder.startsWith(`${token} `)) return token;
+  }
+  return null;
+}
+
+/** Reads object counts straight from the backup file's own table of contents. */
+async function inspectBackupFile(filePath: string): Promise<BackupInspection> {
+  const result = await runProcessCapture("pg_restore", ["--list", filePath]);
+  if (result.code !== 0) {
+    throw new Error(
+      result.error || result.stderr.trim().slice(0, 300) || "pg_restore --list failed.",
+    );
+  }
+
+  const counts: BackupInspection = {
+    schemas: 0,
+    tables: 0,
+    views: 0,
+    sequences: 0,
+    functions: 0,
+  };
+  for (const line of result.stdout.split("\n")) {
+    const match = TOC_LINE_PATTERN.exec(line);
+    if (!match?.[1]) continue;
+    switch (parseTocDesc(match[1])) {
+      case "SCHEMA":
+        counts.schemas++;
+        break;
+      case "TABLE":
+        counts.tables++;
+        break;
+      case "VIEW":
+      case "MATERIALIZED VIEW":
+        counts.views++;
+        break;
+      case "SEQUENCE":
+        counts.sequences++;
+        break;
+      case "FUNCTION":
+        counts.functions++;
+        break;
+      default:
+        break;
+    }
+  }
+  return counts;
 }
 
 async function runBackup(
@@ -1046,4 +1205,31 @@ export function registerDbSyncHandlers(): void {
       return { success: false, error: (err as Error).message };
     }
   });
+
+  registerIpcHandler(
+    DbSyncChannels.DELETE_BACKUP,
+    async (_event, rawInput: unknown) => {
+      try {
+        const input = validateDbSyncDeleteBackupInput(rawInput);
+        await deleteBackup(input.path);
+        return { success: true, data: undefined };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  registerIpcHandler(
+    DbSyncChannels.INSPECT_BACKUP,
+    async (_event, rawInput: unknown) => {
+      try {
+        const input = validateDbSyncInspectBackupInput(rawInput);
+        const resolved = resolveBackupPath(input.path);
+        const data = await inspectBackupFile(resolved);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
 }

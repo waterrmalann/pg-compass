@@ -14,6 +14,7 @@ import {
 } from "./shared/constants/ipc-channels";
 import type {
   BackupFileInfo,
+  BackupInspection,
   DbSyncBackupInput,
   DbSyncCancelInput,
   DbSyncListDatabasesInput,
@@ -47,6 +48,7 @@ import type {
   RenameRoleInput,
   RolesSnapshot,
   SetDbAccessLevelInput,
+  SetTriggerEnabledInput,
   TableRestrictionInput,
 } from "./shared/types/roles";
 import type { AppSettings, AppSettingsPatch } from "./shared/types/settings";
@@ -343,6 +345,17 @@ const rolesApi = {
       password,
     }),
 
+  alterRoleComment: (
+    connectionId: string,
+    name: string,
+    comment: string | null,
+  ): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(RolesChannels.ALTER_ROLE_COMMENT, {
+      connectionId,
+      name,
+      comment,
+    }),
+
   setDbAccessLevel: (
     input: SetDbAccessLevelInput,
   ): Promise<IpcResult<void>> =>
@@ -373,6 +386,11 @@ const rolesApi = {
 
   dropTrigger: (input: DropTriggerInput): Promise<IpcResult<void>> =>
     ipcRenderer.invoke(RolesChannels.DROP_TRIGGER, input),
+
+  setTriggerEnabled: (
+    input: SetTriggerEnabledInput,
+  ): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(RolesChannels.SET_TRIGGER_ENABLED, input),
 
   listTriggerFunctions: (
     connectionId: string,
@@ -441,6 +459,12 @@ const dbSyncApi = {
 
   restore: (input: DbSyncRestoreInput): Promise<IpcResult<DbSyncResult>> =>
     ipcRenderer.invoke(DbSyncChannels.RESTORE, input),
+
+  deleteBackup: (path: string): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(DbSyncChannels.DELETE_BACKUP, { path }),
+
+  inspectBackup: (path: string): Promise<IpcResult<BackupInspection>> =>
+    ipcRenderer.invoke(DbSyncChannels.INSPECT_BACKUP, { path }),
 } satisfies DbSyncApi;
 
 contextBridge.exposeInMainWorld("connectionApi", connectionApi);

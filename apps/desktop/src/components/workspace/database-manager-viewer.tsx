@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ViewerShell } from "@/components/workspace/viewer-shell";
-import { SyncTab } from "@/components/workspace/database-manager/sync-tab";
 import { BackupTab } from "@/components/workspace/database-manager/backup-tab";
 import { RestoreTab } from "@/components/workspace/database-manager/restore-tab";
 
-type DatabaseManagerTab = "sync" | "backup" | "restore";
+type DatabaseManagerTab = "backup" | "restore";
 
 export function DatabaseManagerViewer() {
-  const [activeTab, setActiveTab] = useState<DatabaseManagerTab>("sync");
+  const [activeTab, setActiveTab] = useState<DatabaseManagerTab>("backup");
   const [restorePrefillPath, setRestorePrefillPath] = useState<string | null>(
     null,
   );
@@ -27,14 +26,9 @@ export function DatabaseManagerViewer() {
           className="flex min-h-0 flex-1 flex-col gap-2"
         >
           <TabsList>
-            <TabsTrigger value="sync">Database Syncing</TabsTrigger>
             <TabsTrigger value="backup">Back Up</TabsTrigger>
             <TabsTrigger value="restore">Restore</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="sync" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-            <SyncTab />
-          </TabsContent>
 
           <TabsContent value="backup" className="mt-0 min-h-0 flex-1 overflow-y-auto">
             <BackupTab

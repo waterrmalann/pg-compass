@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Keyboard,
   Monitor,
@@ -163,70 +163,6 @@ function GeneralSettingsPanel() {
         }
       />
 
-      <ProdGuardToggleRow />
-    </div>
-  );
-}
-
-function formatRemaining(ms: number): string {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function ProdGuardToggleRow() {
-  const [state, setState] = useState<{
-    enabled: boolean;
-    enabledUntil: number | null;
-  }>({ enabled: false, enabledUntil: null });
-
-  useEffect(() => {
-    let cancelled = false;
-    globalThis.window.dbSyncApi.getProdGuard().then((result) => {
-      if (!cancelled && result.success) setState(result.data);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!state.enabled) return;
-    const interval = setInterval(() => {
-      globalThis.window.dbSyncApi.getProdGuard().then((result) => {
-        if (result.success) setState(result.data);
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [state.enabled]);
-
-  async function handleChange(checked: boolean) {
-    const result = await globalThis.window.dbSyncApi.setProdGuard(checked);
-    if (result.success) setState(result.data);
-  }
-
-  const remaining = state.enabledUntil
-    ? formatRemaining(state.enabledUntil - Date.now())
-    : null;
-
-  return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-3">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">
-          Show Production Databases in Database Sync
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {state.enabled
-            ? `Databases flagged as production are visible as a Database Sync target for ${remaining} more.`
-            : "Off by default, and always off after restart. Databases flagged as production (by hostname or database name) stay hidden from Database Sync targets unless you turn this on — then only for 5 minutes."}
-        </p>
-      </div>
-      <Switch
-        checked={state.enabled}
-        onCheckedChange={handleChange}
-        aria-label="Show production databases in Database Sync"
-      />
     </div>
   );
 }

@@ -20,6 +20,8 @@ export interface PgRole {
   hasPassword: boolean;
   canReplicate: boolean;
   canBypassRls: boolean;
+  /** COMMENT ON ROLE text, or null when the role has no comment set. */
+  description: string | null;
 }
 
 export interface PgMembership {
@@ -139,6 +141,13 @@ export interface AlterRoleInput {
   validUntil?: string | null;
 }
 
+export interface AlterRoleCommentInput {
+  connectionId: string;
+  name: string;
+  /** New COMMENT ON ROLE text, or null to clear it. */
+  comment: string | null;
+}
+
 export interface MembershipInput {
   connectionId: string;
   memberName: string;
@@ -250,6 +259,15 @@ export interface DropTriggerInput {
   schemaName: string;
   tableName: string;
   triggerName: string;
+}
+
+export interface SetTriggerEnabledInput {
+  connectionId: string;
+  databaseName: string;
+  schemaName: string;
+  tableName: string;
+  triggerName: string;
+  enabled: boolean;
 }
 
 export interface CreateTriggerFunctionInput {
