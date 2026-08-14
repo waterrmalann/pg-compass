@@ -254,7 +254,16 @@ export function ConnectionItem({
   }
 
   async function handleCopyConnectionString() {
-    const connectionString = buildConnectionString(connection);
+    // `connection` comes from the (secret-redacted) connection list — fetch
+    // the real credentials fresh rather than building from a stripped copy.
+    const fresh = await globalThis.window.connectionApi.getById(connection.id);
+    if (!fresh.success) {
+      toast.error(`Failed to load "${connection.label}"`, {
+        description: fresh.error,
+      });
+      return;
+    }
+    const connectionString = buildConnectionString(fresh.data);
     if (!connectionString) {
       toast.error(`No connection string available for "${connection.label}"`);
       return;

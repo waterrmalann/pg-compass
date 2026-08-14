@@ -66,6 +66,14 @@ The table viewer consists of multiple tabs: Data, Structure, Indexes, Constraint
 
 The data view (and the query's data view) supports exporting the data as CSV or JSON.
 
+### Users & Roles
+
+A Users view lets superusers manage roles for the active connection: create, alter, clone, rename and drop roles, manage memberships, set per-database access (no access, read only, read + write), inspect effective permissions, enable or disable triggers, and review a local audit log. Every mutation is refused in Read-only mode. Non-superusers only see their own role. See `docs/decisions/USERS_RBAC_ADR.md`.
+
+### Backup & Restore
+
+The Database Manager can back up a database to a local dump and restore a dump into a database, using `pg_dump`/`pg_restore` from the user's `PATH`. It is optional; the rest of the app needs no client tools. See `docs/decisions/BACKUP_RESTORE_ADR.md`.
+
 ## Design Principles
 
 1. Minimal UI
@@ -83,7 +91,7 @@ The following are **out of scope** for v1:
 * migrations
 * schema editing
 * stored procedure management
-* database backups
+* live database-to-database sync
 * ORM integrations
 
 These belong to full database IDE tools.

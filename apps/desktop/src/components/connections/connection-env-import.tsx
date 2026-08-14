@@ -44,12 +44,14 @@ export function ConnectionEnvImport({
           <DialogHeader>
             <DialogTitle>Extract from .env</DialogTitle>
             <DialogDescription>
-              Paste POSTGRES_*, PG*, or DATABASE_URL variables and matching
-              fields will be filled in automatically.
+              Paste PG*, POSTGRES_*, DATABASE_* or DB_* variables (or a
+              postgres:// DATABASE_URL) and matching fields will be filled in.
+              Commented lines and unrelated keys are ignored.
             </DialogDescription>
           </DialogHeader>
 
           <textarea
+            aria-label="Environment variables"
             className="min-h-48 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             placeholder={
               "POSTGRES_HOST=localhost\nPOSTGRES_PORT=5432\nPOSTGRES_DB=mydb\nPOSTGRES_USER=postgres\nPOSTGRES_PASSWORD=secret"
@@ -66,7 +68,11 @@ export function ConnectionEnvImport({
             >
               Cancel
             </Button>
-            <Button type="button" onClick={handleExtract} disabled={!text.trim()}>
+            <Button
+              type="button"
+              onClick={handleExtract}
+              disabled={!text.trim()}
+            >
               Extract
             </Button>
           </DialogFooter>

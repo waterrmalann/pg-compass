@@ -37,7 +37,7 @@ export function logAudit(args: Readonly<LogAuditArgs>): void {
     action: args.action,
     target: args.target,
     success: args.success,
-    error: args.success ? null : args.error ?? "Unknown error",
+    error: args.success ? null : (args.error ?? "Unknown error"),
   };
 
   const current = store.get("auditLog");

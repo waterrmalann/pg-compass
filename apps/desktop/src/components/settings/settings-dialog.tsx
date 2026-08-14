@@ -162,7 +162,6 @@ function GeneralSettingsPanel() {
           updateSettings({ general: { hideInternalSchemas: checked } })
         }
       />
-
     </div>
   );
 }

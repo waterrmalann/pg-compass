@@ -36,6 +36,10 @@ vi.mock("react-leaflet", () => {
       }
       return null;
     },
+    useMap: () => ({
+      setView: () => undefined,
+      getZoom: () => 6,
+    }),
   };
 });
 

@@ -3,9 +3,9 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import {
+  BackupChannels,
   ClipboardChannels,
   ConnectionChannels,
-  DbSyncChannels,
   HelpChannels,
   RolesChannels,
   SettingsChannels,
@@ -13,17 +13,15 @@ import {
   WorkspaceChannels,
 } from "./shared/constants/ipc-channels";
 import type {
+  BackupCancelInput,
+  BackupCreateInput,
   BackupFileInfo,
   BackupInspection,
-  DbSyncBackupInput,
-  DbSyncCancelInput,
-  DbSyncListDatabasesInput,
-  DbSyncProdGuardState,
-  DbSyncProgressEvent,
-  DbSyncRestoreInput,
-  DbSyncResult,
-  DbSyncRunInput,
-} from "./shared/types/db-sync";
+  BackupListDatabasesInput,
+  BackupProgressEvent,
+  BackupRestoreInput,
+  BackupRunResult,
+} from "./shared/types/backup";
 import type {
   ConnectionConfig,
   ConnectionFileDialogOptions,
@@ -36,16 +34,11 @@ import type {
   AuditLogEntry,
   CloneRoleInput,
   CreateRoleInput,
-  CreateTriggerFunctionInput,
-  CreateTriggerInput,
-  DbAccessInput,
-  DbReadonlyGrantInput,
-  DropTriggerInput,
   EffectivePermissions,
   MembershipInput,
-  PgTriggerFunction,
   PgTriggerInfo,
   RenameRoleInput,
+  RolesSidebarSummary,
   RolesSnapshot,
   SetDbAccessLevelInput,
   SetTriggerEnabledInput,
@@ -85,9 +78,9 @@ import type {
   SearchForeignKeyResult,
 } from "./shared/types/table-data";
 import type {
+  BackupApi,
   ClipboardApi,
   ConnectionApi,
-  DbSyncApi,
   HelpApi,
   IpcResult,
   RolesApi,
@@ -307,6 +300,11 @@ const rolesApi = {
       targetUser,
     }),
 
+  getSidebarSummary: (
+    connectionId: string,
+  ): Promise<IpcResult<RolesSidebarSummary>> =>
+    ipcRenderer.invoke(RolesChannels.GET_SIDEBAR_SUMMARY, { connectionId }),
+
   createRole: (input: CreateRoleInput): Promise<IpcResult<void>> =>
     ipcRenderer.invoke(RolesChannels.CREATE_ROLE, input),
 
@@ -321,18 +319,6 @@ const rolesApi = {
 
   revokeMembership: (input: MembershipInput): Promise<IpcResult<void>> =>
     ipcRenderer.invoke(RolesChannels.REVOKE_MEMBERSHIP, input),
-
-  grantDbConnect: (input: DbAccessInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.GRANT_DB_CONNECT, input),
-
-  revokeDbConnect: (input: DbAccessInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.REVOKE_DB_CONNECT, input),
-
-  grantDbReadonly: (input: DbReadonlyGrantInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.GRANT_DB_READONLY, input),
-
-  revokeDbReadonly: (input: DbReadonlyGrantInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.REVOKE_DB_READONLY, input),
 
   alterRolePassword: (
     connectionId: string,
@@ -356,9 +342,7 @@ const rolesApi = {
       comment,
     }),
 
-  setDbAccessLevel: (
-    input: SetDbAccessLevelInput,
-  ): Promise<IpcResult<void>> =>
+  setDbAccessLevel: (input: SetDbAccessLevelInput): Promise<IpcResult<void>> =>
     ipcRenderer.invoke(RolesChannels.SET_DB_ACCESS_LEVEL, input),
 
   setTableRestrictions: (
@@ -381,30 +365,10 @@ const rolesApi = {
       databaseName,
     }),
 
-  createTrigger: (input: CreateTriggerInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.CREATE_TRIGGER, input),
-
-  dropTrigger: (input: DropTriggerInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.DROP_TRIGGER, input),
-
   setTriggerEnabled: (
     input: SetTriggerEnabledInput,
   ): Promise<IpcResult<void>> =>
     ipcRenderer.invoke(RolesChannels.SET_TRIGGER_ENABLED, input),
-
-  listTriggerFunctions: (
-    connectionId: string,
-    databaseName: string,
-  ): Promise<IpcResult<PgTriggerFunction[]>> =>
-    ipcRenderer.invoke(RolesChannels.LIST_TRIGGER_FUNCTIONS, {
-      connectionId,
-      databaseName,
-    }),
-
-  createTriggerFunction: (
-    input: CreateTriggerFunctionInput,
-  ): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(RolesChannels.CREATE_TRIGGER_FUNCTION, input),
 
   getEffectivePermissions: (
     connectionId: string,
@@ -422,50 +386,44 @@ const rolesApi = {
     ipcRenderer.invoke(RolesChannels.CLEAR_AUDIT_LOG, { connectionId }),
 } satisfies RolesApi;
 
-const dbSyncApi = {
+const backupApi = {
   listDatabases: (
-    input: DbSyncListDatabasesInput,
+    input: BackupListDatabasesInput,
   ): Promise<IpcResult<string[]>> =>
-    ipcRenderer.invoke(DbSyncChannels.LIST_DATABASES, input),
+    ipcRenderer.invoke(BackupChannels.LIST_DATABASES, input),
 
-  run: (input: DbSyncRunInput): Promise<IpcResult<DbSyncResult>> =>
-    ipcRenderer.invoke(DbSyncChannels.RUN, input),
+  cancel: (input: BackupCancelInput): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(BackupChannels.CANCEL, input),
 
-  cancel: (input: DbSyncCancelInput): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(DbSyncChannels.CANCEL, input),
-
-  onProgress: (callback: (event: DbSyncProgressEvent) => void) => {
+  onProgress: (callback: (event: BackupProgressEvent) => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      progress: DbSyncProgressEvent,
+      progress: BackupProgressEvent,
     ) => callback(progress);
-    ipcRenderer.on(DbSyncChannels.PROGRESS, handler);
+    ipcRenderer.on(BackupChannels.PROGRESS, handler);
     return () => {
-      ipcRenderer.removeListener(DbSyncChannels.PROGRESS, handler);
+      ipcRenderer.removeListener(BackupChannels.PROGRESS, handler);
     };
   },
 
-  getProdGuard: (): Promise<IpcResult<DbSyncProdGuardState>> =>
-    ipcRenderer.invoke(DbSyncChannels.GET_PROD_GUARD),
-
-  setProdGuard: (enabled: boolean): Promise<IpcResult<DbSyncProdGuardState>> =>
-    ipcRenderer.invoke(DbSyncChannels.SET_PROD_GUARD, { enabled }),
-
   listBackups: (): Promise<IpcResult<BackupFileInfo[]>> =>
-    ipcRenderer.invoke(DbSyncChannels.LIST_BACKUPS),
+    ipcRenderer.invoke(BackupChannels.LIST_BACKUPS),
 
-  backup: (input: DbSyncBackupInput): Promise<IpcResult<DbSyncResult>> =>
-    ipcRenderer.invoke(DbSyncChannels.BACKUP, input),
+  backup: (input: BackupCreateInput): Promise<IpcResult<BackupRunResult>> =>
+    ipcRenderer.invoke(BackupChannels.BACKUP, input),
 
-  restore: (input: DbSyncRestoreInput): Promise<IpcResult<DbSyncResult>> =>
-    ipcRenderer.invoke(DbSyncChannels.RESTORE, input),
+  restore: (input: BackupRestoreInput): Promise<IpcResult<BackupRunResult>> =>
+    ipcRenderer.invoke(BackupChannels.RESTORE, input),
+
+  showRestoreFileDialog: (): Promise<IpcResult<string | null>> =>
+    ipcRenderer.invoke(BackupChannels.SHOW_RESTORE_FILE_DIALOG),
 
   deleteBackup: (path: string): Promise<IpcResult<void>> =>
-    ipcRenderer.invoke(DbSyncChannels.DELETE_BACKUP, { path }),
+    ipcRenderer.invoke(BackupChannels.DELETE_BACKUP, { path }),
 
   inspectBackup: (path: string): Promise<IpcResult<BackupInspection>> =>
-    ipcRenderer.invoke(DbSyncChannels.INSPECT_BACKUP, { path }),
-} satisfies DbSyncApi;
+    ipcRenderer.invoke(BackupChannels.INSPECT_BACKUP, { path }),
+} satisfies BackupApi;
 
 contextBridge.exposeInMainWorld("connectionApi", connectionApi);
 contextBridge.exposeInMainWorld("settingsApi", settingsApi);
@@ -474,4 +432,4 @@ contextBridge.exposeInMainWorld("helpApi", helpApi);
 contextBridge.exposeInMainWorld("workspaceApi", workspaceApi);
 contextBridge.exposeInMainWorld("clipboardApi", clipboardApi);
 contextBridge.exposeInMainWorld("rolesApi", rolesApi);
-contextBridge.exposeInMainWorld("dbSyncApi", dbSyncApi);
+contextBridge.exposeInMainWorld("backupApi", backupApi);

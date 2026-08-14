@@ -1,4 +1,11 @@
-import { ChevronRight, Eye, ExternalLink, Folder, FolderOpen, Table2 } from "lucide-react";
+import {
+  ChevronRight,
+  Eye,
+  ExternalLink,
+  Folder,
+  FolderOpen,
+  Table2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActiveSelection } from "@/components/sidebar/active-selection";
 import type { DatabaseSchema } from "@/shared/types/connection";
@@ -132,7 +139,7 @@ export function SchemaTreeNode({
                     onClick={() => onOpenTableInNewTab(schema.name, tableName)}
                   >
                     <ExternalLink className="size-3.5" />
-                    Open in New Tab
+                    Open in new tab
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>

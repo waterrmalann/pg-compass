@@ -6,6 +6,7 @@ import {
   csvQuoteField,
 } from "@/main/table-data-export";
 import { assertSafePgCast } from "@/main/table-data-write";
+import { ensureArray } from "@/main/table-data-utils";
 
 describe("table-data query helpers", () => {
   it("accepts read-only queries and rejects mutating ones", () => {
@@ -147,6 +148,23 @@ describe("table-data export helpers", () => {
         table: 'ta"ble',
       }),
     ).toBe('SELECT * FROM "we""ird"."ta""ble"');
+  });
+});
+
+describe("ensureArray", () => {
+  it("passes arrays through and treats non-strings as empty", () => {
+    expect(ensureArray(["a", "b"])).toEqual(["a", "b"]);
+    expect(ensureArray(null)).toEqual([]);
+    expect(ensureArray("{}")).toEqual([]);
+  });
+
+  it("parses quoted elements containing commas, quotes and backslashes", () => {
+    expect(ensureArray("{id,name}")).toEqual(["id", "name"]);
+    expect(ensureArray('{"a,b",c}')).toEqual(["a,b", "c"]);
+    expect(ensureArray(String.raw`{"say \"hi\"","back\\slash"}`)).toEqual([
+      'say "hi"',
+      String.raw`back\slash`,
+    ]);
   });
 });
 

@@ -415,6 +415,9 @@ export async function deleteRows(
           return `(${placeholders.join(", ")})`;
         });
         const keyTuple = `(${primaryKeySql})`;
+        // The renderer-authored filter only ever runs in the read-only
+        // selection above; the write path deletes captured keys only, with
+        // parameters (codebase-consistency ADR).
         const result = await client.query(
           `DELETE FROM ${qualifiedTable} WHERE ${keyTuple} IN (${tuples.join(", ")})`,
           values,

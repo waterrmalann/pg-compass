@@ -8,7 +8,7 @@ type IpcHandler<Args extends unknown[], Result> = (
 
 let trustedRendererUrl: string | null = null;
 const SAVE_PATH_TTL_MS = 5 * 60 * 1_000;
-type SavePurpose = "export" | "sql-dump" | "import";
+type SavePurpose = "export" | "sql-dump" | "import" | "restore";
 interface SavePathGrant {
   purpose: SavePurpose;
   expiresAt: number;
@@ -91,9 +91,7 @@ export function consumeApprovedSavePath(
     approvedSavePaths.delete(event.sender.id);
   }
   if (!grant || grant.purpose !== purpose || grant.expiresAt < Date.now()) {
-    throw new Error(
-      "The export destination was not approved by the save dialog.",
-    );
+    throw new Error("The selected file was not approved by a file dialog.");
   }
   return normalizedPath;
 }

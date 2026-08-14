@@ -175,7 +175,7 @@ function WorkspaceTabBar({
                 Close
               </ContextMenuItem>
               <ContextMenuItem onClick={onCloseAllTabs}>
-                Close All Tabs
+                Close all tabs
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>

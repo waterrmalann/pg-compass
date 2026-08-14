@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  validateBackupCancelInput,
+  validateBackupCreateInput,
+  validateBackupRestoreInput,
   validateConnectionInput,
   validateCreateRoleInput,
-  validateDbAccessInput,
-  validateDbReadonlyGrantInput,
   validateDropRoleInput,
   validateExportDataParams,
   validateGetRowsParams,
@@ -12,7 +13,10 @@ import {
   validateInsertRowParams,
   validateMembershipInput,
   validateRolesSnapshotInput,
+  validateSetDbAccessLevelInput,
+  validateSetTriggerEnabledInput,
   validateSettingsPatch,
+  validateTableRestrictionInput,
   validateUpdateRowParams,
 } from "@/main/ipc-validation";
 
@@ -219,22 +223,35 @@ describe("IPC runtime validation", () => {
       ).toEqual({ connectionId: "c1", targetUser: "reader" });
     });
 
-    it("rejects an invalid role name in create-role", () => {
+    it("accepts any identifier quoteIdent can carry, up to 63 bytes", () => {
+      const unusualNames = ["bad-name!", "Mixed Case", 'quote"d', "ünïcødé"];
+      for (const name of unusualNames) {
+        expect(
+          validateCreateRoleInput({ connectionId: "c1", name, login: true })
+            .name,
+        ).toBe(name);
+      }
+      expect(
+        validateDropRoleInput({ connectionId: "c1", name: "a".repeat(63) })
+          .name,
+      ).toHaveLength(63);
+    });
+
+    it("rejects empty, NUL-containing, and over-63-byte identifiers", () => {
+      expect(() =>
+        validateCreateRoleInput({ connectionId: "c1", name: "", login: true }),
+      ).toThrow(/non-empty/);
       expect(() =>
         validateCreateRoleInput({
           connectionId: "c1",
-          name: "bad-name!",
+          name: "a\u0000b",
           login: true,
         }),
-      ).toThrow(/valid PostgreSQL identifier/);
-
-      expect(
-        validateCreateRoleInput({
-          connectionId: "c1",
-          name: "reader",
-          login: true,
-        }).name,
-      ).toBe("reader");
+      ).toThrow(/NUL/);
+      // 32 two-byte characters = 64 bytes, although only 32 characters.
+      expect(() =>
+        validateDropRoleInput({ connectionId: "c1", name: "é".repeat(32) }),
+      ).toThrow(/63-byte/);
     });
 
     it("rejects unexpected keys in membership input", () => {
@@ -248,25 +265,54 @@ describe("IPC runtime validation", () => {
       ).toThrow(/extra/);
     });
 
-    it("rejects invalid database names in db access input", () => {
+    it("drops the removed restrictedTables option from db access input", () => {
+      const input = {
+        connectionId: "c1",
+        userName: "reader",
+        databaseName: "my-app db",
+        level: "readonly",
+        applyToFutureTables: true,
+      };
+      expect(validateSetDbAccessLevelInput(input)).toEqual(input);
       expect(() =>
-        validateDbAccessInput({
-          connectionId: "c1",
-          userName: "reader",
-          databaseName: "DB WITH SPACES",
-        }),
-      ).toThrow(/valid database name/);
+        validateSetDbAccessLevelInput({ ...input, restrictedTables: ["t"] }),
+      ).toThrow(/restrictedTables/);
+      expect(() =>
+        validateSetDbAccessLevelInput({ ...input, level: "owner" }),
+      ).toThrow(/none\/readonly\/readwrite/);
     });
 
-    it("validates the schema override in readonly grants", () => {
-      expect(
-        validateDbReadonlyGrantInput({
-          connectionId: "c1",
-          userName: "reader",
-          databaseName: "app",
-          schema: "reporting",
-        }).schema,
-      ).toBe("reporting");
+    it("validates per-table restriction entries", () => {
+      const input = {
+        connectionId: "c1",
+        userName: "reader",
+        databaseName: "app",
+        tables: [
+          { schema: "Sales Data", name: "orders-2024", level: "readonly" },
+        ],
+      };
+      expect(validateTableRestrictionInput(input)).toEqual(input);
+      expect(() =>
+        validateTableRestrictionInput({
+          ...input,
+          tables: [{ schema: "", name: "orders", level: "readonly" }],
+        }),
+      ).toThrow(/tables\[0\]\.schema/);
+    });
+
+    it("validates trigger toggles", () => {
+      const input = {
+        connectionId: "c1",
+        databaseName: "app",
+        schemaName: "public",
+        tableName: "orders",
+        triggerName: "orders audit",
+        enabled: false,
+      };
+      expect(validateSetTriggerEnabledInput(input)).toEqual(input);
+      expect(() =>
+        validateSetTriggerEnabledInput({ ...input, enabled: "no" }),
+      ).toThrow(/enabled/);
     });
 
     it("drops unknown keys from drop-role payloads", () => {
@@ -277,6 +323,59 @@ describe("IPC runtime validation", () => {
           force: true,
         }),
       ).toThrow(/force/);
+    });
+  });
+
+  describe("backup / restore", () => {
+    const target = { connectionId: "c1", database: "app" };
+
+    it("accepts a restore with production confirmation", () => {
+      const input = {
+        runId: "run-12345678",
+        target,
+        backupPath: "/tmp/app.dump",
+        backupTarget: true,
+        confirmProduction: true,
+      };
+      expect(validateBackupRestoreInput(input)).toEqual(input);
+    });
+
+    it("rejects a non-boolean production confirmation and unknown keys", () => {
+      const input = { runId: "run-12345678", target, backupPath: "/a.dump" };
+      expect(() =>
+        validateBackupRestoreInput({ ...input, confirmProduction: "yes" }),
+      ).toThrow(/confirmProduction/);
+      expect(() =>
+        validateBackupRestoreInput({ ...input, mode: "row-sync" }),
+      ).toThrow(/mode/);
+    });
+
+    it("validates run identifiers and endpoint database names", () => {
+      expect(() => validateBackupCancelInput({ runId: "short" })).toThrow(
+        /run identifier/,
+      );
+      expect(
+        validateBackupCreateInput({
+          runId: "run-12345678",
+          source: { connectionId: "c1", database: "host=evil dbname=x" },
+        }).source.database,
+      ).toBe("host=evil dbname=x");
+      expect(() =>
+        validateBackupCreateInput({
+          runId: "run-12345678",
+          source: { connectionId: "c1", database: "" },
+        }),
+      ).toThrow(/database/);
+    });
+
+    it("rejects oversized payloads", () => {
+      expect(() =>
+        validateBackupRestoreInput({
+          runId: "run-12345678",
+          target,
+          backupPath: "x".repeat(3_000_000),
+        }),
+      ).toThrow(/payload limit/);
     });
   });
 });

@@ -15,7 +15,13 @@
 import { useEffect, useMemo, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import icon2xUrl from "leaflet/dist/images/marker-icon-2x.png";
@@ -50,6 +56,20 @@ function ClickCapture({
       onSelect(event.latlng.lat, event.latlng.lng);
     },
   });
+  return null;
+}
+
+// Pans to a new marker position without remounting the map. `MapContainer`'s
+// `center`/`zoom` props only apply at mount, so re-centering on every
+// lat/lng edit via a coordinate-derived `key` would fully tear down and
+// recreate the Leaflet map (tile refetch, lost pan/zoom) on every keystroke.
+function RecenterOnMarkerChange({
+  position,
+}: Readonly<{ position: [number, number] | null }>) {
+  const map = useMap();
+  useEffect(() => {
+    if (position) map.setView(position, map.getZoom());
+  }, [position, map]);
   return null;
 }
 
@@ -151,7 +171,6 @@ export function GeometryMapEditor({
         data-testid="postgis-map-wrapper"
       >
         <MapContainer
-          key={`${mapCenter[0]},${mapCenter[1]},${String(mapZoom)}`}
           center={mapCenter}
           zoom={mapZoom}
           style={{ height: "100%", width: "100%" }}
@@ -162,6 +181,7 @@ export function GeometryMapEditor({
             attribution="&copy; OpenStreetMap contributors"
           />
           <ClickCapture onSelect={handleMapClick} />
+          <RecenterOnMarkerChange position={markerPosition} />
           {markerPosition ? <Marker position={markerPosition} /> : null}
         </MapContainer>
       </div>

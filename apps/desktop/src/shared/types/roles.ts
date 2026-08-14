@@ -17,7 +17,11 @@ export interface PgRole {
   connectionLimit: number;
   /** ISO-8601 expiry timestamp, or null when the role never expires. */
   validUntil: string | null;
-  hasPassword: boolean;
+  /**
+   * Whether the role has a password set. Null when unknown: only superusers
+   * can read `pg_authid`, so other connections cannot tell.
+   */
+  hasPassword: boolean | null;
   canReplicate: boolean;
   canBypassRls: boolean;
   /** COMMENT ON ROLE text, or null when the role has no comment set. */
@@ -40,8 +44,14 @@ export interface PgDatabaseInfo {
   owner: string;
   /** Pretty-printed size (e.g. "12 MB"). */
   size: string | null;
-  /** Number of non-system schemas. */
-  schemaCount: number;
+  /**
+   * Number of non-system schemas, read while actually connected to this
+   * database (schemas are a per-database catalog). Null when the snapshot
+   * couldn't connect to this database (no CONNECT privilege, or the
+   * connection attempt failed) — never a stand-in for another database's
+   * count.
+   */
+  schemaCount: number | null;
   /** Number of roles whose grants include CONNECT on this database. */
   roleCount: number;
   /** Privileges evaluated for the snapshot's `targetUser`. */
@@ -92,8 +102,17 @@ export interface DashboardStats {
    * `-1` when the activity view is unavailable (privilege-restricted connection).
    */
   activeConnections: number;
-  /** Roles created within the past 7 days, sorted newest-first. */
-  recentUsers: Array<{ name: string; createdAt: string }>;
+}
+
+/**
+ * Cheap subset of `RolesSnapshot` for surfaces (e.g. the sidebar) that only
+ * need the role count/list and admin flag — skips the memberships fetch and
+ * the per-database connection scan (`databases`/`stats`) that make the full
+ * snapshot expensive on servers with many databases.
+ */
+export interface RolesSidebarSummary {
+  currentUser: CurrentUser;
+  roles: PgRole[];
 }
 
 export interface RolesSnapshot {
@@ -155,37 +174,13 @@ export interface MembershipInput {
   withAdminOption?: boolean;
 }
 
-export interface DbAccessInput {
-  connectionId: string;
-  userName: string;
-  databaseName: string;
-}
-
-export interface DbReadonlyGrantInput {
-  connectionId: string;
-  userName: string;
-  databaseName: string;
-  /** Schema to scope the read-only grant to. Defaults to `public`. */
-  schema?: string;
-}
-
 export interface SetDbAccessLevelInput {
   connectionId: string;
   userName: string;
   databaseName: string;
   level: AccessLevel;
-  /**
-   * When true, recovers the historical default privileges on existing tables.
-   * Tracked because "Read + Write" + restricted tables should NOT auto-add
-   * future tables unless explicitly enabled.
-   */
+  /** Also grant the level on tables created later (ALTER DEFAULT PRIVILEGES). */
   applyToFutureTables: boolean;
-  /**
-   * When set, permissions are restricted to exactly these table names in the
-   * database's `public` schema. When undefined, every table in `public`
-   * receives the grant.
-   */
-  restrictedTables?: string[];
 }
 
 export interface CloneRoleInput {
@@ -227,38 +222,17 @@ export interface PgTriggerInfo {
   functionName: string;
   /** Schema the trigger function lives in. */
   functionSchema: string;
+  /** True unless `enabledMode` is "disabled". Kept for the plain on/off toggle. */
   enabled: boolean;
+  /**
+   * Full `pg_trigger.tgenabled` mode: "origin" (normal), "disabled",
+   * "replica" (fires only when `session_replication_role = replica`), or
+   * "always" (fires regardless of `session_replication_role`). The toggle
+   * UI only offers origin/disabled — replica/always are surfaced read-only.
+   */
+  enabledMode: "origin" | "disabled" | "replica" | "always";
   /** "ROW" or "STATEMENT". */
   orientation: string;
-}
-
-export interface PgTriggerFunction {
-  schemaName: string;
-  functionName: string;
-  source: string | null;
-}
-
-export interface CreateTriggerInput {
-  connectionId: string;
-  databaseName: string;
-  schemaName: string;
-  tableName: string;
-  triggerName: string;
-  timing: "BEFORE" | "AFTER" | "INSTEAD OF";
-  events: Array<"INSERT" | "UPDATE" | "DELETE" | "TRUNCATE">;
-  orientation: "ROW" | "STATEMENT";
-  functionSchema: string;
-  functionName: string;
-  /** Optional argument passed to the trigger function. */
-  functionArgs?: string;
-}
-
-export interface DropTriggerInput {
-  connectionId: string;
-  databaseName: string;
-  schemaName: string;
-  tableName: string;
-  triggerName: string;
 }
 
 export interface SetTriggerEnabledInput {
@@ -270,17 +244,9 @@ export interface SetTriggerEnabledInput {
   enabled: boolean;
 }
 
-export interface CreateTriggerFunctionInput {
-  connectionId: string;
-  databaseName: string;
-  schemaName: string;
-  functionName: string;
-  /** PL/pgSQL source body. */
-  source: string;
-}
-
 export interface EffectivePermissions {
   user: string;
+  /** Per-database level; "none" also when the database could not be reached. */
   databases: Array<{
     name: string;
     level: AccessLevel;

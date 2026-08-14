@@ -10,16 +10,11 @@ import type {
   AuditLogEntry,
   CloneRoleInput,
   CreateRoleInput,
-  CreateTriggerFunctionInput,
-  CreateTriggerInput,
-  DbAccessInput,
-  DbReadonlyGrantInput,
-  DropTriggerInput,
   EffectivePermissions,
   MembershipInput,
-  PgTriggerFunction,
   PgTriggerInfo,
   RenameRoleInput,
+  RolesSidebarSummary,
   RolesSnapshot,
   SetDbAccessLevelInput,
   SetTriggerEnabledInput,
@@ -27,17 +22,15 @@ import type {
 } from "./roles";
 import type { AppSettings, AppSettingsPatch } from "./settings";
 import type {
+  BackupCancelInput,
+  BackupCreateInput,
   BackupFileInfo,
   BackupInspection,
-  DbSyncBackupInput,
-  DbSyncCancelInput,
-  DbSyncListDatabasesInput,
-  DbSyncProdGuardState,
-  DbSyncProgressEvent,
-  DbSyncRestoreInput,
-  DbSyncResult,
-  DbSyncRunInput,
-} from "./db-sync";
+  BackupListDatabasesInput,
+  BackupProgressEvent,
+  BackupRestoreInput,
+  BackupRunResult,
+} from "./backup";
 import type {
   CancelQueryParams,
   CancelQueryResult,
@@ -147,15 +140,14 @@ export interface RolesApi {
     connectionId: string,
     targetUser?: string,
   ): Promise<IpcResult<RolesSnapshot>>;
+  getSidebarSummary(
+    connectionId: string,
+  ): Promise<IpcResult<RolesSidebarSummary>>;
   createRole(input: CreateRoleInput): Promise<IpcResult<void>>;
   alterRole(input: AlterRoleInput): Promise<IpcResult<void>>;
   dropRole(connectionId: string, name: string): Promise<IpcResult<void>>;
   grantMembership(input: MembershipInput): Promise<IpcResult<void>>;
   revokeMembership(input: MembershipInput): Promise<IpcResult<void>>;
-  grantDbConnect(input: DbAccessInput): Promise<IpcResult<void>>;
-  revokeDbConnect(input: DbAccessInput): Promise<IpcResult<void>>;
-  grantDbReadonly(input: DbReadonlyGrantInput): Promise<IpcResult<void>>;
-  revokeDbReadonly(input: DbReadonlyGrantInput): Promise<IpcResult<void>>;
   alterRolePassword(
     connectionId: string,
     name: string,
@@ -167,25 +159,14 @@ export interface RolesApi {
     comment: string | null,
   ): Promise<IpcResult<void>>;
   setDbAccessLevel(input: SetDbAccessLevelInput): Promise<IpcResult<void>>;
-  setTableRestrictions(
-    input: TableRestrictionInput,
-  ): Promise<IpcResult<void>>;
+  setTableRestrictions(input: TableRestrictionInput): Promise<IpcResult<void>>;
   cloneRole(input: CloneRoleInput): Promise<IpcResult<void>>;
   renameRole(input: RenameRoleInput): Promise<IpcResult<void>>;
   listTriggers(
     connectionId: string,
     databaseName: string,
   ): Promise<IpcResult<PgTriggerInfo[]>>;
-  createTrigger(input: CreateTriggerInput): Promise<IpcResult<void>>;
-  dropTrigger(input: DropTriggerInput): Promise<IpcResult<void>>;
   setTriggerEnabled(input: SetTriggerEnabledInput): Promise<IpcResult<void>>;
-  listTriggerFunctions(
-    connectionId: string,
-    databaseName: string,
-  ): Promise<IpcResult<PgTriggerFunction[]>>;
-  createTriggerFunction(
-    input: CreateTriggerFunctionInput,
-  ): Promise<IpcResult<void>>;
   getEffectivePermissions(
     connectionId: string,
     user: string,
@@ -194,18 +175,15 @@ export interface RolesApi {
   clearAuditLog(connectionId: string): Promise<IpcResult<void>>;
 }
 
-export interface DbSyncApi {
-  listDatabases(
-    input: DbSyncListDatabasesInput,
-  ): Promise<IpcResult<string[]>>;
-  run(input: DbSyncRunInput): Promise<IpcResult<DbSyncResult>>;
-  cancel(input: DbSyncCancelInput): Promise<IpcResult<void>>;
-  onProgress(callback: (event: DbSyncProgressEvent) => void): () => void;
-  getProdGuard(): Promise<IpcResult<DbSyncProdGuardState>>;
-  setProdGuard(enabled: boolean): Promise<IpcResult<DbSyncProdGuardState>>;
+export interface BackupApi {
+  listDatabases(input: BackupListDatabasesInput): Promise<IpcResult<string[]>>;
+  cancel(input: BackupCancelInput): Promise<IpcResult<void>>;
+  onProgress(callback: (event: BackupProgressEvent) => void): () => void;
   listBackups(): Promise<IpcResult<BackupFileInfo[]>>;
-  backup(input: DbSyncBackupInput): Promise<IpcResult<DbSyncResult>>;
-  restore(input: DbSyncRestoreInput): Promise<IpcResult<DbSyncResult>>;
+  backup(input: BackupCreateInput): Promise<IpcResult<BackupRunResult>>;
+  restore(input: BackupRestoreInput): Promise<IpcResult<BackupRunResult>>;
+  /** Opens a native file picker; the chosen path is approved for one restore. */
+  showRestoreFileDialog(): Promise<IpcResult<string | null>>;
   deleteBackup(path: string): Promise<IpcResult<void>>;
   inspectBackup(path: string): Promise<IpcResult<BackupInspection>>;
 }

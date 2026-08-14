@@ -1,3 +1,4 @@
+export * from "./backup";
 export * from "./connection";
 export * from "./ipc";
 export * from "./roles";

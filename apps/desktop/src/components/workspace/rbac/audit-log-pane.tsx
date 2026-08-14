@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { AuditLogEntry } from "@/shared/types/roles";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useLatestRequest } from "@/hooks/use-latest-request";
+import type { AuditLogEntry } from "@/shared/types/roles";
 import { ErrorState, LoadingState, unwrap } from "./shared";
 
 interface AuditLogPaneProps {
@@ -33,6 +34,7 @@ export function AuditLogPane({
   connectionId,
   isAdmin,
 }: Readonly<AuditLogPaneProps>) {
+  const runLatestRequest = useLatestRequest();
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,36 +44,102 @@ export function AuditLogPane({
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const result = await globalThis.window.rolesApi.getAuditLog(connectionId);
-      setEntries(unwrap(result));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
+    const request = await runLatestRequest(async () =>
+      unwrap(await globalThis.window.rolesApi.getAuditLog(connectionId)),
+    );
+    if (request.status === "stale") return;
+    setLoading(false);
+    if (request.status === "error") {
+      setError((request.error as Error).message);
+      return;
     }
-  }, [connectionId]);
+    setEntries(request.value);
+  }, [connectionId, runLatestRequest]);
 
   useEffect(() => {
+    setEntries([]);
     void refresh();
   }, [refresh]);
 
   async function handleClear(): Promise<void> {
     setBusy(true);
-    const result = await globalThis.window.rolesApi.clearAuditLog(connectionId);
-    setBusy(false);
-    if (result.success) {
+    try {
+      const result =
+        await globalThis.window.rolesApi.clearAuditLog(connectionId);
+      if (!result.success) {
+        toast.error("Clear audit log failed", { description: result.error });
+        return;
+      }
       toast.success("Audit log cleared");
       setClearOpen(false);
       await refresh();
-    } else {
-      toast.error("Clear audit log failed", { description: result.error });
+    } catch (err) {
+      toast.error("Clear audit log failed", {
+        description: (err as Error).message,
+      });
+    } finally {
+      setBusy(false);
     }
   }
 
   const sorted = [...entries].sort((a, b) =>
     a.timestamp < b.timestamp ? 1 : -1,
   );
+
+  let content: React.ReactNode;
+  if (loading && sorted.length === 0) {
+    content = <LoadingState label="Loading audit log…" />;
+  } else if (error) {
+    content = (
+      <ErrorState
+        message={error}
+        onRetry={() => {
+          void refresh();
+        }}
+      />
+    );
+  } else if (sorted.length === 0) {
+    content = (
+      <p className="text-sm text-muted-foreground">No audit entries yet.</p>
+    );
+  } else {
+    content = (
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="overflow-hidden rounded-lg border border-border">
+          <Table>
+            <TableHeader className="bg-card">
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Actor</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                    {new Date(entry.timestamp).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="font-medium">{entry.actor}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      {entry.action}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs">{entry.target}</TableCell>
+                  <TableCell>
+                    <AuditResult entry={entry} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </ScrollArea>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -92,61 +160,7 @@ export function AuditLogPane({
           </Button>
         )}
       </div>
-      {loading && sorted.length === 0 ? (
-        <LoadingState label="Loading audit log…" />
-      ) : error ? (
-        <ErrorState message={error} onRetry={() => void refresh()} />
-      ) : sorted.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No audit entries yet.</p>
-      ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="overflow-hidden rounded-lg border border-border">
-            <Table>
-              <TableHeader className="bg-card">
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Actor</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="font-medium">{entry.actor}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono uppercase">
-                        {entry.action}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs">{entry.target}</TableCell>
-                    <TableCell>
-                      {entry.success ? (
-                        <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="size-3.5" />
-                          OK
-                        </span>
-                      ) : (
-                        <span
-                          className="flex items-center gap-1 text-xs text-destructive"
-                          title={entry.error ?? undefined}
-                        >
-                          <XCircle className="size-3.5" />
-                          Failed
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </ScrollArea>
-      )}
+      {content}
 
       <Dialog
         open={clearOpen}
@@ -171,13 +185,40 @@ export function AuditLogPane({
             <Button
               variant="destructive"
               disabled={busy}
-              onClick={() => void handleClear()}
+              onClick={() => {
+                void handleClear();
+              }}
             >
+              {busy && <Loader2 className="size-4 animate-spin" />}
               Clear log
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function AuditResult({ entry }: Readonly<{ entry: AuditLogEntry }>) {
+  if (entry.success) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <CheckCircle2 className="size-3.5" />
+        OK
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-col gap-0.5 text-xs text-destructive">
+      <span className="flex items-center gap-1">
+        <XCircle className="size-3.5" />
+        Failed
+      </span>
+      {entry.error && (
+        <span className="max-w-xs whitespace-normal text-muted-foreground">
+          {entry.error}
+        </span>
+      )}
+    </span>
   );
 }

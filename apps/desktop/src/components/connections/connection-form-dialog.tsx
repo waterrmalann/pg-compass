@@ -183,7 +183,12 @@ export function ConnectionFormDialog({
     }
 
     if (parsed.ca) {
-      setSsl((s) => ({ ...s, enabled: true, caSource: "inline", ca: parsed.ca }));
+      setSsl((s) => ({
+        ...s,
+        enabled: true,
+        caSource: "inline",
+        ca: parsed.ca,
+      }));
       setAdvancedOpen(true);
     }
 

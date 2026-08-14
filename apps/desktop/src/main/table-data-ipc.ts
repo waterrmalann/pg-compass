@@ -12,7 +12,12 @@ import {
 } from "./table-data-meta";
 import { exportData, sqlDump } from "./table-data-export";
 import { importData } from "./table-data-import";
-import { deleteRows, insertRow, updateCell, updateRow } from "./table-data-write";
+import {
+  deleteRows,
+  insertRow,
+  updateCell,
+  updateRow,
+} from "./table-data-write";
 import { searchForeignKey } from "./table-data-fk";
 import {
   validateCancelQueryParams,

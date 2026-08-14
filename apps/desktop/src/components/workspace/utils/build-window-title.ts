@@ -3,7 +3,7 @@ import { WorkspaceTabView } from "@/shared/types";
 export function buildWindowTitle(view: WorkspaceTabView | undefined): string {
   const base = "PG Compass";
   if (!view) return base;
-  if (view.type === "database-manager") return `${base} - Database Manager`;
+  if (view.type === "database-manager") return `${base} - Database manager`;
 
   const label = view.path.connectionLabel;
 

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,7 @@ export function ConnectionBasicFields({
   errors,
   onEnvExtract,
 }: Readonly<ConnectionBasicFieldsProps>) {
+  const [showUri, setShowUri] = useState(false);
   return (
     <>
       <div className="flex flex-col gap-1.5">
@@ -56,13 +59,30 @@ export function ConnectionBasicFields({
       {mode === "uri" && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="conn-uri">Connection URI</Label>
-          <Input
-            id="conn-uri"
-            placeholder="postgresql://user:password@localhost:5432/mydb"
-            className="font-mono text-sm"
-            value={uri}
-            onChange={(e) => onUriChange(e.target.value)}
-          />
+          <div className="relative">
+            <Input
+              id="conn-uri"
+              type={showUri ? "text" : "password"}
+              placeholder="postgresql://user:password@localhost:5432/mydb"
+              className="font-mono text-sm pr-9"
+              value={uri}
+              onChange={(e) => onUriChange(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowUri((value) => !value)}
+              className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground"
+              aria-label={
+                showUri ? "Hide connection URI" : "Show connection URI"
+              }
+            >
+              {showUri ? (
+                <EyeOff className="size-3.5" />
+              ) : (
+                <Eye className="size-3.5" />
+              )}
+            </button>
+          </div>
           {errors.uri && (
             <p className="text-xs text-destructive">{errors.uri}</p>
           )}

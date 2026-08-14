@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Ban, FolderOpen, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConnections } from "@/hooks/use-connections";
-import type { BackupFileInfo } from "@/shared/types/db-sync";
+import { useSettings } from "@/hooks/use-settings";
+import { looksLikeProduction } from "@/shared/production-guard";
+import type { ConnectionConfig } from "@/shared/types/connection";
 import {
   EndpointFields,
   ProdConfirmDialog,
@@ -13,124 +15,147 @@ import {
   endpointKey,
   formatBytes,
   formatRelativeTime,
-  looksLikeProduction,
+  useBackupList,
   useDatabaseList,
-  useProdGuard,
   useRunLog,
 } from "./shared";
 
 interface RestoreTabProps {
   prefillPath: string | null;
   onConsumePrefill: () => void;
+  /** Bumped when the Backup tab creates or removes a backup. */
+  backupsRevision: number;
+}
+
+function connectionHost(connection: ConnectionConfig | undefined): string {
+  if (!connection) return "";
+  if (connection.mode === "fields") return connection.fields?.host ?? "";
+  if (!connection.uri) return "";
+  try {
+    return new URL(connection.uri).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function fileNameFromPath(path: string): string {
+  const parts = path.split(/[\\/]/);
+  return parts.at(-1) ?? path;
 }
 
 export function RestoreTab({
   prefillPath,
   onConsumePrefill,
+  backupsRevision,
 }: Readonly<RestoreTabProps>) {
   const { connections } = useConnections();
+  const { settings } = useSettings();
+  const readOnlyMode = settings.general.readOnlyMode;
 
   const [targetConnectionId, setTargetConnectionId] = useState("");
   const [targetDatabase, setTargetDatabase] = useState("");
   const [sourceMode, setSourceMode] = useState<"list" | "file">("list");
   const [selectedBackupPath, setSelectedBackupPath] = useState("");
   const [filePath, setFilePath] = useState("");
-  const [backups, setBackups] = useState<BackupFileInfo[]>([]);
-  const [loadingBackups, setLoadingBackups] = useState(false);
+  const {
+    backups,
+    loading: loadingBackups,
+    refresh: refreshBackups,
+  } = useBackupList();
   const [confirmText, setConfirmText] = useState("");
   const [backupTarget, setBackupTarget] = useState(false);
   const [running, setRunning] = useState(false);
   const runIdRef = useRef<string | null>(null);
   const runLog = useRunLog();
 
-  const prodGuardEnabled = useProdGuard();
   const [prodConfirmOpen, setProdConfirmOpen] = useState(false);
   const [confirmedProdKey, setConfirmedProdKey] = useState<string | null>(null);
 
-  const { databases: targetDatabasesRaw, loading: loadingTargetDbs } =
+  const { databases: targetDatabases, loading: loadingTargetDbs } =
     useDatabaseList(targetConnectionId);
 
-  const refreshBackups = useCallback(async () => {
-    setLoadingBackups(true);
-    const result = await globalThis.window.dbSyncApi.listBackups();
-    if (result.success) {
-      setBackups(result.data);
-    } else {
-      toast.error("Failed to list backups", { description: result.error });
-    }
-    setLoadingBackups(false);
-  }, []);
-
   useEffect(() => {
-    refreshBackups().catch(() => undefined);
-  }, [refreshBackups]);
+    void refreshBackups();
+  }, [refreshBackups, backupsRevision]);
 
   useEffect(() => {
     if (!prefillPath) return;
     setSourceMode("list");
     setSelectedBackupPath(prefillPath);
     onConsumePrefill();
+    // The path may belong to a backup created after this list was loaded.
+    void refreshBackups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillPath]);
 
-  const targetConnection = useMemo(
-    () => connections.find((c) => c.id === targetConnectionId),
-    [connections, targetConnectionId],
+  const targetConnection = connections.find(
+    (connection) => connection.id === targetConnectionId,
   );
 
-  const visibleTargetDatabases = useMemo(() => {
-    if (prodGuardEnabled) return targetDatabasesRaw;
-    return targetDatabasesRaw.filter(
-      (name) => !looksLikeProduction(targetConnection, name),
-    );
-  }, [targetDatabasesRaw, targetConnection, prodGuardEnabled]);
-  const hiddenProdCount = targetDatabasesRaw.length - visibleTargetDatabases.length;
-
   useEffect(() => {
-    if (targetDatabase && visibleTargetDatabases.includes(targetDatabase)) return;
-    setTargetDatabase(visibleTargetDatabases[0] ?? "");
+    if (targetDatabase && targetDatabases.includes(targetDatabase)) return;
+    setTargetDatabase(targetDatabases[0] ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleTargetDatabases]);
+  }, [targetDatabases]);
 
-  const isTargetProd = looksLikeProduction(targetConnection, targetDatabase);
+  const isTargetProd =
+    targetDatabase !== "" &&
+    looksLikeProduction(
+      targetConnection?.label,
+      connectionHost(targetConnection),
+      targetDatabase,
+    );
   const targetKey = endpointKey(targetConnectionId, targetDatabase);
 
   useEffect(() => {
-    if (!targetDatabase || !isTargetProd) return;
+    if (!isTargetProd) return;
     if (confirmedProdKey === targetKey) return;
     setProdConfirmOpen(true);
-  }, [targetDatabase, isTargetProd, targetKey, confirmedProdKey]);
+  }, [isTargetProd, targetKey, confirmedProdKey]);
 
   useEffect(() => {
+    setConfirmText("");
     if (!targetDatabase) return;
     setBackupTarget(isTargetProd);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetConnectionId, targetDatabase]);
 
+  const selectedBackupListed = backups.some(
+    (backup) => backup.path === selectedBackupPath,
+  );
   const backupPath = sourceMode === "list" ? selectedBackupPath : filePath;
+  const hasValidSource =
+    sourceMode === "list" ? selectedBackupListed : filePath !== "";
   const targetLabel = targetConnection?.label;
   const confirmedProdTarget = !isTargetProd || confirmedProdKey === targetKey;
-  const confirmedRestore = targetDatabase !== "" && confirmText === targetDatabase;
+  const confirmedRestore =
+    targetDatabase !== "" && confirmText === targetDatabase;
 
   const canRun =
     !running &&
+    !readOnlyMode &&
     targetConnectionId !== "" &&
     targetDatabase !== "" &&
-    backupPath !== "" &&
+    hasValidSource &&
     confirmedProdTarget &&
     confirmedRestore;
 
   async function handleBrowse() {
-    const result = await globalThis.window.connectionApi.showOpenFileDialog({
-      title: "Select a backup file to restore",
-      filters: [
-        { name: "Backup files", extensions: ["dump", "sql", "backup"] },
-        { name: "All files", extensions: ["*"] },
-      ],
-    });
-    if (result.success && result.data) {
+    try {
+      const result = await globalThis.window.backupApi.showRestoreFileDialog();
+      if (!result.success) {
+        toast.error("Failed to open file picker", {
+          description: result.error,
+        });
+        return;
+      }
+      if (!result.data) return;
       setSourceMode("file");
       setFilePath(result.data);
+    } catch (err) {
+      toast.error("Failed to open file picker", {
+        description: (err as Error).message,
+      });
     }
   }
 
@@ -140,17 +165,18 @@ export function RestoreTab({
     setRunning(true);
     runLog.reset();
 
-    const cleanup = globalThis.window.dbSyncApi.onProgress((event) => {
+    const cleanup = globalThis.window.backupApi.onProgress((event) => {
       if (event.runId !== runId) return;
       runLog.append(event.line, event.level);
     });
 
     try {
-      const result = await globalThis.window.dbSyncApi.restore({
+      const result = await globalThis.window.backupApi.restore({
         runId,
         target: { connectionId: targetConnectionId, database: targetDatabase },
         backupPath,
         backupTarget,
+        confirmProduction: isTargetProd,
       });
 
       if (!result.success) {
@@ -163,6 +189,7 @@ export function RestoreTab({
             ? `Pre-restore backup saved to ${result.data.backupPath}`
             : undefined,
         });
+        if (result.data.backupPath) void refreshBackups();
       } else if (result.data.status === "cancelled") {
         toast.info("Restore cancelled");
       } else {
@@ -179,7 +206,9 @@ export function RestoreTab({
 
   function handleCancel() {
     if (!runIdRef.current) return;
-    globalThis.window.dbSyncApi.cancel({ runId: runIdRef.current }).catch(() => undefined);
+    globalThis.window.backupApi
+      .cancel({ runId: runIdRef.current })
+      .catch(() => undefined);
   }
 
   function handleConfirmProdTarget() {
@@ -192,24 +221,24 @@ export function RestoreTab({
     setTargetDatabase("");
   }
 
+  let emptyBackupOption = "Select a backup…";
+  if (loadingBackups) emptyBackupOption = "Loading…";
+  else if (backups.length === 0) emptyBackupOption = "No backups yet";
+
   return (
     <>
       <div className="flex flex-col gap-3">
         <EndpointFields
           label="Target"
+          idPrefix="restore-target"
           connectionId={targetConnectionId}
           onConnectionChange={setTargetConnectionId}
           database={targetDatabase}
           onDatabaseChange={setTargetDatabase}
-          databases={visibleTargetDatabases}
+          databases={targetDatabases}
           loadingDatabases={loadingTargetDbs}
           connections={connections}
           disabled={running}
-          hint={
-            hiddenProdCount > 0
-              ? `${hiddenProdCount} production database${hiddenProdCount === 1 ? "" : "s"} hidden — enable in Settings > General.`
-              : undefined
-          }
         />
 
         <div className="flex flex-col gap-2">
@@ -222,6 +251,7 @@ export function RestoreTab({
               variant={sourceMode === "list" ? "secondary" : "ghost"}
               size="sm"
               className="h-8 px-3 text-xs"
+              aria-pressed={sourceMode === "list"}
               onClick={() => setSourceMode("list")}
               disabled={running}
             >
@@ -232,6 +262,7 @@ export function RestoreTab({
               variant={sourceMode === "file" ? "secondary" : "ghost"}
               size="sm"
               className="h-8 px-3 text-xs"
+              aria-pressed={sourceMode === "file"}
               onClick={() => setSourceMode("file")}
               disabled={running}
             >
@@ -241,18 +272,19 @@ export function RestoreTab({
 
           {sourceMode === "list" ? (
             <select
+              aria-label="Backup to restore"
               value={selectedBackupPath}
               onChange={(e) => setSelectedBackupPath(e.target.value)}
-              disabled={running || loadingBackups}
+              disabled={running}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             >
-              <option value="">
-                {loadingBackups
-                  ? "Loading…"
-                  : backups.length === 0
-                    ? "No backups yet"
-                    : "Select a backup…"}
-              </option>
+              <option value="">{emptyBackupOption}</option>
+              {selectedBackupPath && !selectedBackupListed && (
+                <option value={selectedBackupPath}>
+                  {fileNameFromPath(selectedBackupPath)}
+                  {loadingBackups ? "" : " (not in backup list)"}
+                </option>
+              )}
               {backups.map((backup) => (
                 <option key={backup.path} value={backup.path}>
                   {backup.fileName} ({formatBytes(backup.sizeBytes)},{" "}
@@ -263,6 +295,7 @@ export function RestoreTab({
           ) : (
             <div className="flex items-center gap-2">
               <Input
+                aria-label="Backup file"
                 value={filePath}
                 readOnly
                 placeholder="No file selected"
@@ -306,9 +339,13 @@ export function RestoreTab({
 
         {targetDatabase && (
           <div className="flex flex-col gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 p-2.5">
-            <Label htmlFor="db-restore-confirm" className="text-xs text-destructive">
-              Type <span className="font-mono">{targetDatabase}</span> to confirm
-              you want to permanently replace it{targetLabel ? ` on "${targetLabel}"` : ""}.
+            <Label
+              htmlFor="db-restore-confirm"
+              className="text-xs text-destructive"
+            >
+              Type <span className="font-mono">{targetDatabase}</span> to
+              confirm you want to permanently replace it
+              {targetLabel ? ` on "${targetLabel}"` : ""}.
             </Label>
             <Input
               id="db-restore-confirm"
@@ -323,14 +360,26 @@ export function RestoreTab({
 
         {(runLog.log.length > 0 || running) && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">Log</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Log
+            </span>
             <RunLog log={runLog.log} running={running} endRef={runLog.endRef} />
           </div>
         )}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          {readOnlyMode && (
+            <p className="text-xs text-muted-foreground">
+              Read-only mode is on. Turn it off in Settings to restore.
+            </p>
+          )}
           {running ? (
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCancel}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleCancel}
+            >
               <Ban className="size-3.5" />
               Cancel run
             </Button>
@@ -340,7 +389,9 @@ export function RestoreTab({
               className="gap-1.5"
               variant="destructive"
               disabled={!canRun}
-              onClick={handleRun}
+              onClick={() => {
+                handleRun().catch(() => undefined);
+              }}
             >
               <Play className="size-3.5" />
               Run restore

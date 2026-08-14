@@ -104,6 +104,29 @@ function toInputString(value: unknown): string {
   return String(value);
 }
 
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * `date`/`timestamp` (no time zone) carry no offset on the wire, so the `pg`
+ * driver parses them into a `Date` using the LOCAL-time constructor (its
+ * Y/M/D/H/M/S become the Date's local fields, not UTC ones). Reading them
+ * back with `toISOString()` re-interprets those same fields as UTC, shifting
+ * the displayed (and, if saved unchanged, the stored) value by the system's
+ * UTC offset — a full day for `date` in any non-UTC zone. These two read the
+ * Date's LOCAL fields back out instead, which is the correct inverse.
+ */
+function toLocalDateString(value: Date): string {
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+function toLocalTimestampString(value: Date): string {
+  const ms = value.getMilliseconds();
+  const msPart = ms ? `.${String(ms).padStart(3, "0")}` : "";
+  return `${toLocalDateString(value)}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}${msPart}`;
+}
+
 // --- text -------------------------------------------------------------------
 
 const textEditor: TypeEditor = {
@@ -388,7 +411,11 @@ function makeTimestampEditor(pgCast: "timestamp" | "timestamptz"): TypeEditor {
   return {
     kind: "inline",
     toInput(value) {
-      if (value instanceof Date) return value.toISOString();
+      if (value instanceof Date) {
+        return pgCast === "timestamptz"
+          ? value.toISOString()
+          : toLocalTimestampString(value);
+      }
       return toInputString(value);
     },
     validate(raw) {
@@ -410,7 +437,7 @@ function makeTimestampEditor(pgCast: "timestamp" | "timestamptz"): TypeEditor {
 const dateEditor: TypeEditor = {
   kind: "inline",
   toInput(value) {
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (value instanceof Date) return toLocalDateString(value);
     return toInputString(value);
   },
   validate(raw) {

@@ -9,6 +9,7 @@ import type {
   ToggleTriggerParams,
   TriggerInfo,
 } from "../shared/types/table-data";
+import type { ClientBase } from "pg";
 import { quoteIdent, withPoolClient } from "./pg-utils";
 import { getSettings } from "./settings-store";
 import { ensureArray } from "./table-data-utils";
@@ -298,6 +299,47 @@ export async function getTriggers(
   });
 }
 
+export interface TriggerTarget {
+  schema: string;
+  table: string;
+  trigger: string;
+  enabled: boolean;
+}
+
+/**
+ * Enable or disable a user trigger on `client`'s database. Shared by the
+ * table viewer and the RBAC triggers pane so both validate the trigger exists
+ * and quote identically. Callers own the read-only-mode check.
+ */
+export async function setTriggerEnabledOnClient(
+  client: ClientBase,
+  target: TriggerTarget,
+): Promise<void> {
+  const exists = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND c.relname = $2
+        AND t.tgname = $3
+        AND NOT t.tgisinternal
+    ) AS exists`,
+    [target.schema, target.table, target.trigger],
+  );
+
+  if (!exists.rows[0]?.exists) {
+    throw new Error("Trigger not found on the selected table.");
+  }
+
+  const qualifiedTable = `${quoteIdent(target.schema)}.${quoteIdent(target.table)}`;
+  const action = target.enabled ? "ENABLE" : "DISABLE";
+  await client.query(
+    `ALTER TABLE ${qualifiedTable} ${action} TRIGGER ${quoteIdent(target.trigger)}`,
+  );
+}
+
 export async function toggleTrigger(
   params: ToggleTriggerParams,
 ): Promise<TriggerInfo[]> {
@@ -306,31 +348,9 @@ export async function toggleTrigger(
     throw new Error("Cannot toggle trigger: read-only mode is enabled.");
   }
 
-  await withPoolClient(params.connectionId, async (client) => {
-    const exists = await client.query<{ exists: boolean }>(
-      `SELECT EXISTS (
-        SELECT 1
-        FROM pg_trigger t
-        JOIN pg_class c ON c.oid = t.tgrelid
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = $1
-          AND c.relname = $2
-          AND t.tgname = $3
-          AND NOT t.tgisinternal
-      ) AS exists`,
-      [params.schema, params.table, params.trigger],
-    );
-
-    if (!exists.rows[0]?.exists) {
-      throw new Error("Trigger not found on the selected table.");
-    }
-
-    const qualifiedTable = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
-    const action = params.enabled ? "ENABLE" : "DISABLE";
-    await client.query(
-      `ALTER TABLE ${qualifiedTable} ${action} TRIGGER ${quoteIdent(params.trigger)}`,
-    );
-  });
+  await withPoolClient(params.connectionId, (client) =>
+    setTriggerEnabledOnClient(client, params),
+  );
 
   return getTriggers(params);
 }

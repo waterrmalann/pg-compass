@@ -80,9 +80,16 @@ describe("ConnectionItem", () => {
       refreshTabs: vi.fn(),
       relationSessions: {},
       updateRelationSession: vi.fn(),
+      rolesRevision: 0,
+      notifyRolesChanged: vi.fn(),
     });
 
     Object.assign(window, {
+      connectionApi: {
+        getById: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: uriConnection }),
+      },
       clipboardApi: {
         writeText: vi.fn().mockResolvedValue({ success: true }),
       },

@@ -47,6 +47,12 @@ interface WorkspaceContextValue {
     tabId: string,
     patch: Partial<RelationSessionState>,
   ) => void;
+  /**
+   * Bumped after any RBAC mutation so role summaries outside the Users view
+   * (the sidebar footer) know to refetch.
+   */
+  rolesRevision: number;
+  notifyRolesChanged: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -60,14 +66,17 @@ function buildTabId(view: WorkspaceTabView): string {
   if (view.type === "schema") return `${base}:${view.path.schemaName}`;
   if (view.type === "table-list" || view.type === "table-details")
     return `${base}:${view.path.schemaName}:${view.path.tableName}`;
-  if (view.type === "users") return `${base}:${view.path.selectedRole ?? ""}`;
+  // Deliberately excludes `selectedRole`: one Users tab per connection, its
+  // selection updated in place (see `openTab`) rather than a new tab per
+  // clicked role.
+  if (view.type === "users") return base;
 
   // view-list or view-details
   return `${base}:${view.path.schemaName}:${view.path.viewName}`;
 }
 
 function buildTabTitle(view: WorkspaceTabView): string {
-  if (view.type === "database-manager") return "Database Manager";
+  if (view.type === "database-manager") return "Database manager";
   if (view.type === "schema-list") return view.path.connectionLabel;
   if (view.type === "schema") return view.path.schemaName;
   if (view.type === "table-list" || view.type === "table-details")
@@ -103,12 +112,20 @@ export function WorkspaceProvider({
   const [relationSessions, setRelationSessions] = useState<
     Record<string, RelationSessionState>
   >({});
+  const [rolesRevision, setRolesRevision] = useState(0);
 
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
 
   const schemaCacheRef = useRef(schemaCache);
   schemaCacheRef.current = schemaCache;
+
+  // openTab/forceOpenTab/navigateToView all `await refreshSchemaTree(...)`
+  // before touching tabs/schemaCache. If the connection is removed (via
+  // closeConnectionTabs) while that await is still pending, the stale
+  // continuation must not resurrect a tab or schema-cache entry for a
+  // connection the user just explicitly closed.
+  const closedConnectionIdsRef = useRef<Set<string>>(new Set());
 
   const refreshSchemaTreeWithStatus = useCallback(
     async (
@@ -135,6 +152,10 @@ export function WorkspaceProvider({
         toast.error("Failed to load schema tree", {
           description: result.error,
         });
+        return { ok: false, data: [] };
+      }
+
+      if (closedConnectionIdsRef.current.has(connectionId)) {
         return { ok: false, data: [] };
       }
 
@@ -196,6 +217,7 @@ export function WorkspaceProvider({
   }, []);
 
   const closeConnectionTabs = useCallback((connectionId: string) => {
+    closedConnectionIdsRef.current.add(connectionId);
     setTabs((prevTabs) => {
       const removedIds = new Set(
         prevTabs
@@ -235,6 +257,10 @@ export function WorkspaceProvider({
     setRelationSessions({});
   }, []);
 
+  const notifyRolesChanged = useCallback(() => {
+    setRolesRevision((revision) => revision + 1);
+  }, []);
+
   const updateRelationSession = useCallback(
     (tabId: string, patch: Partial<RelationSessionState>) => {
       setRelationSessions((prev) => ({
@@ -252,13 +278,22 @@ export function WorkspaceProvider({
     async (view: WorkspaceTabView, color?: string) => {
       if (view.type !== "database-manager") {
         await refreshSchemaTree(view.path.connectionId);
+        if (closedConnectionIdsRef.current.has(view.path.connectionId)) return;
       }
 
       const nextTab = buildWorkspaceTab(view, color);
       setTabs((prev) => {
-        const existing = prev.find((tab) => tab.id === nextTab.id);
-        if (existing) return prev;
-        return [...prev, nextTab];
+        const existingIndex = prev.findIndex((tab) => tab.id === nextTab.id);
+        if (existingIndex === -1) return [...prev, nextTab];
+        // Refresh the existing tab's view/title (e.g. a new `selectedRole`
+        // for the same Users tab) rather than leaving it stale — a no-op
+        // for view types whose path is otherwise identical when the id
+        // matches, so this doesn't affect other tab types.
+        return prev.map((tab, index) =>
+          index === existingIndex
+            ? { ...tab, title: nextTab.title, view: nextTab.view }
+            : tab,
+        );
       });
       setActiveTabId(nextTab.id);
     },
@@ -269,10 +304,11 @@ export function WorkspaceProvider({
     async (view: WorkspaceTabView, color?: string) => {
       if (view.type !== "database-manager") {
         await refreshSchemaTree(view.path.connectionId);
+        if (closedConnectionIdsRef.current.has(view.path.connectionId)) return;
       }
 
       const nextTab = buildWorkspaceTab(view, color);
-      const uniqueId = `${nextTab.id}:${Date.now()}`;
+      const uniqueId = `${nextTab.id}:${globalThis.crypto.randomUUID()}`;
       setTabs((prev) => [...prev, { ...nextTab, id: uniqueId }]);
       setActiveTabId(uniqueId);
     },
@@ -283,6 +319,7 @@ export function WorkspaceProvider({
     async (view: WorkspaceTabView) => {
       if (view.type !== "database-manager") {
         await refreshSchemaTree(view.path.connectionId);
+        if (closedConnectionIdsRef.current.has(view.path.connectionId)) return;
       }
 
       const targetTabId = buildTabId(view);
@@ -341,6 +378,8 @@ export function WorkspaceProvider({
       refreshTabs,
       relationSessions,
       updateRelationSession,
+      rolesRevision,
+      notifyRolesChanged,
     }),
     [
       tabs,
@@ -358,6 +397,8 @@ export function WorkspaceProvider({
       refreshTabs,
       relationSessions,
       updateRelationSession,
+      rolesRevision,
+      notifyRolesChanged,
     ],
   );
 

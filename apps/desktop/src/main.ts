@@ -7,7 +7,7 @@ import { registerSettingsHandlers } from "./main/settings-ipc";
 import { registerTableDataHandlers } from "./main/table-data-ipc";
 import { registerClipboardHandlers } from "./main/clipboard-ipc";
 import { registerRolesHandlers } from "./main/roles-ipc";
-import { registerDbSyncHandlers } from "./main/db-sync-ipc";
+import { registerBackupHandlers } from "./main/backup-ipc";
 import { destroyAllPools } from "./main/pg-utils";
 import { getSettings } from "./main/settings-store";
 import { buildAppMenu } from "./main/app-menu";
@@ -63,7 +63,7 @@ registerConnectionHandlers();
 registerTableDataHandlers();
 registerClipboardHandlers();
 registerRolesHandlers();
-registerDbSyncHandlers();
+registerBackupHandlers();
 registerSettingsHandlers((settings) => {
   cachedSettings = settings;
   if (!settings.general.enableDevTools) {

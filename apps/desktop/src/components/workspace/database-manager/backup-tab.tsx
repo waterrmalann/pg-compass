@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Ban,
   ChevronDown,
@@ -18,14 +18,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useConnections } from "@/hooks/use-connections";
-import type { BackupFileInfo, BackupInspection } from "@/shared/types/db-sync";
+import type { BackupFileInfo, BackupInspection } from "@/shared/types/backup";
 import {
   EndpointFields,
   RunLog,
   formatBytes,
   formatRelativeTime,
+  useBackupList,
   useDatabaseList,
   useRunLog,
 } from "./shared";
@@ -37,23 +43,34 @@ type InspectionState =
 
 interface BackupTabProps {
   onUseForRestore: (path: string) => void;
+  /** Called after a backup is created or removed so other lists can refresh. */
+  onBackupsChanged: () => void;
 }
 
-export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
+export function BackupTab({
+  onUseForRestore,
+  onBackupsChanged,
+}: Readonly<BackupTabProps>) {
   const { connections } = useConnections();
   const [connectionId, setConnectionId] = useState("");
   const [database, setDatabase] = useState("");
   const [running, setRunning] = useState(false);
   const runIdRef = useRef<string | null>(null);
   const runLog = useRunLog();
-  const [backups, setBackups] = useState<BackupFileInfo[]>([]);
-  const [loadingBackups, setLoadingBackups] = useState(false);
+  const {
+    backups,
+    loading: loadingBackups,
+    refresh: refreshBackups,
+  } = useBackupList();
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
-  const [inspections, setInspections] = useState<Record<string, InspectionState>>({});
+  const [inspections, setInspections] = useState<
+    Record<string, InspectionState>
+  >({});
   const [deleteTarget, setDeleteTarget] = useState<BackupFileInfo | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const { databases, loading: loadingDatabases } = useDatabaseList(connectionId);
+  const { databases, loading: loadingDatabases } =
+    useDatabaseList(connectionId);
 
   useEffect(() => {
     if (database && databases.includes(database)) return;
@@ -61,19 +78,8 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [databases]);
 
-  const refreshBackups = useCallback(async () => {
-    setLoadingBackups(true);
-    const result = await globalThis.window.dbSyncApi.listBackups();
-    if (result.success) {
-      setBackups(result.data);
-    } else {
-      toast.error("Failed to list backups", { description: result.error });
-    }
-    setLoadingBackups(false);
-  }, []);
-
   useEffect(() => {
-    refreshBackups().catch(() => undefined);
+    void refreshBackups();
   }, [refreshBackups]);
 
   const canRun = !running && connectionId !== "" && database !== "";
@@ -84,13 +90,13 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
     setRunning(true);
     runLog.reset();
 
-    const cleanup = globalThis.window.dbSyncApi.onProgress((event) => {
+    const cleanup = globalThis.window.backupApi.onProgress((event) => {
       if (event.runId !== runId) return;
       runLog.append(event.line, event.level);
     });
 
     try {
-      const result = await globalThis.window.dbSyncApi.backup({
+      const result = await globalThis.window.backupApi.backup({
         runId,
         source: { connectionId, database },
       });
@@ -100,7 +106,10 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
         return;
       }
       if (result.data.status === "ok") {
-        toast.success("Backup complete", { description: result.data.backupPath });
+        toast.success("Backup complete", {
+          description: result.data.backupPath,
+        });
+        onBackupsChanged();
         await refreshBackups();
       } else if (result.data.status === "cancelled") {
         toast.info("Backup cancelled");
@@ -118,7 +127,9 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
 
   function handleCancel() {
     if (!runIdRef.current) return;
-    globalThis.window.dbSyncApi.cancel({ runId: runIdRef.current }).catch(() => undefined);
+    globalThis.window.backupApi
+      .cancel({ runId: runIdRef.current })
+      .catch(() => undefined);
   }
 
   async function handleToggleDetails(backup: BackupFileInfo) {
@@ -129,27 +140,45 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
     setExpandedPath(backup.path);
     if (inspections[backup.path]) return;
 
-    setInspections((prev) => ({ ...prev, [backup.path]: { status: "loading" } }));
-    const result = await globalThis.window.dbSyncApi.inspectBackup(backup.path);
     setInspections((prev) => ({
       ...prev,
-      [backup.path]: result.success
-        ? { status: "ok", data: result.data }
-        : { status: "error", message: result.error },
+      [backup.path]: { status: "loading" },
     }));
+    let next: InspectionState;
+    try {
+      const result = await globalThis.window.backupApi.inspectBackup(
+        backup.path,
+      );
+      next = result.success
+        ? { status: "ok", data: result.data }
+        : { status: "error", message: result.error };
+    } catch (err) {
+      next = { status: "error", message: (err as Error).message };
+    }
+    setInspections((prev) => ({ ...prev, [backup.path]: next }));
   }
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
-    const result = await globalThis.window.dbSyncApi.deleteBackup(deleteTarget.path);
-    setDeleting(false);
-    if (result.success) {
+    try {
+      const result = await globalThis.window.backupApi.deleteBackup(
+        deleteTarget.path,
+      );
+      if (!result.success) {
+        toast.error("Failed to remove backup", { description: result.error });
+        return;
+      }
       toast.success("Backup removed");
       setDeleteTarget(null);
+      onBackupsChanged();
       await refreshBackups();
-    } else {
-      toast.error("Failed to remove backup", { description: result.error });
+    } catch (err) {
+      toast.error("Failed to remove backup", {
+        description: (err as Error).message,
+      });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -158,6 +187,7 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
       <div className="grid grid-cols-2 gap-3">
         <EndpointFields
           label="Database to back up"
+          idPrefix="backup-source"
           connectionId={connectionId}
           onConnectionChange={setConnectionId}
           database={database}
@@ -178,12 +208,24 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
 
       <div className="flex justify-end gap-2">
         {running ? (
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCancel}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleCancel}
+          >
             <Ban className="size-3.5" />
             Cancel run
           </Button>
         ) : (
-          <Button size="sm" className="gap-1.5" disabled={!canRun} onClick={handleRun}>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={!canRun}
+            onClick={() => {
+              handleRun().catch(() => undefined);
+            }}
+          >
             <HardDriveDownload className="size-3.5" />
             Run backup
           </Button>
@@ -195,138 +237,43 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
           <span className="text-xs font-medium text-muted-foreground">
             Recent backups
           </span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              refreshBackups().catch(() => undefined);
-            }}
-            disabled={loadingBackups}
-            aria-label="Refresh backups"
-          >
-            <RotateCcw className={cn("size-3.5", loadingBackups && "animate-spin")} />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  void refreshBackups();
+                }}
+                disabled={loadingBackups}
+                aria-label="Refresh backups"
+              >
+                <RotateCcw
+                  className={cn("size-3.5", loadingBackups && "animate-spin")}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh backups</TooltipContent>
+          </Tooltip>
         </div>
         {backups.length === 0 ? (
           <p className="text-xs text-muted-foreground">No backups yet.</p>
         ) : (
           <div className="flex flex-col gap-1">
-            {backups.map((backup) => {
-              const expanded = expandedPath === backup.path;
-              const inspection = inspections[backup.path];
-              return (
-                <div
-                  key={backup.path}
-                  className="rounded-md border border-border bg-card text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
-                    <button
-                      type="button"
-                      className="flex min-w-0 items-center gap-1.5 text-left"
-                      onClick={() => {
-                        handleToggleDetails(backup).catch(() => undefined);
-                      }}
-                    >
-                      {expanded ? (
-                        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="min-w-0">
-                        <p className="truncate font-mono">{backup.fileName}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {formatBytes(backup.sizeBytes)} ·{" "}
-                          {formatRelativeTime(backup.mtimeMs)}
-                        </p>
-                      </span>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onUseForRestore(backup.path)}
-                      >
-                        Restore from this
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Remove backup"
-                        onClick={() => setDeleteTarget(backup)}
-                      >
-                        <Trash2 className="size-3.5 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div
-                    className={cn(
-                      "grid transition-[grid-template-rows] duration-200 ease-out",
-                      expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                    )}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 px-2.5 py-1.5 text-muted-foreground">
-                        <span>
-                          <span className="font-medium text-foreground">Time:</span>{" "}
-                          {new Date(backup.createdAt ?? backup.mtimeMs).toLocaleString()}
-                        </span>
-                        <span>
-                          <span className="font-medium text-foreground">Target:</span>{" "}
-                          {backup.target ?? "—"}
-                        </span>
-                        {!inspection || inspection.status === "loading" ? (
-                          <span className="flex items-center gap-1.5">
-                            <Loader2 className="size-3 animate-spin" />
-                            Reading backup contents…
-                          </span>
-                        ) : inspection.status === "error" ? (
-                          <span className="text-destructive">{inspection.message}</span>
-                        ) : (
-                          <>
-                            <span>
-                              <span className="font-medium text-foreground">
-                                {inspection.data.schemas}
-                              </span>{" "}
-                              schema{inspection.data.schemas === 1 ? "" : "s"}
-                            </span>
-                            <span>
-                              <span className="font-medium text-foreground">
-                                {inspection.data.tables}
-                              </span>{" "}
-                              table{inspection.data.tables === 1 ? "" : "s"}
-                            </span>
-                            <span>
-                              <span className="font-medium text-foreground">
-                                {inspection.data.views}
-                              </span>{" "}
-                              view{inspection.data.views === 1 ? "" : "s"}
-                            </span>
-                            <span>
-                              <span className="font-medium text-foreground">
-                                {inspection.data.sequences}
-                              </span>{" "}
-                              sequence{inspection.data.sequences === 1 ? "" : "s"}
-                            </span>
-                            <span>
-                              <span className="font-medium text-foreground">
-                                {inspection.data.functions}
-                              </span>{" "}
-                              function{inspection.data.functions === 1 ? "" : "s"}
-                            </span>
-                            <span>
-                              <span className="font-medium text-foreground">
-                                {formatBytes(backup.sizeBytes)}
-                              </span>{" "}
-                              on disk
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {backups.map((backup) => (
+              <BackupRow
+                key={backup.path}
+                backup={backup}
+                expanded={expandedPath === backup.path}
+                inspection={inspections[backup.path]}
+                running={running}
+                onToggleDetails={() => {
+                  handleToggleDetails(backup).catch(() => undefined);
+                }}
+                onUseForRestore={() => onUseForRestore(backup.path)}
+                onDelete={() => setDeleteTarget(backup)}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -366,5 +313,133 @@ export function BackupTab({ onUseForRestore }: Readonly<BackupTabProps>) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function BackupRow({
+  backup,
+  expanded,
+  inspection,
+  running,
+  onToggleDetails,
+  onUseForRestore,
+  onDelete,
+}: Readonly<{
+  backup: BackupFileInfo;
+  expanded: boolean;
+  inspection: InspectionState | undefined;
+  running: boolean;
+  onToggleDetails: () => void;
+  onUseForRestore: () => void;
+  onDelete: () => void;
+}>) {
+  const detailsId = useId();
+  return (
+    <div className="rounded-md border border-border bg-card text-xs">
+      <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+        <button
+          type="button"
+          className="flex min-w-0 items-center gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          onClick={onToggleDetails}
+        >
+          {expanded ? (
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className="min-w-0">
+            <span className="block truncate font-mono">{backup.fileName}</span>
+            <span className="block text-[10px] text-muted-foreground">
+              {formatBytes(backup.sizeBytes)} ·{" "}
+              {formatRelativeTime(backup.mtimeMs)}
+            </span>
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={running}
+            onClick={onUseForRestore}
+          >
+            Restore from this
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove backup ${backup.fileName}`}
+                onClick={onDelete}
+              >
+                <Trash2 className="size-3.5 text-destructive" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Remove backup</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+      <div
+        id={detailsId}
+        hidden={!expanded}
+        className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border px-2.5 py-1.5 text-muted-foreground"
+      >
+        {expanded && <BackupDetails backup={backup} inspection={inspection} />}
+      </div>
+    </div>
+  );
+}
+
+function BackupDetails({
+  backup,
+  inspection,
+}: Readonly<{
+  backup: BackupFileInfo;
+  inspection: InspectionState | undefined;
+}>) {
+  const inspectionPending = !inspection || inspection.status === "loading";
+  return (
+    <>
+      <span>
+        <span className="font-medium text-foreground">Time:</span>{" "}
+        {new Date(backup.createdAt ?? backup.mtimeMs).toLocaleString()}
+      </span>
+      <span>
+        <span className="font-medium text-foreground">Source:</span>{" "}
+        {backup.target ?? "—"}
+      </span>
+      {inspectionPending && (
+        <span className="flex items-center gap-1.5">
+          <Loader2 className="size-3 animate-spin" />
+          Reading backup contents…
+        </span>
+      )}
+      {inspection?.status === "error" && (
+        <span className="text-destructive">{inspection.message}</span>
+      )}
+      {inspection?.status === "ok" && (
+        <>
+          <ObjectCount count={inspection.data.schemas} noun="schema" />
+          <ObjectCount count={inspection.data.tables} noun="table" />
+          <ObjectCount count={inspection.data.views} noun="view" />
+          <ObjectCount count={inspection.data.sequences} noun="sequence" />
+          <ObjectCount count={inspection.data.functions} noun="function" />
+        </>
+      )}
+    </>
+  );
+}
+
+function ObjectCount({
+  count,
+  noun,
+}: Readonly<{ count: number; noun: string }>) {
+  return (
+    <span>
+      <span className="font-medium text-foreground">{count}</span> {noun}
+      {count === 1 ? "" : "s"}
+    </span>
   );
 }

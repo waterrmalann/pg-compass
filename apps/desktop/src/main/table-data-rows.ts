@@ -129,16 +129,30 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
       );
       const totalCount = parseCountRow(countResult.rows[0]?.count);
 
-      const dataResult = await client.query(
-        `SELECT * FROM ${qualifiedTable} ${whereFragment} LIMIT $1 OFFSET $2`,
-        [params.pageSize, offset],
-      );
-
       const primaryKey = await resolvePrimaryKey(
         client,
         params.schema,
         params.table,
       );
+      // Without an ORDER BY, Postgres doesn't guarantee row order is stable
+      // across separate executions of the same query — concurrent writes,
+      // HOT updates, or even a different plan choice can reorder results
+      // between page fetches, so a row can silently be skipped or shown
+      // twice while paging. Primary-key columns are always btree-orderable
+      // (required to build the index), so this can't newly break a query
+      // that worked before. Relations without a PK (views, PK-less tables)
+      // keep the prior unordered behavior rather than risk ordering by an
+      // exotic column type with no default ordering operator.
+      const orderByFragment =
+        primaryKey && primaryKey.length > 0
+          ? `ORDER BY ${primaryKey.map(quoteIdent).join(", ")}`
+          : "";
+
+      const dataResult = await client.query(
+        `SELECT * FROM ${qualifiedTable} ${whereFragment} ${orderByFragment} LIMIT $1 OFFSET $2`,
+        [params.pageSize, offset],
+      );
+
       const nullability = await resolveColumnNullability(
         client,
         params.schema,

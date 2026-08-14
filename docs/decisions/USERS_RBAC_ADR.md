@@ -1,88 +1,41 @@
 # Users & RBAC Management ADR
 
-## Title
+## Description
 
-Users, roles, and database access management inside PG Compass.
+Developers occasionally need to adjust PostgreSQL principals on a server they are already connected to: create a read-only role for an analytics tool, grant a login access to one database, rotate a password, or check who is superuser. Sending these small actions to psql or pgAdmin breaks the "open, fix, close" workflow PG Compass optimises for.
 
-## Status
-
-Accepted
-
-## Context
-
-Developers using PG Compass occasionally need to inspect or adjust the
-PostgreSQL principals on a server they are already connected to — create a
-read-only role for an analytics tool, grant CONNECT on a specific database to a
-new login role, rotate a password, or audit who has superuser rights. Routing
-these small actions through a separate tool (psql, pgAdmin) breaks the "open
-the sidebar, fix the problem, close the app" workflow PG Compass optimises for.
-
-PostgreSQL models users and groups as a single concept — `pg_roles`. A role
-with `rolcanlogin = true` is a user; otherwise it is a group role that bundles
-privileges other roles can be granted membership in. RBAC is layered: login
-attributes, group memberships via `pg_auth_members`, and per-database
-privileges via `GRANT CONNECT / GRANT SELECT ON TABLES / ...`.
+PostgreSQL models users and groups as one concept (`pg_roles`). A role with `rolcanlogin` is a user; otherwise it is a group role other roles can be members of. Privileges are layered: role attributes, memberships (`pg_auth_members`), and per-database grants.
 
 ## Decision
 
-Add a first-class **Users** workspace view and an IPC layer that operates on
-the connection the active workspace tab belongs to.
+Add a **Users** workspace view backed by a `rolesApi` preload bridge (channels prefixed `roles:*`) that operates on the active connection.
 
-- The renderer talks to a new `rolesApi` exposed through the preload (channels
-  prefixed `roles:*`). All mutations are validated on the main process through
-  `ipc-validation.ts` and every admin-only handler re-checks
-  `pg_roles.rolsuper` on the live connection before executing `GRANT`,
-  `REVOKE`, `CREATE ROLE`, `ALTER ROLE`, or `DROP ROLE`.
-- A single `roles:get-snapshot` round trip returns the current user, the roles
-  visible to the connection, the membership graph, and the per-database
-  privileges. **Non-superuser connections get a filtered snapshot** that only
-  exposes their own role row, their own memberships, and privileges evaluated
-  against themselves — the renderer simply never receives information about
-  other principals.
-- The sidebar footer renders a compact roles bar above the "New Connection"
-  button, scoped to the active connection, with a one-click jump into the full
-  Users view. The Users view itself exposes create-role / create-user dialogs,
-  membership toggles, and a per-database access table (CONNECT + read-only on
-  `public`) — but only when the current connection is a superuser.
-- Read-only access is scoped to the `public` schema by default and grants
-  `SELECT` on existing tables plus a default-privileges grant for future
-  tables. Restricting a database is implemented as `REVOKE CONNECT` against the
-  user; we deliberately do **not** revoke `CONNECT` from `PUBLIC` to avoid
-  locking the database out from other callers.
-- The Users workspace view is organised as a tabbed dashboard: **Users & Roles**
-  (role list + per-role detail with Attributes, Roles, Database Access, and
-  Effective Permissions tabs), **Databases** (a card grid summarising every
-  connectable database), **Triggers** (superuser-only trigger and trigger
-  function management, hidden for non-superusers), and **Audit Log** (a local,
-  per-connection log of administrative actions capped at 5,000 entries).
-- Database access exposes exactly three levels — No Access, Read Only,
-  Read + Write — abstracting PostgreSQL's low-level `GRANT`/`REVOKE` cascade
-  (owned by `roles-ipc.ts:setDbAccessLevel`). Each database row additionally
-  offers a "Restrict to tables" checklist; when enabled, grants are scoped to
-  the selected `public`-schema tables and future tables are **not** granted
-  automatically. Role lifecycle actions (create, drop, clone, rename, reset
-  password, edit attributes, toggle memberships) are surfaced in the role detail
-  header; clone refuses to copy superuser roles.
+- **Enforcement lives in the main process.** Every mutation is validated in `ipc-validation.ts`, re-checks `pg_roles.rolsuper` on the live connection, and is refused while Read-only mode is on. Multi-statement mutations (create, alter, clone) run in a single transaction.
+- **Passwords never appear as plaintext SQL.** The main process computes a SCRAM-SHA-256 verifier and sends that as the `PASSWORD` literal, so servers that log DDL do not record the secret.
+- **Identifiers are quoted, not restricted.** Any non-empty name up to 63 bytes without NUL is accepted and always passed through `quoteIdent`.
+- **One snapshot round trip.** `roles:get-snapshot` returns the current user, visible roles, memberships and the selected role's per-database access. Non-superusers only receive their own role, memberships and privileges.
+- **Views.** Users & roles (role list and a detail pane with Attributes, Roles, Database access and Effective permissions), Databases (summary cards), Triggers (superuser-only enable/disable per trigger or all at once; no create or drop), and Audit log (a local, per-connection log of administrative actions, capped at 5,000 entries, never containing passwords).
+- **Database access has three levels**: no access, read only, read + write. They abstract the `GRANT`/`REVOKE` cascade across every non-system schema in that database (tables, sequences and default privileges), with an optional "restrict to tables" list.
+- **Predefined `pg_*` roles are hidden** while Hide internal schemas is on.
+- **The sidebar footer** shows a compact roles summary for the active connection that opens the Users view.
 
 ## Rationale
 
-- One round trip keeps the sidebar roles bar cheap and the Users view snappy.
-- Server-side superuser enforcement defends against a tampered renderer; the
-  UI gating only controls discoverability. Filtering the snapshot for
-  non-admins means a non-privileged login truly cannot learn about other
-  principals even via the network bridge.
-- We reuse the existing connection pool (`withPoolClient`) and add a small
-  `runInDatabase` helper for grants that must run against a specific database
-  (read-only SELECT on that database's `public` schema).
+- Server-side superuser, read-only and validation checks defend against a tampered renderer; UI gating only controls discoverability.
+- Transactions keep a failed `GRANT` from leaving a half-created role.
+- SCRAM verifiers are what PostgreSQL stores anyway, so computing them client-side (as `psql \password` does) is behaviour-neutral and keeps secrets out of server logs.
+- Per-database grants reuse one shared helper that opens a short-lived client against the target database, so backup/restore and RBAC share connection handling.
+
+## Status
+
+Accepted. Revised 2026-09-27 after the initial contribution was audited (read-only enforcement, transactions, SCRAM, relaxed identifiers, triggers reduced to enable/disable).
 
 ## Consequences
 
-- Mutations are irreversible from the app's perspective — there is no undo for
-  `DROP ROLE`. We rely on PostgreSQL's own ownership checks to refuse unsafe
-  drops.
-- "Restrict database" is best-effort: revoking `CONNECT` from a user is
-  effective only if `PUBLIC` does not already grant it. True isolation requires
-  revoking from `PUBLIC`, which we intentionally avoid to prevent accidental
-  lockouts.
-- Read-only grants assume the `public` schema. Multi-schema read-only is left
-  for a follow-up.
+- There is no undo: `DROP ROLE` is final. PostgreSQL's ownership checks refuse unsafe drops.
+- Restricting a database revokes `CONNECT` from the role only. If `PUBLIC` still has `CONNECT`, the role can still connect; we do not revoke from `PUBLIC` to avoid lockouts.
+- Access levels cover schemas that exist when they are applied; schemas created later need the level re-applied. Default privileges for future tables only cover tables created by the connected role, not by other roles such as migration users.
+- `pg_roles` is readable by every login, so snapshot filtering for non-superusers is a UX boundary, not a secrecy guarantee.
+- A database the app cannot reach is shown as no access rather than failing the snapshot.
+- "Has password" is only known for superusers (`pg_authid`); others see "unknown".
+- Trigger enable/disable shares its SQL with the table viewer's Triggers tab.

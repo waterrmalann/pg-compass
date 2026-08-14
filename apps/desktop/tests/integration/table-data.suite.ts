@@ -1319,6 +1319,24 @@ export function runTableDataIntegrationSuite(
         expect(await countDeleteTarget("category = 'keep'")).toBe(2);
       });
 
+      it("evaluates the filter only in the read-only selection, then deletes captured keys", async () => {
+        await resetDeleteTarget();
+        const { deleteRows } = await import("@/main/table-data-write");
+
+        // True only inside a read-only transaction: if the DELETE re-applied
+        // the free-form filter (write transaction), nothing would be deleted.
+        const result = await deleteRows({
+          connectionId,
+          schema: "app",
+          table: "delete_target",
+          whereClause:
+            "category = 'old' AND current_setting('transaction_read_only') = 'on'",
+        });
+
+        expect(result.deletedCount).toBe(3);
+        expect(await countDeleteTarget()).toBe(2);
+      });
+
       it("returns zero when the current filter matches no rows", async () => {
         await resetDeleteTarget();
         const { deleteRows } = await import("@/main/table-data-write");
@@ -1347,6 +1365,29 @@ export function runTableDataIntegrationSuite(
           }),
         ).rejects.toThrow();
         expect(await countDeleteTarget()).toBe(5);
+      });
+
+      it("pages rows in primary-key order after an update moves a row", async () => {
+        await resetDeleteTarget();
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { getRows } = await import("@/main/table-data-rows");
+        // An UPDATE writes a new tuple version after the others, so an
+        // unordered scan would no longer return id 1 first.
+        await withPoolClient(connectionId, (client) =>
+          client.query(
+            "UPDATE app.delete_target SET category = category WHERE id = 1",
+          ),
+        );
+
+        const rows = await getRows({
+          connectionId,
+          schema: "app",
+          table: "delete_target",
+          page: 1,
+          pageSize: 25,
+        });
+
+        expect(rows.rows.map((row) => row.id)).toEqual([1, 2, 3, 4, 5]);
       });
 
       it("deletes all rows when no filter is provided", async () => {
@@ -2004,6 +2045,153 @@ export function runTableDataIntegrationSuite(
         );
         expect(result.insertedCount).toBe(1);
         expect(await countRows("app", "injection_target")).toBe(before + 1);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Roles (pooled-connection mutations only: PGlite serves one socket)
+    // -----------------------------------------------------------------------
+
+    describe("roles management", () => {
+      const roleSuffix = Date.now().toString(36);
+      const loginRole = `pgc_login_${roleSuffix}`;
+      const noPasswordRole = `pgc_nopass_${roleSuffix}`;
+      const failedRole = `pgc failed "${roleSuffix}"`;
+      const cloneRoleName = `pgc_clone_${roleSuffix}`;
+      const parentRole = `pgc_parent_${roleSuffix}`;
+
+      async function queryRole<T>(
+        sql: string,
+        params: unknown[],
+      ): Promise<T | undefined> {
+        const { withPoolClient } = await import("@/main/pg-utils");
+        return withPoolClient(connectionId, async (client) => {
+          const result = await client.query(sql, params);
+          return result.rows[0] as T | undefined;
+        });
+      }
+
+      afterAll(async () => {
+        const { withPoolClient, quoteIdent } = await import("@/main/pg-utils");
+        await withPoolClient(connectionId, async (client) => {
+          for (const role of [
+            cloneRoleName,
+            loginRole,
+            noPasswordRole,
+            failedRole,
+            parentRole,
+          ]) {
+            await client.query(`DROP ROLE IF EXISTS ${quoteIdent(role)}`);
+          }
+        });
+      });
+
+      it("creates a role with a SCRAM verifier instead of the plaintext password", async () => {
+        const { createRole } = await import("@/main/roles-mutations");
+        const { buildScramSha256Verifier } =
+          await import("@/main/scram-verifier");
+        await createRole({
+          connectionId,
+          name: parentRole,
+          login: false,
+        });
+        await createRole({
+          connectionId,
+          name: loginRole,
+          login: true,
+          password: "pencil",
+          membershipRoles: [parentRole],
+        });
+
+        const row = await queryRole<{ rolpassword: string }>(
+          "SELECT rolpassword FROM pg_authid WHERE rolname = $1",
+          [loginRole],
+        );
+        const stored = row?.rolpassword ?? "";
+        expect(stored).toMatch(/^SCRAM-SHA-256\$4096:/);
+        const saltBase64 = stored.split("$")[1]!.split(":")[1]!;
+        expect(
+          buildScramSha256Verifier("pencil", Buffer.from(saltBase64, "base64")),
+        ).toBe(stored);
+      });
+
+      it("reports hasPassword from pg_authid for superuser connections", async () => {
+        const { createRole } = await import("@/main/roles-mutations");
+        const { buildSidebarSummary } = await import("@/main/roles-queries");
+        await createRole({ connectionId, name: noPasswordRole, login: true });
+
+        const summary = await buildSidebarSummary(connectionId);
+        const byName = new Map(summary.roles.map((role) => [role.name, role]));
+        expect(summary.currentUser.isSuperuser).toBe(true);
+        expect(byName.get(loginRole)?.hasPassword).toBe(true);
+        expect(byName.get(noPasswordRole)?.hasPassword).toBe(false);
+      });
+
+      it("rolls back CREATE ROLE when a membership grant fails", async () => {
+        const { createRole } = await import("@/main/roles-mutations");
+        await expect(
+          createRole({
+            connectionId,
+            name: failedRole,
+            login: true,
+            password: "secret",
+            membershipRoles: [`pgc_missing_${roleSuffix}`],
+          }),
+        ).rejects.toThrow(/does not exist/);
+
+        const row = await queryRole<{ count: number }>(
+          "SELECT count(*)::int AS count FROM pg_roles WHERE rolname = $1",
+          [failedRole],
+        );
+        expect(row?.count).toBe(0);
+      });
+
+      it("applies alterRole atomically", async () => {
+        const { alterRole } = await import("@/main/roles-mutations");
+        await expect(
+          alterRole({
+            connectionId,
+            name: loginRole,
+            login: false,
+            validUntil: "not a timestamp",
+          }),
+        ).rejects.toThrow();
+        const unchanged = await queryRole<{ rolcanlogin: boolean }>(
+          "SELECT rolcanlogin FROM pg_roles WHERE rolname = $1",
+          [loginRole],
+        );
+        expect(unchanged?.rolcanlogin).toBe(true);
+
+        await alterRole({
+          connectionId,
+          name: loginRole,
+          login: false,
+          password: null,
+        });
+        const changed = await queryRole<{
+          rolcanlogin: boolean;
+          rolpassword: string | null;
+        }>(
+          "SELECT rolcanlogin, rolpassword FROM pg_authid WHERE rolname = $1",
+          [loginRole],
+        );
+        expect(changed).toEqual({ rolcanlogin: false, rolpassword: null });
+      });
+
+      it("clones a role together with its memberships", async () => {
+        const { cloneRole } = await import("@/main/roles-mutations");
+        const { fetchMemberships } = await import("@/main/roles-queries");
+        const { withPoolClient } = await import("@/main/pg-utils");
+        await cloneRole({
+          connectionId,
+          sourceName: loginRole,
+          newName: cloneRoleName,
+        });
+
+        const memberships = await withPoolClient(connectionId, (client) =>
+          fetchMemberships(client, cloneRoleName),
+        );
+        expect(memberships.map((m) => m.parentName)).toEqual([parentRole]);
       });
     });
   });

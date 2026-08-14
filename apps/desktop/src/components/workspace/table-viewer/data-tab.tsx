@@ -186,6 +186,11 @@ export function DataTab({
           whereClause: where || undefined,
         }),
       );
+      // A stale result means a newer call (background or foreground)
+      // already superseded this one — that newer call is responsible for
+      // the final loading state when IT resolves, so this one touches
+      // nothing further (in particular, it must NOT clear `loading`, since
+      // the newer call may still be pending).
       if (request.status === "stale") return false;
       if (request.status === "error") {
         const msg = (request.error as Error).message;
@@ -193,8 +198,8 @@ export function DataTab({
         if (!background) {
           setRows([]);
           setTotalCount(0);
-          setLoading(false);
         }
+        setLoading(false);
         toast.error("Failed to load rows", { description: msg });
         return false;
       }
@@ -205,8 +210,8 @@ export function DataTab({
         if (!background) {
           setRows([]);
           setTotalCount(0);
-          setLoading(false);
         }
+        setLoading(false);
         toast.error("Failed to load rows", { description: msg });
         return false;
       }
@@ -215,7 +220,13 @@ export function DataTab({
       setPrimaryKey(result.data.primaryKey);
       setTotalCount(result.data.totalCount);
       setLastRefreshedAt(new Date());
-      if (!background) setLoading(false);
+      // Unconditional (not just `if (!background)`): being the "current"
+      // (non-stale) result means no newer request is pending, regardless of
+      // whether THIS call itself was the one that had set loading=true — a
+      // background call can be the one that resolves last after an earlier
+      // foreground call went stale, and must still clear the spinner it
+      // never set. Calling this when it's already false is a harmless no-op.
+      setLoading(false);
       return true;
     },
     [connectionId, runLatestRequest, schema, table],

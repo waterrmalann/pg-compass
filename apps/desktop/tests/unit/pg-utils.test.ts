@@ -199,6 +199,103 @@ describe("buildPgConfig", () => {
   });
 });
 
+describe("connection safety checks", () => {
+  it("refuses SSH-tunnelled connections instead of connecting directly", async () => {
+    const { utils } = await loadUtils();
+    expect(() =>
+      utils.buildPgConfig({
+        ...fieldsConnection,
+        ssh: {
+          enabled: true,
+          host: "bastion",
+          port: 22,
+          user: "deploy",
+          authMethod: "password",
+        },
+      }),
+    ).toThrow(/SSH tunneling is not yet supported/);
+  });
+
+  it.each([String.raw`\\evil-host\share\ca.pem`, "//evil-host/share/ca.pem"])(
+    "rejects network (UNC) SSL file paths: %s",
+    async (uncPath) => {
+      const { utils } = await loadUtils();
+      expect(() =>
+        utils.buildPgConfig({
+          ...fieldsConnection,
+          ssl: { enabled: true, ca: uncPath },
+        }),
+      ).toThrow(/not a network \(UNC\) path/);
+    },
+  );
+
+  it("does not treat local extended-length paths as UNC", async () => {
+    const { utils } = await loadUtils();
+    expect(() =>
+      utils.buildPgConfig({
+        ...fieldsConnection,
+        ssl: { enabled: true, ca: String.raw`\\?\C:\missing\ca.pem` },
+      }),
+    ).toThrow(/Could not read SSL CA certificate file/);
+  });
+});
+
+describe("buildPgConfigForDatabase", () => {
+  it("overrides the database for field connections", async () => {
+    const { utils } = await loadUtils();
+    expect(
+      utils.buildPgConfigForDatabase(fieldsConnection, "other db"),
+    ).toMatchObject({ host: "localhost", database: "other db" });
+  });
+
+  it("encodes the database into URI paths so pg decodes it back exactly", async () => {
+    const { utils } = await loadUtils();
+    const uriConnection: ConnectionConfig = {
+      id: "c",
+      label: "x",
+      favourite: false,
+      mode: "uri",
+      uri: "postgres://u:p@h:5432/db?sslmode=disable",
+    };
+    for (const database of ["my db", "100%", "a/b", "host=evil dbname=x"]) {
+      const config = utils.buildPgConfigForDatabase(uriConnection, database);
+      const url = new URL(config.connectionString as string);
+      // Mirrors pg-connection-string: decodeURI(pathname.slice(1)).
+      expect(decodeURI(url.pathname.slice(1))).toBe(database);
+      expect(url.hostname).toBe("h");
+      expect(url.search).toBe("?sslmode=disable");
+    }
+  });
+
+  it("refuses URI database names pg could not decode faithfully", async () => {
+    const { utils } = await loadUtils();
+    expect(() =>
+      utils.buildPgConfigForDatabase(
+        {
+          id: "c",
+          label: "x",
+          favourite: false,
+          mode: "uri",
+          uri: "postgres://u:p@h/db",
+        },
+        "what?#",
+      ),
+    ).toThrow(/cannot be addressed/);
+  });
+});
+
+describe("quoteLiteral", () => {
+  it("asks the server to quote the value as a bound parameter", async () => {
+    const { utils } = await loadUtils();
+    const query = vi.fn(async () => ({ rows: [{ quoted: "'it''s'" }] }));
+    const quoted = await utils.quoteLiteral({ query } as never, "it's");
+    expect(quoted).toBe("'it''s'");
+    expect(query).toHaveBeenCalledWith("SELECT quote_literal($1) AS quoted", [
+      "it's",
+    ]);
+  });
+});
+
 describe("quoteIdent", () => {
   it("wraps in double quotes and escapes embedded double quotes", async () => {
     const { utils } = await loadUtils();

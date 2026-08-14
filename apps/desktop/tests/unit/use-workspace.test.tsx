@@ -299,4 +299,52 @@ describe("useWorkspace", () => {
     });
     expect(result.current.schemaCache["conn-failed"]).toBeUndefined();
   });
+
+  it("closeAllTabs closes every tab, clears the active tab and relation sessions", async () => {
+    const { result } = renderHook(() => useWorkspace(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.tabs).toHaveLength(0));
+
+    await act(async () => {
+      await result.current.openTab({
+        type: "table-details",
+        path: {
+          connectionId: "conn-1",
+          connectionLabel: "Local",
+          schemaName: "app",
+          tableName: "users",
+        },
+      });
+      await result.current.openTab({ type: "database-manager" });
+    });
+    const tableTabId = result.current.tabs[0]!.id;
+    act(() => {
+      result.current.updateRelationSession(tableTabId, { dataPageSize: 100 });
+    });
+    expect(result.current.tabs).toHaveLength(2);
+
+    act(() => result.current.closeAllTabs());
+
+    expect(result.current.tabs).toHaveLength(0);
+    expect(result.current.activeTabId).toBeNull();
+    expect(result.current.relationSessions).toEqual({});
+
+    // The workspace stays usable after closing everything.
+    await act(async () => {
+      await result.current.openTab({ type: "database-manager" });
+    });
+    expect(result.current.tabs.map((tab) => tab.title)).toEqual([
+      "Database manager",
+    ]);
+    expect(result.current.activeTabId).toBe("database-manager");
+  });
+
+  it("bumps the roles revision when RBAC data changes", async () => {
+    const { result } = renderHook(() => useWorkspace(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.tabs).toHaveLength(0));
+    const before = result.current.rolesRevision;
+
+    act(() => result.current.notifyRolesChanged());
+
+    expect(result.current.rolesRevision).toBe(before + 1);
+  });
 });
