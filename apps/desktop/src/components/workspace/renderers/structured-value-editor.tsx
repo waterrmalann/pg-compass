@@ -6,7 +6,7 @@ import {
   indentWithTab,
 } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { keymap, EditorView, lineNumbers } from "@codemirror/view";
 import { pgTheme } from "@/components/sql-editor/pg-theme";
 
@@ -30,7 +30,12 @@ export function StructuredValueEditor({
   const initialValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const editableCompartment = useRef(new Compartment());
+  const ariaLabelCompartment = useRef(new Compartment());
 
+  // Mount-only: the view is created once and never torn down for prop
+  // changes, so an in-progress edit survives `disabled` toggling (e.g. while
+  // a save is pending) instead of reverting to the value captured at mount.
   useEffect(() => {
     if (!hostRef.current) return;
     const view = new EditorView({
@@ -43,8 +48,10 @@ export function StructuredValueEditor({
           json(),
           keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
           ...pgTheme,
-          EditorView.editable.of(!disabled),
-          EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+          editableCompartment.current.of(EditorView.editable.of(!disabled)),
+          ariaLabelCompartment.current.of(
+            EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+          ),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               onChangeRef.current(update.state.doc.toString());
@@ -63,7 +70,28 @@ export function StructuredValueEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [ariaLabel, disabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; disabled/ariaLabel are reconfigured via compartments below
+  }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: editableCompartment.current.reconfigure(
+        EditorView.editable.of(!disabled),
+      ),
+    });
+  }, [disabled]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: ariaLabelCompartment.current.reconfigure(
+        EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+      ),
+    });
+  }, [ariaLabel]);
 
   useEffect(() => {
     const view = viewRef.current;

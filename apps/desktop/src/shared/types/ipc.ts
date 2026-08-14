@@ -5,7 +5,40 @@ import type {
   DatabaseSchema,
   SchemaTreeOptions,
 } from "./connection";
+import type {
+  AlterRoleInput,
+  AuditLogEntry,
+  CloneRoleInput,
+  CreateRoleInput,
+  CreateTriggerFunctionInput,
+  CreateTriggerInput,
+  DbAccessInput,
+  DbReadonlyGrantInput,
+  DropTriggerInput,
+  EffectivePermissions,
+  MembershipInput,
+  PgTriggerFunction,
+  PgTriggerInfo,
+  RenameRoleInput,
+  RolesSidebarSummary,
+  RolesSnapshot,
+  SetDbAccessLevelInput,
+  SetTriggerEnabledInput,
+  TableRestrictionInput,
+} from "./roles";
 import type { AppSettings, AppSettingsPatch } from "./settings";
+import type {
+  BackupFileInfo,
+  BackupInspection,
+  DbSyncBackupInput,
+  DbSyncCancelInput,
+  DbSyncListDatabasesInput,
+  DbSyncProdGuardState,
+  DbSyncProgressEvent,
+  DbSyncRestoreInput,
+  DbSyncResult,
+  DbSyncRunInput,
+} from "./db-sync";
 import type {
   CancelQueryParams,
   CancelQueryResult,
@@ -108,4 +141,75 @@ export interface WorkspaceApi {
 
 export interface ClipboardApi {
   writeText(text: string): Promise<IpcResult<void>>;
+}
+
+export interface RolesApi {
+  getSnapshot(
+    connectionId: string,
+    targetUser?: string,
+  ): Promise<IpcResult<RolesSnapshot>>;
+  getSidebarSummary(
+    connectionId: string,
+  ): Promise<IpcResult<RolesSidebarSummary>>;
+  createRole(input: CreateRoleInput): Promise<IpcResult<void>>;
+  alterRole(input: AlterRoleInput): Promise<IpcResult<void>>;
+  dropRole(connectionId: string, name: string): Promise<IpcResult<void>>;
+  grantMembership(input: MembershipInput): Promise<IpcResult<void>>;
+  revokeMembership(input: MembershipInput): Promise<IpcResult<void>>;
+  grantDbConnect(input: DbAccessInput): Promise<IpcResult<void>>;
+  revokeDbConnect(input: DbAccessInput): Promise<IpcResult<void>>;
+  grantDbReadonly(input: DbReadonlyGrantInput): Promise<IpcResult<void>>;
+  revokeDbReadonly(input: DbReadonlyGrantInput): Promise<IpcResult<void>>;
+  alterRolePassword(
+    connectionId: string,
+    name: string,
+    password: string,
+  ): Promise<IpcResult<void>>;
+  alterRoleComment(
+    connectionId: string,
+    name: string,
+    comment: string | null,
+  ): Promise<IpcResult<void>>;
+  setDbAccessLevel(input: SetDbAccessLevelInput): Promise<IpcResult<void>>;
+  setTableRestrictions(
+    input: TableRestrictionInput,
+  ): Promise<IpcResult<void>>;
+  cloneRole(input: CloneRoleInput): Promise<IpcResult<void>>;
+  renameRole(input: RenameRoleInput): Promise<IpcResult<void>>;
+  listTriggers(
+    connectionId: string,
+    databaseName: string,
+  ): Promise<IpcResult<PgTriggerInfo[]>>;
+  createTrigger(input: CreateTriggerInput): Promise<IpcResult<void>>;
+  dropTrigger(input: DropTriggerInput): Promise<IpcResult<void>>;
+  setTriggerEnabled(input: SetTriggerEnabledInput): Promise<IpcResult<void>>;
+  listTriggerFunctions(
+    connectionId: string,
+    databaseName: string,
+  ): Promise<IpcResult<PgTriggerFunction[]>>;
+  createTriggerFunction(
+    input: CreateTriggerFunctionInput,
+  ): Promise<IpcResult<void>>;
+  getEffectivePermissions(
+    connectionId: string,
+    user: string,
+  ): Promise<IpcResult<EffectivePermissions>>;
+  getAuditLog(connectionId: string): Promise<IpcResult<AuditLogEntry[]>>;
+  clearAuditLog(connectionId: string): Promise<IpcResult<void>>;
+}
+
+export interface DbSyncApi {
+  listDatabases(
+    input: DbSyncListDatabasesInput,
+  ): Promise<IpcResult<string[]>>;
+  run(input: DbSyncRunInput): Promise<IpcResult<DbSyncResult>>;
+  cancel(input: DbSyncCancelInput): Promise<IpcResult<void>>;
+  onProgress(callback: (event: DbSyncProgressEvent) => void): () => void;
+  getProdGuard(): Promise<IpcResult<DbSyncProdGuardState>>;
+  setProdGuard(enabled: boolean): Promise<IpcResult<DbSyncProdGuardState>>;
+  listBackups(): Promise<IpcResult<BackupFileInfo[]>>;
+  backup(input: DbSyncBackupInput): Promise<IpcResult<DbSyncResult>>;
+  restore(input: DbSyncRestoreInput): Promise<IpcResult<DbSyncResult>>;
+  deleteBackup(path: string): Promise<IpcResult<void>>;
+  inspectBackup(path: string): Promise<IpcResult<BackupInspection>>;
 }

@@ -22,6 +22,16 @@ export function extendedQuery(text: string): ExtendedQueryConfig {
 
 /** Build a pg connection config from a ConnectionConfig. */
 export function buildPgConfig(connection: ConnectionConfig) {
+  // The SSH tunnel option is validated, encrypted, and stored, but no tunnel
+  // is actually established anywhere connections are made — refuse rather
+  // than silently connecting directly to `fields.host`/`uri`, which would
+  // give the user a false sense of their traffic being tunneled.
+  if (connection.ssh?.enabled) {
+    throw new Error(
+      `"${connection.label}" has an SSH tunnel enabled, but SSH tunneling is not yet supported. Disable it on this connection to connect directly.`,
+    );
+  }
+
   const config: Record<string, unknown> =
     connection.mode === "uri" && connection.uri
       ? { connectionString: connection.uri }
@@ -50,7 +60,8 @@ function buildFieldPgConfig(
   };
 }
 
-function buildPgSslConfig(
+/** Resolve a connection's SSL settings to actual PEM content (ca/cert/key). */
+export function buildPgSslConfig(
   connection: ConnectionConfig,
 ): Record<string, unknown> {
   const ssl = connection.ssl;
@@ -104,8 +115,25 @@ function looksLikeBase64(value: string): boolean {
   return value.startsWith("LS0t") && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 }
 
+// Matches a Windows UNC path (`\\server\share\...`) or its POSIX-style
+// double-slash alias (`//server/share/...`), but not a normal absolute path
+// (`/etc/...`) or the `\\?\` local extended-length prefix. A bare
+// `fs.readFileSync` on a UNC path makes the OS open an SMB connection to
+// whatever host the string names — a known technique (forced NTLM
+// authentication / SMB relay) for leaking or relaying the current user's
+// Windows credentials to an attacker-controlled server, and on any OS it's
+// an oracle for probing arbitrary network-reachable paths. SSL cert/key/CA
+// paths are meant to name a local file, so network paths are rejected.
+const UNC_PATH_PATTERN = /^\\\\[^?\\]|^\/\/[^/]/;
+
 function readConnectionFile(filePath: string, label: string): string {
-  const resolvedPath = resolveUserPath(filePath.trim());
+  const trimmed = filePath.trim();
+  if (UNC_PATH_PATTERN.test(trimmed)) {
+    throw new Error(
+      `${label} path must be a local file path, not a network (UNC) path: "${filePath}".`,
+    );
+  }
+  const resolvedPath = resolveUserPath(trimmed);
   try {
     return fs.readFileSync(resolvedPath, "utf8");
   } catch (err) {
@@ -131,6 +159,29 @@ function resolveUserPath(filePath: string): string {
 /** Quote a PostgreSQL identifier to prevent SQL injection. */
 export function quoteIdent(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
+}
+
+/**
+ * Safely quote a string literal for DDL that can't accept a bound
+ * parameter — PostgreSQL's grammar rejects `$1` in places like
+ * `ALTER ROLE ... PASSWORD '...'` or `COMMENT ON ... IS '...'`, so these
+ * values have to be embedded as a literal. Manual `'`-doubling is only a
+ * correct escape when `standard_conforming_strings = on` (the default
+ * since PG 9.1, but not guaranteed) — a value ending in a backslash on a
+ * server with it `off` could swallow the closing quote and break out of
+ * the literal. Asking the server to quote it via `quote_literal()` is
+ * correct regardless of that setting, since it accounts for the server's
+ * own escaping rules.
+ */
+export async function quoteLiteral(
+  client: Pick<Client, "query">,
+  value: string,
+): Promise<string> {
+  const result = await client.query<{ quoted: string }>(
+    "SELECT quote_literal($1) AS quoted",
+    [value],
+  );
+  return result.rows[0]!.quoted;
 }
 
 // ---------------------------------------------------------------------------

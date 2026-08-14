@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   editRegistry,
   type TypeEditor,
@@ -232,6 +232,16 @@ function ForeignKeyFieldEditor(props: Readonly<ForeignKeyFieldEditorProps>) {
   const foreignKey = props.column.foreignKey!;
   const [open, setOpen] = useState(false);
   const [lastLabel, setLastLabel] = useState<string | null>(null);
+  // `lastLabel` only reflects what was picked in *this* dialog session — if
+  // `rawValue` changes for any other reason (e.g. a "Revert" button resetting
+  // the draft), the label is stale and must be dropped rather than shown next
+  // to a value it no longer describes.
+  const pickedValueRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (props.rawValue !== pickedValueRef.current) {
+      setLastLabel(null);
+    }
+  }, [props.rawValue]);
   const display = props.rawValue === "" ? "(unset)" : props.rawValue;
 
   return (
@@ -271,9 +281,10 @@ function ForeignKeyFieldEditor(props: Readonly<ForeignKeyFieldEditorProps>) {
             connectionId={props.connectionId}
             allowNull={false}
             onPick={(value, label) => {
-              props.onChange(
-                value === null || value === undefined ? "" : String(value),
-              );
+              const nextRaw =
+                value === null || value === undefined ? "" : String(value);
+              pickedValueRef.current = nextRaw;
+              props.onChange(nextRaw);
               setLastLabel(label);
               setOpen(false);
             }}

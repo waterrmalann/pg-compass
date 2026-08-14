@@ -1,6 +1,6 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
-  "ui": "tui",
+  "ui": "stream",
   "globalEnv": [
     "PG_COMPASS_STORE_DIR",
     "PG_COMPASS_TEST_ADMIN_DATABASE_URL",

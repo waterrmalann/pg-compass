@@ -5,6 +5,12 @@ import {
 } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { useDensity } from "@/hooks/use-density";
@@ -15,6 +21,8 @@ import { TableListViewer } from "@/components/workspace/table-list-viewer";
 import { TableDetailsViewer } from "@/components/workspace/table-details-viewer";
 import { ViewListViewer } from "@/components/workspace/view-list-viewer";
 import { ViewDetailsViewer } from "@/components/workspace/view-details-viewer";
+import { UsersViewer } from "@/components/workspace/users-viewer";
+import { DatabaseManagerViewer } from "@/components/workspace/database-manager-viewer";
 import type { WorkspaceTab, WorkspaceTabView } from "@/shared/types/workspace";
 import { WelcomeScreen } from "./welcome-screen";
 import { ApplicationTitle } from "../topbar/application-title";
@@ -22,7 +30,8 @@ import { buildWindowTitle } from "./utils/build-window-title";
 import { matchesShortcut } from "@/shared/constants/shortcuts";
 
 export function Workspace() {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useWorkspace();
+  const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs } =
+    useWorkspace();
   const density = useDensity();
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
@@ -71,6 +80,7 @@ export function Workspace() {
         activeTabId={activeTabId}
         onSelectTab={setActiveTab}
         onCloseTab={closeTab}
+        onCloseAllTabs={closeAllTabs}
       />
       {tabs.length === 0 ? (
         <WelcomeScreen />
@@ -86,11 +96,13 @@ function WorkspaceTabBar({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseAllTabs,
 }: Readonly<{
   tabs: ReturnType<typeof useWorkspace>["tabs"];
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onCloseAllTabs: () => void;
 }>) {
   if (tabs.length === 0) {
     return (
@@ -119,43 +131,54 @@ function WorkspaceTabBar({
         }
 
         return (
-          <div
-            key={tab.id}
-            title={tab.title}
-            className={cn(
-              "group flex h-8 w-44 min-w-32 max-w-44 shrink-0 items-center gap-1 rounded-t-md border border-transparent px-2 text-xs",
-              isActive
-                ? "border-border border-b-card bg-background text-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-            style={tabStyle}
-          >
-            <button
-              type="button"
-              className="h-full min-w-0 flex-1 cursor-pointer truncate text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onMouseDown={handleTabMouseDown}
-              onAuxClick={handleTabAuxClick}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectTab(tab.id);
-              }}
-            >
-              {tab.title}
-            </button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="size-8 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-              aria-label={`Close ${tab.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onCloseTab(tab.id);
-              }}
-            >
-              <X className="size-3" />
-            </Button>
-          </div>
+          <ContextMenu key={tab.id}>
+            <ContextMenuTrigger asChild>
+              <div
+                title={tab.title}
+                className={cn(
+                  "group flex h-8 w-44 min-w-32 max-w-44 shrink-0 items-center gap-1 rounded-t-md border border-transparent px-2 text-xs",
+                  isActive
+                    ? "border-border border-b-card bg-background text-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                )}
+                style={tabStyle}
+              >
+                <button
+                  type="button"
+                  className="h-full min-w-0 flex-1 cursor-pointer truncate text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onMouseDown={handleTabMouseDown}
+                  onAuxClick={handleTabAuxClick}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectTab(tab.id);
+                  }}
+                >
+                  {tab.title}
+                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-8 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                  aria-label={`Close ${tab.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCloseTab(tab.id);
+                  }}
+                >
+                  <X className="size-3" />
+                </Button>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-40">
+              <ContextMenuItem onClick={() => onCloseTab(tab.id)}>
+                Close
+              </ContextMenuItem>
+              <ContextMenuItem onClick={onCloseAllTabs}>
+                Close All Tabs
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         );
       })}
     </div>
@@ -231,6 +254,12 @@ function TabViewRenderer({ tab }: Readonly<{ tab: WorkspaceTab }>) {
   }
   if (view.type === "view-details") {
     return <ViewDetailsViewer tabId={tab.id} path={view.path} />;
+  }
+  if (view.type === "users") {
+    return <UsersViewer path={view.path} />;
+  }
+  if (view.type === "database-manager") {
+    return <DatabaseManagerViewer />;
   }
 
   return (

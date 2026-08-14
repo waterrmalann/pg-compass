@@ -415,8 +415,13 @@ export async function deleteRows(
           return `(${placeholders.join(", ")})`;
         });
         const keyTuple = `(${primaryKeySql})`;
+        // Re-apply the original filter here (not just the pinned PK set):
+        // a row selected above can be concurrently modified before this
+        // batch runs so it no longer matches `trimmedWhere` — without this,
+        // it would still be deleted purely because its PK was captured
+        // earlier, deleting a row the user's filter no longer matches.
         const result = await client.query(
-          `DELETE FROM ${qualifiedTable} WHERE ${keyTuple} IN (${tuples.join(", ")})`,
+          `DELETE FROM ${qualifiedTable} WHERE ${keyTuple} IN (${tuples.join(", ")}) AND (${trimmedWhere})`,
           values,
         );
         deletedCount += result.rowCount ?? 0;

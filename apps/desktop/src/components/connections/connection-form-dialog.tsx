@@ -23,6 +23,7 @@ import { ConnectionColorPicker } from "./connection-color-picker";
 import { ConnectionBasicFields } from "./connection-basic-fields";
 import { ConnectionSSLFieldset } from "./connection-ssl-fieldset";
 import { ConnectionSSHFieldset } from "./connection-ssh-fieldset";
+import type { ParsedEnvConnection } from "./parse-env-block";
 import type {
   ConnectionConfig,
   ConnectionInput,
@@ -172,6 +173,23 @@ export function ConnectionFormDialog({
     setErrors({});
   }
 
+  function handleEnvExtract(parsed: ParsedEnvConnection) {
+    if (parsed.uri) {
+      setMode("uri");
+      setUri(parsed.uri);
+    } else if (Object.keys(parsed.fields).length > 0) {
+      setMode("fields");
+      setFields((f) => ({ ...f, ...parsed.fields }));
+    }
+
+    if (parsed.ca) {
+      setSsl((s) => ({ ...s, enabled: true, caSource: "inline", ca: parsed.ca }));
+      setAdvancedOpen(true);
+    }
+
+    setErrors({});
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -250,6 +268,7 @@ export function ConnectionFormDialog({
             fields={fields}
             onFieldsChange={setFields}
             errors={errors}
+            onEnvExtract={handleEnvExtract}
           />
 
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>

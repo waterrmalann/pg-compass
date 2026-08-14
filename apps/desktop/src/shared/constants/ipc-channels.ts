@@ -54,3 +54,46 @@ export const WorkspaceChannels = {
 export const ClipboardChannels = {
   WRITE_TEXT: "clipboard:write-text",
 } as const;
+
+export const RolesChannels = {
+  GET_SNAPSHOT: "roles:get-snapshot",
+  GET_SIDEBAR_SUMMARY: "roles:get-sidebar-summary",
+  CREATE_ROLE: "roles:create-role",
+  ALTER_ROLE: "roles:alter-role",
+  DROP_ROLE: "roles:drop-role",
+  GRANT_MEMBERSHIP: "roles:grant-membership",
+  REVOKE_MEMBERSHIP: "roles:revoke-membership",
+  GRANT_DB_CONNECT: "roles:grant-db-connect",
+  REVOKE_DB_CONNECT: "roles:revoke-db-connect",
+  GRANT_DB_READONLY: "roles:grant-db-readonly",
+  REVOKE_DB_READONLY: "roles:revoke-db-readonly",
+  ALTER_ROLE_PASSWORD: "roles:alter-role-password",
+  ALTER_ROLE_COMMENT: "roles:alter-role-comment",
+  SET_DB_ACCESS_LEVEL: "roles:set-db-access-level",
+  SET_TABLE_RESTRICTIONS: "roles:set-table-restrictions",
+  CLONE_ROLE: "roles:clone-role",
+  RENAME_ROLE: "roles:rename-role",
+  LIST_TRIGGERS: "roles:list-triggers",
+  CREATE_TRIGGER: "roles:create-trigger",
+  DROP_TRIGGER: "roles:drop-trigger",
+  SET_TRIGGER_ENABLED: "roles:set-trigger-enabled",
+  LIST_TRIGGER_FUNCTIONS: "roles:list-trigger-functions",
+  CREATE_TRIGGER_FUNCTION: "roles:create-trigger-function",
+  GET_EFFECTIVE_PERMISSIONS: "roles:get-effective-permissions",
+  GET_AUDIT_LOG: "roles:get-audit-log",
+  CLEAR_AUDIT_LOG: "roles:clear-audit-log",
+} as const;
+
+export const DbSyncChannels = {
+  LIST_DATABASES: "db-sync:list-databases",
+  RUN: "db-sync:run",
+  CANCEL: "db-sync:cancel",
+  PROGRESS: "db-sync:progress",
+  GET_PROD_GUARD: "db-sync:get-prod-guard",
+  SET_PROD_GUARD: "db-sync:set-prod-guard",
+  LIST_BACKUPS: "db-sync:list-backups",
+  BACKUP: "db-sync:backup",
+  RESTORE: "db-sync:restore",
+  DELETE_BACKUP: "db-sync:delete-backup",
+  INSPECT_BACKUP: "db-sync:inspect-backup",
+} as const;

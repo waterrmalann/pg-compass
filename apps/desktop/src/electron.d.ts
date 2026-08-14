@@ -1,7 +1,9 @@
 import type {
   ClipboardApi,
   ConnectionApi,
+  DbSyncApi,
   HelpApi,
+  RolesApi,
   SettingsApi,
   TableDataApi,
   WorkspaceApi,
@@ -15,5 +17,7 @@ declare global {
     helpApi: HelpApi;
     workspaceApi: WorkspaceApi;
     clipboardApi: ClipboardApi;
+    rolesApi: RolesApi;
+    dbSyncApi: DbSyncApi;
   }
 }

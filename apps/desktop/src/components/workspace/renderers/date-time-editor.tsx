@@ -46,7 +46,12 @@ export function DateTimeEditor({
   disabled?: boolean;
 }>) {
   const [rawMode, setRawMode] = useState(false);
-  const [timezone, setTimezone] = useState(() => detectedOffset(value));
+  // Derived from `value` (like `visualValue` below) rather than local state:
+  // `value` is the single source of truth, so this always reflects the
+  // current field even when it changes externally (e.g. a "Revert" button
+  // resetting the draft) instead of going stale and combining with a
+  // picker edit to silently shift the saved instant to the wrong offset.
+  const timezone = useMemo(() => detectedOffset(value), [value]);
   const inputType = DATE_TYPES.has(pgType)
     ? "date"
     : TIME_TYPES.has(pgType)
@@ -103,9 +108,7 @@ export function DateTimeEditor({
           aria-label="Timezone offset"
           className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
           onChange={(event) => {
-            const next = event.target.value;
-            setTimezone(next);
-            onChange(withTimezone(visualValue, next));
+            onChange(withTimezone(visualValue, event.target.value));
           }}
         >
           {[

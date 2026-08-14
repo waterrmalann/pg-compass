@@ -32,8 +32,24 @@ function isSecureEncryptionAvailable(): boolean {
   );
 }
 
+let warnedAboutPlaintextFallback = false;
+
 function encryptField(value: string | undefined): string | undefined {
-  if (!value || !isSecureEncryptionAvailable()) return value;
+  if (!value) return value;
+  if (!isSecureEncryptionAvailable()) {
+    // Silent otherwise — this is a real security degradation (credentials
+    // land in connections.json in plaintext), not just a missing feature.
+    if (!warnedAboutPlaintextFallback) {
+      warnedAboutPlaintextFallback = true;
+      console.warn(
+        "[connection-store] OS-backed credential encryption is unavailable " +
+          "(safeStorage.isEncryptionAvailable() is false, or Linux is using " +
+          "the basic_text secret-service backend) — connection passwords " +
+          "and other secrets will be stored in plaintext.",
+      );
+    }
+    return value;
+  }
   const encrypted = safeStorage.encryptString(value);
   return ENCRYPTED_PREFIX + encrypted.toString("base64");
 }
@@ -83,9 +99,51 @@ function decryptConnection(connection: ConnectionConfig): ConnectionConfig {
   return decrypted;
 }
 
-/** Get all saved connections (with credentials decrypted). */
+/**
+ * Strips secrets for list/display views. The URI's non-secret parts
+ * (host/port/database/user) are kept for display by decrypting just long
+ * enough to clear the embedded password; any consumer that needs the real
+ * credentials (editing a connection, copying its connection string) must
+ * fetch it individually via `getConnectionById`.
+ */
+function redactConnectionForList(connection: ConnectionConfig): ConnectionConfig {
+  const redacted = structuredClone(connection);
+  if (redacted.uri) {
+    try {
+      const decryptedUri = decryptField(redacted.uri);
+      const url = new URL(decryptedUri!);
+      url.password = "";
+      redacted.uri = url.toString();
+    } catch {
+      // Can't reveal even the host/port without successfully decrypting —
+      // omit the URI rather than leak the still-encrypted blob or throw.
+      redacted.uri = undefined;
+    }
+  }
+  if (redacted.fields) {
+    redacted.fields = { ...redacted.fields, password: "" };
+  }
+  if (redacted.ssh) {
+    redacted.ssh = {
+      ...redacted.ssh,
+      password: undefined,
+      passphrase: undefined,
+    };
+  }
+  return redacted;
+}
+
+/**
+ * Get all saved connections for list/display views. Secrets (passwords,
+ * the URI's embedded password, SSH password/passphrase) are redacted, not
+ * decrypted — every saved connection's full credentials living in
+ * renderer memory at once (rather than just the one currently open) is an
+ * unnecessary exposure if the renderer is ever compromised. Callers that
+ * need the real credentials (editing a connection, copying its connection
+ * string) must fetch that one connection via `getConnectionById`.
+ */
 export function getAllConnections(): ConnectionConfig[] {
-  return store.get("connections").map(decryptConnection);
+  return store.get("connections").map(redactConnectionForList);
 }
 
 /** Get a single connection by ID (with credentials decrypted). */

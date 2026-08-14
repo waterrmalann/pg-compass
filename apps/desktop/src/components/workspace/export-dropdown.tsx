@@ -35,6 +35,12 @@ export function ExportDropdown({
 }: Readonly<ExportDropdownProps>) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "query">("all");
+  const [sqlDumping, setSqlDumping] = useState(false);
+  // Every export path shares one `onExportProgress` IPC channel with no job
+  // id, so two exports in flight at once make each other's progress toasts
+  // flicker with the wrong row count. Block starting a second one while
+  // either the dialog-based export or a SQL dump is already running.
+  const exportBusy = dialogOpen || sqlDumping;
 
   // Build the effective SQL for a query/filter export
   const effectiveSql =
@@ -45,16 +51,20 @@ export function ExportDropdown({
   const canExportQuery = hasQueryResults ?? !!whereClause;
 
   function handleExportAll() {
+    if (exportBusy) return;
     setExportMode("all");
     setDialogOpen(true);
   }
 
   function handleExportQuery() {
+    if (exportBusy) return;
     setExportMode("query");
     setDialogOpen(true);
   }
 
   async function handleSqlDump() {
+    if (exportBusy) return;
+    setSqlDumping(true);
     try {
       // 1. Pick save location first
       const dialogResult = await globalThis.window.tableDataApi.showSaveDialog({
@@ -107,6 +117,8 @@ export function ExportDropdown({
       }
     } catch (err) {
       toast.error("SQL dump failed", { description: (err as Error).message });
+    } finally {
+      setSqlDumping(false);
     }
   }
 
@@ -125,18 +137,30 @@ export function ExportDropdown({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem onClick={handleExportAll} className="gap-2">
+          <DropdownMenuItem
+            onClick={handleExportAll}
+            disabled={exportBusy}
+            className="gap-2"
+          >
             <FileSpreadsheet className="size-4" />
             Export all
           </DropdownMenuItem>
           {canExportQuery && effectiveSql && (
-            <DropdownMenuItem onClick={handleExportQuery} className="gap-2">
+            <DropdownMenuItem
+              onClick={handleExportQuery}
+              disabled={exportBusy}
+              className="gap-2"
+            >
               <FileDown className="size-4" />
               Export selected query
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleSqlDump} className="gap-2">
+          <DropdownMenuItem
+            onClick={handleSqlDump}
+            disabled={exportBusy}
+            className="gap-2"
+          >
             <Database className="size-4" />
             SQL Dump
           </DropdownMenuItem>

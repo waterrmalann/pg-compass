@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import {
   DEFAULT_APP_SETTINGS,
   type AppSettings,
@@ -87,6 +88,12 @@ export function SettingsProvider({
         return result.data;
       }
 
+      // Settings toggles aren't applied optimistically, so on failure the
+      // control just snaps back to its old value — without this, that
+      // happens with zero explanation of why the change didn't take.
+      toast.error("Failed to save settings", {
+        description: result.error,
+      });
       return null;
     },
     [],

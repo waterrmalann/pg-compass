@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   validateConnectionInput,
+  validateCreateRoleInput,
+  validateDbAccessInput,
+  validateDbReadonlyGrantInput,
+  validateDropRoleInput,
   validateExportDataParams,
   validateGetRowsParams,
+  validateMembershipInput,
+  validateRolesSnapshotInput,
   validateImportDataParams,
   validateImportOpenDialogOptions,
   validateInsertRowParams,
@@ -201,5 +207,76 @@ describe("IPC runtime validation", () => {
         general: { readOnlyMode: true, unexpected: "persist me" },
       }),
     ).toThrow(/unexpected/);
+  });
+
+  describe("roles / RBAC", () => {
+    it("accepts a snapshot request", () => {
+      expect(
+        validateRolesSnapshotInput({
+          connectionId: "c1",
+          targetUser: "reader",
+        }),
+      ).toEqual({ connectionId: "c1", targetUser: "reader" });
+    });
+
+    it("rejects an invalid role name in create-role", () => {
+      expect(() =>
+        validateCreateRoleInput({
+          connectionId: "c1",
+          name: "bad-name!",
+          login: true,
+        }),
+      ).toThrow(/valid PostgreSQL identifier/);
+
+      expect(
+        validateCreateRoleInput({
+          connectionId: "c1",
+          name: "reader",
+          login: true,
+        }).name,
+      ).toBe("reader");
+    });
+
+    it("rejects unexpected keys in membership input", () => {
+      expect(() =>
+        validateMembershipInput({
+          connectionId: "c1",
+          memberName: "reader",
+          parentRoleName: "admins",
+          extra: true,
+        }),
+      ).toThrow(/extra/);
+    });
+
+    it("rejects invalid database names in db access input", () => {
+      expect(() =>
+        validateDbAccessInput({
+          connectionId: "c1",
+          userName: "reader",
+          databaseName: "DB WITH SPACES",
+        }),
+      ).toThrow(/valid database name/);
+    });
+
+    it("validates the schema override in readonly grants", () => {
+      expect(
+        validateDbReadonlyGrantInput({
+          connectionId: "c1",
+          userName: "reader",
+          databaseName: "app",
+          schema: "reporting",
+        }).schema,
+      ).toBe("reporting");
+    });
+
+    it("drops unknown keys from drop-role payloads", () => {
+      expect(() =>
+        validateDropRoleInput({
+          connectionId: "c1",
+          name: "reader",
+          force: true,
+        }),
+      ).toThrow(/force/);
+    });
   });
 });

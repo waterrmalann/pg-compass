@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Star,
   Trash2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ export function ConnectionItem({
     refreshSchemaTree,
     refreshSchemaTreeWithStatus,
     openTab,
+    forceOpenTab,
     closeConnectionTabs,
     tabs,
     activeTabId,
@@ -170,6 +172,22 @@ export function ConnectionItem({
     ).catch(() => undefined);
   }
 
+  function handleOpenTableInNewTab(schemaName: string, tableName: string) {
+    const connectionLabel = getDatabaseName();
+    forceOpenTab(
+      {
+        type: "table-details",
+        path: {
+          connectionId: connection.id,
+          connectionLabel,
+          schemaName,
+          tableName,
+        },
+      },
+      connection.color,
+    ).catch(() => undefined);
+  }
+
   function handleOpenViewViewer(schemaName: string, viewName: string) {
     const connectionLabel = getDatabaseName();
     openTab(
@@ -213,6 +231,7 @@ export function ConnectionItem({
         onToggleSchema={toggleSchema}
         onOpenSchema={handleOpenSchemaViewer}
         onOpenTable={handleOpenTableViewer}
+        onOpenTableInNewTab={handleOpenTableInNewTab}
         onOpenView={handleOpenViewViewer}
         selection={treeSelection}
         accentColor={connection.color}
@@ -235,7 +254,18 @@ export function ConnectionItem({
   }
 
   async function handleCopyConnectionString() {
-    const connectionString = buildConnectionString(connection);
+    // `connection` comes from the (secret-redacted) connection list — fetch
+    // the real credentials fresh rather than building from a stripped copy.
+    const fresh = await globalThis.window.connectionApi.getById(
+      connection.id,
+    );
+    if (!fresh.success) {
+      toast.error(`Failed to load "${connection.label}"`, {
+        description: fresh.error,
+      });
+      return;
+    }
+    const connectionString = buildConnectionString(fresh.data);
     if (!connectionString) {
       toast.error(`No connection string available for "${connection.label}"`);
       return;
@@ -281,6 +311,24 @@ export function ConnectionItem({
     ).catch(() => undefined);
   }
 
+  async function handleOpenUsers() {
+    const isConnected = connected || (await handleConnect());
+    if (!isConnected) {
+      return;
+    }
+
+    openTab(
+      {
+        type: "users",
+        path: {
+          connectionId: connection.id,
+          connectionLabel: connection.label,
+        },
+      },
+      connection.color,
+    ).catch(() => undefined);
+  }
+
   async function handleRefresh() {
     const isConnected = connected || (await handleConnect());
     if (!isConnected) {
@@ -315,7 +363,7 @@ export function ConnectionItem({
         )}
       >
         {/* Color / selection indicator */}
-        {(connection.color || isConnectionLeaf) && (
+        {isConnectionActive && (
           <div
             className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary"
             style={
@@ -445,6 +493,14 @@ export function ConnectionItem({
                     className={`mr-2 size-3 ${schemasLoading ? "animate-spin" : ""}`}
                   />
                   {schemasLoading ? "Refreshing" : "Refresh"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    handleOpenUsers().catch(() => undefined);
+                  }}
+                >
+                  <Users className="mr-2 size-3" />
+                  Users
                 </DropdownMenuItem>
                 {connected && (
                   <DropdownMenuItem onClick={handleDisconnect}>

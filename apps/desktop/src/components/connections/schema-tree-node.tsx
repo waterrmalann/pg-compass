@@ -1,7 +1,13 @@
-import { ChevronRight, Eye, Folder, FolderOpen, Table2 } from "lucide-react";
+import { ChevronRight, Eye, ExternalLink, Folder, FolderOpen, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActiveSelection } from "@/components/sidebar/active-selection";
 import type { DatabaseSchema } from "@/shared/types/connection";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 interface SchemaTreeNodeProps {
   schema: DatabaseSchema;
@@ -9,6 +15,7 @@ interface SchemaTreeNodeProps {
   onToggleSchema: (schemaName: string) => void;
   onOpenSchema: (schemaName: string) => void;
   onOpenTable: (schemaName: string, tableName: string) => void;
+  onOpenTableInNewTab: (schemaName: string, tableName: string) => void;
   onOpenView: (schemaName: string, viewName: string) => void;
   /** Selection projected onto this connection's tree, or null when inactive. */
   selection?: ActiveSelection | null;
@@ -33,6 +40,7 @@ export function SchemaTreeNode({
   onToggleSchema,
   onOpenSchema,
   onOpenTable,
+  onOpenTableInNewTab,
   onOpenView,
   selection,
   accentColor,
@@ -98,25 +106,36 @@ export function SchemaTreeNode({
               selection.schemaName === schema.name &&
               selection.tableName === tableName;
             return (
-              <button
-                key={`${schema.name}.${tableName}`}
-                type="button"
-                className={cn(
-                  "relative flex h-7 min-w-0 items-center gap-2 rounded-md pl-2 pr-1 text-left text-[13px] transition-colors",
-                  isSelected
-                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                    : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-                )}
-                onClick={() => onOpenTable(schema.name, tableName)}
-                aria-label={`Table ${tableName}`}
-                aria-current={isSelected ? "true" : undefined}
-              >
-                {isSelected ? <SelectedBar color={accentColor} /> : null}
-                <Table2 className="size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate" title={tableName}>
-                  {tableName}
-                </span>
-              </button>
+              <ContextMenu key={`${schema.name}.${tableName}`}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "relative flex h-7 min-w-0 items-center gap-2 rounded-md pl-2 pr-1 text-left text-[13px] transition-colors",
+                      isSelected
+                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                    )}
+                    onClick={() => onOpenTable(schema.name, tableName)}
+                    aria-label={`Table ${tableName}`}
+                    aria-current={isSelected ? "true" : undefined}
+                  >
+                    {isSelected ? <SelectedBar color={accentColor} /> : null}
+                    <Table2 className="size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate" title={tableName}>
+                      {tableName}
+                    </span>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-48">
+                  <ContextMenuItem
+                    onClick={() => onOpenTableInNewTab(schema.name, tableName)}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    Open in New Tab
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
           {schema.views.map((view) => {

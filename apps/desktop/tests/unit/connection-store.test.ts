@@ -113,4 +113,59 @@ describe("connection-store", () => {
       "field-secret",
     );
   });
+
+  it("redacts secrets from getAllConnections but keeps them in getConnectionById", async () => {
+    encryptionAvailable.value = true;
+    vi.resetModules();
+    const store = await import("@/main/connection-store");
+
+    const uriConn = store.createConnection({
+      label: "Encrypted URI",
+      favourite: false,
+      mode: "uri",
+      uri: "postgresql://user:secret@localhost:5432/database",
+    });
+    const fieldsConn = store.createConnection({
+      label: "Encrypted Fields",
+      favourite: false,
+      mode: "fields",
+      fields: {
+        host: "localhost",
+        port: 5432,
+        database: "postgres",
+        user: "postgres",
+        password: "field-secret",
+      },
+      ssh: {
+        enabled: true,
+        host: "bastion.example.com",
+        port: 22,
+        user: "deploy",
+        authMethod: "password",
+        password: "ssh-secret",
+        passphrase: "key-secret",
+      },
+    });
+
+    const list = store.getAllConnections();
+    const listedUri = list.find((c) => c.id === uriConn.id);
+    const listedFields = list.find((c) => c.id === fieldsConn.id);
+
+    // Host/port/database are kept for display; the password is not.
+    expect(listedUri?.uri).toBe("postgresql://user@localhost:5432/database");
+    expect(listedFields?.fields?.password).toBe("");
+    expect(listedFields?.ssh?.password).toBeUndefined();
+    expect(listedFields?.ssh?.passphrase).toBeUndefined();
+
+    // The single-connection lookup still returns the real secrets.
+    expect(store.getConnectionById(uriConn.id)?.uri).toBe(
+      "postgresql://user:secret@localhost:5432/database",
+    );
+    expect(store.getConnectionById(fieldsConn.id)?.fields?.password).toBe(
+      "field-secret",
+    );
+    expect(store.getConnectionById(fieldsConn.id)?.ssh?.password).toBe(
+      "ssh-secret",
+    );
+  });
 });
