@@ -2,10 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
-const versionFiles = [
-  "apps/desktop/package.json",
-  "apps/landing/package.json",
-];
+const versionFiles = ["apps/desktop/package.json", "apps/landing/package.json"];
 
 const semverPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/;

@@ -28,7 +28,7 @@
   "packageManager": "pnpm@9.0.0",
   "pnpm": {
     "overrides": {
-      "fast-uri": "3.1.2",
+      "fast-uri": "3.1.8",
       "picomatch@>=2.0.0 <2.3.2": "2.3.2",
       "picomatch@>=4.0.0 <4.0.5": "4.0.5"
     },
