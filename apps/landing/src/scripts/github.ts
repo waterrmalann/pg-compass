@@ -162,9 +162,25 @@ function renderContributors(contributors: Contributor[]) {
   container.replaceChildren(...avatars);
 }
 
+// Replaces the "Loading recent commits…" row when the request fails or
+// returns nothing, so a settled failure never reads as still loading.
+function renderCommitsUnavailable() {
+  const list = document.querySelector<HTMLElement>("[data-commits]");
+  if (!list) return;
+
+  const item = document.createElement("li");
+  item.className = "flex h-10 items-center px-4 text-[13px] text-muted-foreground";
+  item.textContent = "Recent commits are unavailable right now.";
+  list.replaceChildren(item);
+}
+
 function renderCommits(commits: Commit[]) {
   const list = document.querySelector<HTMLElement>("[data-commits]");
-  if (!list || commits.length === 0) return;
+  if (!list) return;
+  if (commits.length === 0) {
+    renderCommitsUnavailable();
+    return;
+  }
 
   const rows = commits.slice(0, 6).map((commit) => {
     const item = document.createElement("li");
@@ -209,6 +225,7 @@ async function hydrateRepository() {
   }
   if (contributors.status === "fulfilled") renderContributors(contributors.value);
   if (commits.status === "fulfilled") renderCommits(commits.value);
+  else renderCommitsUnavailable();
 }
 
 export function hydrateGitHub() {
