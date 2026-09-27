@@ -1,0 +1,112 @@
+---
+import { Menu, Moon, Sun, X } from "@lucide/astro";
+import GitHubIcon from "./GitHubIcon.astro";
+import Wordmark from "./Wordmark.astro";
+import { links } from "../lib/site";
+
+const navItems = [
+  { label: "Features", href: "#features" },
+  { label: "Download", href: "#download" },
+  { label: "FAQ", href: "#faq" },
+  { label: "Open source", href: "#open-source" },
+  { label: "Docs", href: links.readme, external: true },
+];
+---
+
+<header
+  class="sticky top-0 z-50 h-16 border-b border-border bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70"
+>
+  <div class="mx-auto flex h-full max-w-6xl items-center gap-6 px-4 md:px-6">
+    <Wordmark />
+
+    <nav aria-label="Main" class="hidden items-center gap-1 md:flex">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            class="rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            {...(item.external ? { target: "_blank", rel: "noopener" } : {})}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="ml-auto flex items-center gap-1">
+      <a
+        class="btn btn-ghost btn-md hidden sm:inline-flex"
+        href={links.repo}
+        target="_blank"
+        rel="noopener"
+        aria-label="PG Compass on GitHub"
+      >
+        <GitHubIcon />
+        <span class="font-mono text-xs tabular-nums" data-github-stars>GitHub</span>
+      </a>
+      <button
+        type="button"
+        class="btn btn-ghost btn-icon"
+        data-theme-toggle
+        aria-label="Toggle light and dark theme"
+      >
+        <Sun class="hidden dark:block" aria-hidden="true" />
+        <Moon class="dark:hidden" aria-hidden="true" />
+      </button>
+      <a class="btn btn-primary btn-sm ml-1 hidden sm:inline-flex" href="#download">Download</a>
+      <button
+        type="button"
+        class="btn btn-ghost btn-icon md:hidden"
+        data-menu-open
+        aria-label="Open menu"
+        aria-haspopup="dialog"
+      >
+        <Menu aria-hidden="true" />
+      </button>
+    </div>
+  </div>
+
+  <!-- §9.20 mobile drawer. <dialog> gives Escape, focus trapping and inert
+       page content for free. -->
+  <dialog
+    data-menu
+    aria-label="Menu"
+    class="fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-[min(288px,85vw)] -translate-x-full border-r border-border bg-sidebar p-0 text-foreground shadow-2xl transition-[translate,display,overlay] transition-discrete duration-200 ease-snappy backdrop:bg-black/40 backdrop:backdrop-blur-[2px] open:translate-x-0 starting:open:-translate-x-full"
+  >
+    <div class="h-full p-2">
+    <div class="flex h-11 items-center justify-between px-2">
+      <Wordmark />
+      <button type="button" class="btn btn-ghost btn-icon" data-menu-close aria-label="Close menu">
+        <X aria-hidden="true" />
+      </button>
+    </div>
+    <nav aria-label="Mobile" class="mt-2 flex flex-col gap-px">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            data-menu-link
+            class="flex h-9 items-center rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            {...(item.external ? { target: "_blank", rel: "noopener" } : {})}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+      <a
+        href={links.repo}
+        target="_blank"
+        rel="noopener"
+        class="flex h-9 items-center gap-2 rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        GitHub
+      </a>
+    </nav>
+    </div>
+  </dialog>
+</header>
+
+<script>
+  import { setupHeader } from "../scripts/header";
+  setupHeader();
+</script>

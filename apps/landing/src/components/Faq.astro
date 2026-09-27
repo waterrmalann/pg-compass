@@ -1,0 +1,67 @@
+---
+import { ArrowUpRight } from "@lucide/astro";
+import { links } from "../lib/site";
+
+const questions = [
+  {
+    question: "Does it replace pgAdmin or DataGrip?",
+    answer:
+      "No, and it isn't trying to. PG Compass covers browsing, reading, light editing and quick queries. Migrations, schema design, stored procedures and backups are out of scope, and they'll stay that way.",
+  },
+  {
+    question: "Can it change my data?",
+    answer:
+      "Only when you ask it to. You can edit a cell, insert rows, and run bulk updates or deletes, which show a preview of the affected rows first. The Query tab only runs SELECT. Turn on read-only mode and the app refuses every write.",
+  },
+  {
+    question: "Where are my connection details stored?",
+    answer:
+      "On your machine. Passwords are encrypted with your operating system's credential store when one is available, and they never leave your computer except to reach your database.",
+  },
+  {
+    question: "Does it collect any data?",
+    answer:
+      "No. There's no account, no analytics and no telemetry. The only network traffic is to the databases you connect to.",
+  },
+  {
+    question: "Which platforms are supported?",
+    answer:
+      "Windows, and Linux through an AppImage or a .deb package. There's no macOS build yet.",
+  },
+  {
+    question: "What does it cost?",
+    answer: "Nothing. PG Compass is MIT licensed, with no paid tier and no features held back for one.",
+    link: { label: "Read the license", href: links.license },
+  },
+];
+---
+
+<section id="faq" class="border-t border-border py-16 md:py-24">
+  <div class="grid gap-10 md:grid-cols-[0.85fr_1.3fr] lg:gap-20">
+    <div class="self-start md:sticky md:top-24">
+      <h2 class="section-title">Before you get started.</h2>
+      <p class="mt-2 text-[15px] leading-7 text-muted-foreground">The questions people ask first.</p>
+    </div>
+    <div class="divide-y divide-border border-y border-border">
+      {
+        questions.map((item) => (
+          <div class="flex flex-col gap-2 py-6">
+            <h3 class="text-base font-medium tracking-[-0.025em]">{item.question}</h3>
+            <p class="max-w-[65ch] text-[15px] leading-[1.75] text-muted-foreground">{item.answer}</p>
+            {item.link && (
+              <a
+                href={item.link.href}
+                target="_blank"
+                rel="noopener"
+                class="mt-1 inline-flex w-fit items-center gap-1 text-sm text-foreground hover:underline hover:underline-offset-4"
+              >
+                {item.link.label}
+                <ArrowUpRight class="size-3.5" aria-hidden="true" />
+              </a>
+            )}
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

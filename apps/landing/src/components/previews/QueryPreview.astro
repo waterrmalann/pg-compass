@@ -1,0 +1,124 @@
+---
+import { Play } from "@lucide/astro";
+
+// Pre-highlighted with the §9.19 palette: keywords in foreground 500,
+// strings green, numbers blue, punctuation muted.
+const lines = [
+  `<span class="tok-kw">SELECT</span> <span class="tok-id">c.name</span><span class="tok-punct">,</span> <span class="tok-id">c.plan</span><span class="tok-punct">,</span> <span class="tok-kw">sum</span><span class="tok-punct">(</span><span class="tok-id">o.total</span><span class="tok-punct">)</span> <span class="tok-kw">AS</span> <span class="tok-id">spent</span>`,
+  `<span class="tok-kw">FROM</span> <span class="tok-id">shop.orders</span> <span class="tok-id">o</span>`,
+  `<span class="tok-kw">JOIN</span> <span class="tok-id">shop.customers</span> <span class="tok-id">c</span> <span class="tok-kw">ON</span> <span class="tok-id">c.id</span> <span class="tok-punct">=</span> <span class="tok-id">o.customer_id</span>`,
+  `<span class="tok-kw">WHERE</span> <span class="tok-id">o.status</span> <span class="tok-punct">&lt;&gt;</span> <span class="tok-str">'refunded'</span>`,
+  `<span class="tok-kw">GROUP BY</span> <span class="tok-id">c.id</span>`,
+  `<span class="tok-kw">ORDER BY</span> <span class="tok-id">spent</span> <span class="tok-kw">DESC</span>`,
+  `<span class="tok-kw">LIMIT</span> <span class="tok-num">4</span><span class="tok-punct">;</span>`,
+];
+
+const results = [
+  { name: "Cleo Reyes", plan: "member", spent: "1185.92" },
+  { name: "Jonas Whitlock", plan: "free", spent: "1173.64" },
+  { name: "Greta Lindqvist", plan: "crew", spent: "1161.36" },
+  { name: "Ada Whitlock", plan: "member", spent: "1137.80" },
+];
+---
+
+<div class="preview" data-query-preview>
+  <div class="preview-header">
+    <span class="font-mono text-xs">Production / shop / orders</span>
+    <span class="ml-auto text-xs font-normal">Query</span>
+  </div>
+
+  <div class="bg-code">
+    <pre class="overflow-x-auto py-3 font-mono text-[12.5px] leading-5 [tab-size:2]"><code>{
+      lines.map((line, index) => (
+        <span class="flex pr-3">
+          <span class="inline-block w-10 shrink-0 pr-3 text-right text-muted-foreground/60 select-none">{index + 1}</span>
+          <span set:html={line} />
+        </span>
+      ))
+    }</code></pre>
+  </div>
+
+  <div class="flex items-center gap-2 border-t border-border px-3 py-2">
+    <span class="hidden text-xs text-muted-foreground sm:inline">Only SELECT statements are allowed.</span>
+    <span class="kbd ml-auto">Ctrl+Enter</span>
+    <button type="button" class="btn btn-primary btn-sm" data-run-query>
+      <Play aria-hidden="true" />
+      Run query
+    </button>
+  </div>
+
+  <div class="min-h-[10.5rem] border-t border-border" aria-live="polite">
+    <p class="px-4 py-3 text-xs text-muted-foreground" data-query-placeholder>
+      Press Run query or Ctrl+Enter to see the results.
+    </p>
+    <div data-query-results hidden>
+      <div class="flex h-10 items-center gap-2 border-b border-border px-4">
+        <span class="text-sm font-medium">Results</span>
+        <span class="text-xs text-muted-foreground">4 rows returned</span>
+      </div>
+      <table class="w-full border-collapse font-mono text-[12.5px]">
+        <thead class="sr-only">
+          <tr><th>name</th><th>plan</th><th>spent</th></tr>
+        </thead>
+        <tbody>
+          {
+            results.map((row) => (
+              <tr class="border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/40">
+                <td class="h-8 px-4">{row.name}</td>
+                <td class="h-8 px-4 text-muted-foreground">{row.plan}</td>
+                <td class="h-8 px-4 text-right tabular-nums">{row.spent}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setupQueryPreview() {
+    const root = document.querySelector<HTMLElement>("[data-query-preview]");
+    if (!root) return;
+    const button = root.querySelector<HTMLButtonElement>("[data-run-query]")!;
+    const placeholder = root.querySelector<HTMLElement>("[data-query-placeholder]")!;
+    const results = root.querySelector<HTMLElement>("[data-query-results]")!;
+
+    function run() {
+      results.hidden = true;
+      placeholder.hidden = false;
+      placeholder.textContent = "Running…";
+      button.disabled = true;
+      window.setTimeout(() => {
+        placeholder.hidden = true;
+        results.hidden = false;
+        button.disabled = false;
+      }, 280);
+    }
+
+    button.addEventListener("click", run);
+
+    // Run once when the preview scrolls into view, so the result area
+    // doesn't sit empty. Reduced-motion visitors press Run themselves.
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reducedMotion) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          observer.disconnect();
+          window.setTimeout(run, 600);
+        },
+        { threshold: 0.6 },
+      );
+      observer.observe(root);
+    }
+    root.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        run();
+      }
+    });
+  }
+
+  setupQueryPreview();
+</script>

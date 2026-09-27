@@ -1,0 +1,104 @@
+---
+import { ArrowUpRight, Tag } from "@lucide/astro";
+import { links } from "../lib/site";
+
+const platforms = [
+  {
+    key: "windows",
+    title: "Windows installer",
+    description: "Windows 10 and 11, 64-bit. Installs per user and keeps itself in the Start menu.",
+  },
+  {
+    key: "linux-appimage",
+    title: "Linux AppImage",
+    description: "Runs on most distributions. Make it executable and open it, no install step.",
+  },
+  {
+    key: "linux-deb",
+    title: "Linux .deb package",
+    description: "For Debian, Ubuntu and friends. Adds PG Compass to your application menu.",
+  },
+];
+---
+
+<section id="download" class="border-t border-border py-16 md:py-24">
+  <p class="eyebrow">Download</p>
+  <h2 class="section-title">Get the latest release.</h2>
+  <p class="mt-2 max-w-[34rem] text-[15px] leading-7 text-muted-foreground">
+    Builds are published to GitHub releases for Windows and Linux, straight from CI. There's no
+    macOS build yet.
+  </p>
+
+  <div class="mt-10 grid gap-10 md:grid-cols-[1.3fr_0.85fr] lg:gap-16">
+    <ul class="border-b border-border">
+      {
+        platforms.map((platform) => (
+          <li>
+            <a
+              href={links.latestRelease}
+              target="_blank"
+              rel="noopener"
+              data-platform-asset={platform.key}
+              class="group flex items-start gap-6 border-t border-border px-2 py-5 transition-colors hover:bg-muted/40"
+            >
+              <span class="flex min-w-0 flex-1 flex-col gap-1">
+                <span class="text-sm font-medium text-foreground">{platform.title}</span>
+                <span class="text-sm text-muted-foreground">{platform.description}</span>
+              </span>
+              <span class="mt-0.5 font-mono text-xs text-subtle-foreground tabular-nums" data-asset-size />
+              <ArrowUpRight
+                class="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+                aria-hidden="true"
+              />
+            </a>
+          </li>
+        ))
+      }
+      <li>
+        <a
+          href={links.readme}
+          target="_blank"
+          rel="noopener"
+          class="group flex items-start gap-6 border-t border-border px-2 py-5 transition-colors hover:bg-muted/40"
+        >
+          <span class="flex min-w-0 flex-1 flex-col gap-1">
+            <span class="text-sm font-medium text-foreground">Build from source</span>
+            <span class="text-sm text-muted-foreground">Node.js 20 and pnpm. Clone, install, and run pnpm dev.</span>
+          </span>
+          <ArrowUpRight
+            class="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+            aria-hidden="true"
+          />
+        </a>
+      </li>
+    </ul>
+
+    <div class="panel self-start">
+      <div class="flex min-h-11 items-center gap-2 border-b border-border px-4">
+        <Tag class="size-3.5 text-muted-foreground" aria-hidden="true" />
+        <h3 class="text-sm font-medium">Latest release</h3>
+        <span class="ml-auto text-xs text-muted-foreground">From GitHub</span>
+      </div>
+      <dl class="divide-y divide-border/70 text-[13px]">
+        <div class="flex h-10 items-center justify-between gap-4 px-4">
+          <dt class="text-muted-foreground">Version</dt>
+          <dd class="truncate font-mono text-[12.5px]" data-release-name>Checking…</dd>
+        </div>
+        <div class="flex h-10 items-center justify-between gap-4 px-4">
+          <dt class="text-muted-foreground">Published</dt>
+          <dd class="tabular-nums" data-release-date>—</dd>
+        </div>
+        <div class="flex h-10 items-center justify-between gap-4 px-4">
+          <dt class="text-muted-foreground">Files</dt>
+          <dd class="tabular-nums" data-release-assets>—</dd>
+        </div>
+      </dl>
+      <div class="border-t border-border px-4 py-2.5">
+        <a class="text-link text-xs" href={links.latestRelease} target="_blank" rel="noopener" data-release-link>
+          Read the release notes
+          <ArrowUpRight class="size-3" aria-hidden="true" />
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

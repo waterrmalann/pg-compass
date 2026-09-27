@@ -1,0 +1,132 @@
+---
+import { LayoutList, Rows3, Search } from "@lucide/astro";
+import { demoOrders } from "../../lib/demo";
+
+const columns = [
+  { name: "id", type: "int4", numeric: true },
+  { name: "customer", type: "text" },
+  { name: "status", type: "order_status" },
+  { name: "total", type: "numeric", numeric: true },
+  { name: "placed_at", type: "timestamptz" },
+];
+
+const shippingByOrder: Record<number, { carrier: string; method: string; tracking: string }> = {
+  1: { carrier: "UPS", method: "standard", tracking: "TW007919" },
+  2: { carrier: "PostNL", method: "standard", tracking: "TW015838" },
+};
+---
+
+<div class="preview" data-data-preview>
+  <div class="flex items-center gap-2 border-b border-border px-3 py-2.5">
+    <div
+      class="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-input bg-background px-2.5 font-mono text-xs text-muted-foreground shadow-xs/5"
+      aria-hidden="true"
+    >
+      <Search class="size-3.5 shrink-0" />
+      <span class="truncate"><span class="tok-kw">WHERE</span> clause, e.g. status = <span class="tok-str">'shipped'</span></span>
+    </div>
+    <div class="segmented shrink-0" role="group" aria-label="View">
+      <button type="button" class="segment" aria-pressed="true" data-view="table" aria-label="Table view">
+        <Rows3 aria-hidden="true" />
+        <span class="hidden sm:inline">Table</span>
+      </button>
+      <button type="button" class="segment" aria-pressed="false" data-view="cards" aria-label="Card view">
+        <LayoutList aria-hidden="true" />
+        <span class="hidden sm:inline">Cards</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="flex h-11 items-center gap-2 border-b border-border px-4">
+    <span class="text-sm font-medium">Rows</span>
+    <span class="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-subtle-foreground">240</span>
+    <span class="ml-auto font-mono text-xs text-muted-foreground">shop.orders</span>
+  </div>
+
+  <div class="h-[18.5rem] overflow-hidden">
+    <div data-view-panel="table" class="h-full overflow-x-auto">
+      <table class="w-full border-collapse text-[13px]">
+        <thead>
+          <tr>
+            {
+              columns.map((column) => (
+                <th class:list={["h-10 border-b border-border px-4 font-normal", column.numeric ? "text-right" : "text-left"]}>
+                  <span class="block font-mono text-[12.5px] font-medium text-foreground">{column.name}</span>
+                  <span class="block font-mono text-[11px] text-subtle-foreground">{column.type}</span>
+                </th>
+              ))
+            }
+          </tr>
+        </thead>
+        <tbody>
+          {
+            demoOrders.map((order) => (
+              <tr class="border-b border-border/70 font-mono text-[12.5px] transition-colors last:border-b-0 hover:bg-muted/40">
+                <td class="h-9 px-4 text-right tabular-nums">{order.id}</td>
+                <td class="h-9 px-4 whitespace-nowrap">{order.customer}</td>
+                <td class="h-9 px-4">{order.status}</td>
+                <td class="h-9 px-4 text-right tabular-nums">{order.total}</td>
+                <td class="h-9 px-4 whitespace-nowrap text-muted-foreground">{order.placedAt}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div data-view-panel="cards" class="flex h-full flex-col gap-2 overflow-hidden p-3" hidden>
+      {
+        demoOrders.slice(0, 2).map((order, index) => {
+          const shipping = shippingByOrder[order.id]!;
+          return (
+            <div class="rounded-lg border border-border bg-background shadow-xs/5">
+              <div class="flex h-8 items-center border-b border-border/70 px-3 font-mono text-[11px] text-subtle-foreground">
+                Document {index + 1}
+              </div>
+              <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-3 py-2 font-mono text-[12px]">
+                <dt class="text-muted-foreground">customer</dt>
+                <dd>{order.customer}</dd>
+                <dt class="text-muted-foreground">status</dt>
+                <dd>{order.status}</dd>
+                <dt class="text-muted-foreground">total</dt>
+                <dd class="tabular-nums">{order.total}</dd>
+                <dt class="text-muted-foreground">shipping</dt>
+                <dd>
+                  <span class="tok-punct">{"{"}</span>
+                  <div class="ml-1 border-l border-border pl-3">
+                    <div>carrier: <span class="tok-str">"{shipping.carrier}"</span></div>
+                    <div>method: <span class="tok-str">"{shipping.method}"</span></div>
+                    <div>tracking: <span class="tok-str">"{shipping.tracking}"</span></div>
+                  </div>
+                  <span class="tok-punct">{"}"}</span>
+                </dd>
+              </dl>
+            </div>
+          );
+        })
+      }
+    </div>
+  </div>
+  <p class="preview-footer">Switch to cards to read JSONB as a document instead of a squashed string.</p>
+</div>
+
+<script>
+  function setupDataPreview() {
+    const root = document.querySelector<HTMLElement>("[data-data-preview]");
+    if (!root) return;
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>("[data-view]")];
+    const panels = [...root.querySelectorAll<HTMLElement>("[data-view-panel]")];
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const view = button.dataset.view;
+        buttons.forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+        panels.forEach((panel) => {
+          panel.hidden = panel.dataset.viewPanel !== view;
+        });
+      });
+    });
+  }
+
+  setupDataPreview();
+</script>

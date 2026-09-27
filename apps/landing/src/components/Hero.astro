@@ -1,0 +1,48 @@
+---
+import { ArrowRight, ArrowUpRight } from "@lucide/astro";
+import GitHubIcon from "./GitHubIcon.astro";
+import { appVersion, links } from "../lib/site";
+---
+
+<section class="mx-auto max-w-6xl px-6 pt-14 pb-16 md:pt-20 md:pb-20 lg:pt-24">
+  <a
+    href={links.releases}
+    target="_blank"
+    rel="noopener"
+    class="chip mb-6 h-6 gap-1.5 transition-colors hover:text-foreground"
+  >
+    <span class="size-1.5 rounded-full bg-brand" aria-hidden="true"></span>
+    <span class="font-mono">v{appVersion}</span>
+    <span class="text-subtle-foreground/70" aria-hidden="true">·</span>
+    Release notes
+    <ArrowUpRight class="size-3" aria-hidden="true" />
+  </a>
+
+  <h1 class="max-w-[18ch] text-4xl leading-[1.06] font-medium tracking-[-0.025em] md:text-5xl">
+    Look inside Postgres. Skip the IDE.
+  </h1>
+  <p class="mt-5 max-w-[34rem] text-lg leading-[1.7] text-muted-foreground">
+    PG Compass is a small desktop app for the thing you do most with a database: open it and see
+    what's there. Browse schemas, read rows, check an index, run a quick query, and get back to work.
+  </p>
+
+  <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+    <a
+      class="btn btn-brand btn-xl"
+      href={links.latestRelease}
+      target="_blank"
+      rel="noopener"
+      data-download-primary
+    >
+      <span data-download-label>Download the latest release</span>
+      <ArrowRight aria-hidden="true" />
+    </a>
+    <a class="btn btn-outline btn-xl" href={links.repo} target="_blank" rel="noopener">
+      <GitHubIcon />
+      View on GitHub
+    </a>
+  </div>
+  <p class="mt-3 text-xs text-muted-foreground">
+    Free and MIT licensed. No account, no telemetry. For Windows and Linux.
+  </p>
+</section>

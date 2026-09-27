@@ -6,5 +6,6 @@ export default defineConfig({
     plugins: [tailwindcss()],
   },
   site: 'https://waterrmalann.github.io',
+  devToolbar: { enabled: false },
   base: '/pg-compass',
 });

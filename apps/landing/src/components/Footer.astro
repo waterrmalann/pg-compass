@@ -1,0 +1,79 @@
+---
+import GitHubIcon from "./GitHubIcon.astro";
+import Wordmark from "./Wordmark.astro";
+import { appVersion, links } from "../lib/site";
+
+const columns = [
+  {
+    heading: "Product",
+    items: [
+      { label: "Features", href: "#features" },
+      { label: "Download", href: "#download" },
+      { label: "FAQ", href: "#faq" },
+      { label: "Release notes", href: links.releases, external: true },
+    ],
+  },
+  {
+    heading: "Resources",
+    items: [
+      { label: "README", href: links.readme, external: true },
+      { label: "Discussions", href: links.discussions, external: true },
+      { label: "Report a bug", href: links.newIssue, external: true },
+    ],
+  },
+  {
+    heading: "Project",
+    items: [
+      { label: "GitHub", href: links.repo, external: true },
+      { label: "Pull requests", href: links.pulls, external: true },
+      { label: "Contributors", href: links.contributors, external: true },
+      { label: "License", href: links.license, external: true },
+    ],
+  },
+];
+
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-border/30 bg-sidebar/70 py-12 sm:py-16">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+      <div>
+        <Wordmark />
+        <p class="mt-3 max-w-[32ch] text-sm leading-6 text-muted-foreground">
+          A fast, focused desktop viewer for PostgreSQL.
+        </p>
+      </div>
+      {
+        columns.map((column) => (
+          <div>
+            <h2 class="text-sm font-medium text-foreground">{column.heading}</h2>
+            <ul class="mt-3 flex flex-col gap-3">
+              {column.items.map((item) => (
+                <li>
+                  <a
+                    href={item.href}
+                    class="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    {...(item.external ? { target: "_blank", rel: "noopener" } : {})}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="mt-12 flex flex-col gap-3 border-t border-border/60 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      <span>© {year} PG Compass. MIT licensed.</span>
+      <span class="flex items-center gap-3">
+        <span class="font-mono">v{appVersion}</span>
+        <a href={links.repo} target="_blank" rel="noopener" aria-label="GitHub" class="transition-colors hover:text-foreground">
+          <GitHubIcon class="size-4" />
+        </a>
+      </span>
+    </div>
+  </div>
+</footer>

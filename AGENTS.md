@@ -2,6 +2,7 @@
 
 This is a **Turborepo** powered monorepo for **PG Compass**, a **MongoDB Compass** inspired database viewer for **PostgreSQL** built with **React and Electron**
 - `apps/desktop`: The desktop application built with Electron.
+- `apps/landing`: The marketing landing page built with Astro.
 
 > [!IMPORTANT]
 > Before performing any task, implementation or code change, you **MUST** internalize: `docs/PROJECT_CONTEXT.md` to understand the project context (needs). Any frontend UI work should also be aligned with `docs/DESIGN.md` (the Quiet Utility design system). **No implementation may violate these documents.**
