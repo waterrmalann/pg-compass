@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { fieldClassName } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -24,14 +32,9 @@ import {
 } from "@/components/ui/table";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { useSettings } from "@/hooks/use-settings";
+import { cn } from "@/lib/utils";
 import type { PgTriggerInfo } from "@/shared/types/roles";
-import {
-  ErrorState,
-  Field,
-  LoadingState,
-  ReadOnlyNotice,
-  unwrap,
-} from "./shared";
+import { ErrorState, LoadingState, ReadOnlyNotice, unwrap } from "./shared";
 
 interface TriggersPaneProps {
   connectionId: string;
@@ -167,9 +170,11 @@ export function TriggersPane({
 
   if (databaseNames.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No connectable databases on this server.
-      </p>
+      <EmptyState
+        icon={<Zap />}
+        title="No databases"
+        description="No databases on this server accept connections."
+      />
     );
   }
 
@@ -180,103 +185,118 @@ export function TriggersPane({
     content = <ErrorState message={error} onRetry={reload} />;
   } else if (triggers.length === 0) {
     content = (
-      <p className="text-sm text-muted-foreground">
-        No triggers in {database}.
-      </p>
+      <EmptyState
+        icon={<Zap />}
+        title="No triggers"
+        description={`There are no triggers in ${database}.`}
+      />
     );
   } else {
     content = (
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="overflow-hidden rounded-lg border border-border">
-          <Table>
-            <TableHeader className="bg-card">
-              <TableRow>
-                <TableHead>Table</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Timing</TableHead>
-                <TableHead>Events</TableHead>
-                <TableHead>Function</TableHead>
-                <TableHead>Enabled</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {triggers.map((trigger) => (
-                <TableRow key={triggerKey(trigger)}>
-                  <TableCell className="font-mono text-xs">
-                    {trigger.schemaName}.{trigger.tableName}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {trigger.triggerName}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {trigger.timing}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {trigger.events}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {trigger.functionSchema}.{trigger.functionName}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={trigger.enabled}
-                        disabled={controlsDisabled}
-                        onCheckedChange={(checked) => {
-                          handleToggleTrigger(trigger, checked).catch(
-                            () => undefined,
-                          );
-                        }}
-                        aria-label={`Toggle trigger ${trigger.triggerName}`}
-                      />
-                      {(trigger.enabledMode === "replica" ||
-                        trigger.enabledMode === "always") && (
-                        <Badge variant="outline">{trigger.enabledMode}</Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </ScrollArea>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Table</TableHead>
+            <TableHead>Trigger</TableHead>
+            <TableHead>Timing</TableHead>
+            <TableHead>Events</TableHead>
+            <TableHead>Function</TableHead>
+            <TableHead>Enabled</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {triggers.map((trigger) => (
+            <TableRow key={triggerKey(trigger)}>
+              <TableCell className="font-mono text-[12.5px]">
+                <span className="text-muted-foreground">
+                  {trigger.schemaName}.
+                </span>
+                {trigger.tableName}
+              </TableCell>
+              <TableCell className="font-mono text-[12.5px] font-medium">
+                {trigger.triggerName}
+              </TableCell>
+              <TableCell>
+                <Badge className="font-mono">{trigger.timing}</Badge>
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {trigger.events}
+              </TableCell>
+              <TableCell className="font-mono text-[12.5px]">
+                <span className="text-muted-foreground">
+                  {trigger.functionSchema}.
+                </span>
+                {trigger.functionName}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={trigger.enabled}
+                    disabled={controlsDisabled}
+                    onCheckedChange={(checked) => {
+                      handleToggleTrigger(trigger, checked).catch(
+                        () => undefined,
+                      );
+                    }}
+                    aria-label={`Toggle trigger ${trigger.triggerName}`}
+                  />
+                  {(trigger.enabledMode === "replica" ||
+                    trigger.enabledMode === "always") && (
+                    <Badge>{trigger.enabledMode}</Badge>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     );
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="Database" htmlFor="triggers-db">
-          <select
-            id="triggers-db"
-            value={database}
-            onChange={(e) => setDatabase(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-          >
-            {databaseNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="flex flex-1 flex-col items-end gap-1">
-          <Label className="gap-2 text-sm">
-            <Switch
-              checked={allEnabled}
-              disabled={controlsDisabled || loading || triggers.length === 0}
-              onCheckedChange={(checked) => setToggleAllTarget(checked)}
-            />
-            All triggers enabled
-          </Label>
-          {readOnlyMode && <ReadOnlyNotice action="toggle triggers" />}
-        </div>
-      </div>
-      <Separator />
-      {content}
+      {readOnlyMode && <ReadOnlyNotice action="toggle triggers" />}
+      <Panel className="min-h-0 flex-1">
+        <PanelHeader className="flex-wrap">
+          <Zap />
+          <PanelTitle>Triggers</PanelTitle>
+          <PanelCount>{triggers.length}</PanelCount>
+          <div className="ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="triggers-db"
+                className="text-xs font-normal text-muted-foreground"
+              >
+                Database
+              </Label>
+              <select
+                id="triggers-db"
+                value={database}
+                onChange={(e) => setDatabase(e.target.value)}
+                className={cn(
+                  fieldClassName,
+                  "h-7 w-auto px-1.5 font-mono text-xs",
+                )}
+              >
+                {databaseNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Label className="gap-2 text-xs font-normal text-muted-foreground">
+              <Switch
+                checked={allEnabled}
+                disabled={controlsDisabled || loading || triggers.length === 0}
+                onCheckedChange={(checked) => setToggleAllTarget(checked)}
+              />
+              All triggers enabled
+            </Label>
+          </div>
+        </PanelHeader>
+        <ScrollArea className="min-h-0 flex-1">{content}</ScrollArea>
+      </Panel>
 
       <Dialog
         open={toggleAllTarget !== null}

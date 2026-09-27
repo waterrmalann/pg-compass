@@ -32,6 +32,9 @@ vi.mock("@/hooks/use-workspace", () => ({
     closeAllTabs,
   }),
 }));
+vi.mock("@/hooks/use-connections", () => ({
+  useConnections: () => ({ connections: [] }),
+}));
 vi.mock("@/hooks/use-density", () => ({ useDensity: () => "compact" }));
 vi.mock("@/hooks/use-workspace-shortcuts", () => ({
   useWorkspaceShortcuts: () => undefined,

@@ -58,7 +58,7 @@ export function PasswordInput({
         <Input
           id={id}
           type={generated ? "text" : "password"}
-          className={generated ? "font-mono text-sm" : undefined}
+          className={generated ? "font-mono text-xs" : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoComplete="new-password"
@@ -76,7 +76,7 @@ export function PasswordInput({
                   handleCopy().catch(() => undefined);
                 }}
               >
-                <Copy className="size-4" />
+                <Copy />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Copy password</TooltipContent>
@@ -93,8 +93,7 @@ export function PasswordInput({
       </div>
       {generated && (
         <p className="text-xs text-muted-foreground">
-          Generated password shown above — copy it now, it won&apos;t be shown
-          again.
+          Copy the generated password now. It won&apos;t be shown again.
         </p>
       )}
     </>

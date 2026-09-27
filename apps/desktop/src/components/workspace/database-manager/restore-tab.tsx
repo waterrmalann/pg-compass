@@ -1,9 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { Ban, FolderOpen, Play } from "lucide-react";
+import {
+  ArchiveRestore,
+  Ban,
+  FolderOpen,
+  Play,
+  TriangleAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, fieldClassName } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Panel,
+  PanelFooter,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { cn } from "@/lib/utils";
 import { useConnections } from "@/hooks/use-connections";
 import { useSettings } from "@/hooks/use-settings";
 import { looksLikeProduction } from "@/shared/production-guard";
@@ -227,178 +241,178 @@ export function RestoreTab({
 
   return (
     <>
-      <div className="flex flex-col gap-3">
-        <EndpointFields
-          label="Target"
-          idPrefix="restore-target"
-          connectionId={targetConnectionId}
-          onConnectionChange={setTargetConnectionId}
-          database={targetDatabase}
-          onDatabaseChange={setTargetDatabase}
-          databases={targetDatabases}
-          loadingDatabases={loadingTargetDbs}
-          connections={connections}
-          disabled={running}
-        />
-
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            Backup source
+      <Panel className="max-w-3xl">
+        <PanelHeader>
+          <ArchiveRestore />
+          <PanelTitle>Restore a backup</PanelTitle>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Replaces the target database with pg_restore
           </span>
-          <div className="flex items-center gap-0.5 self-start rounded-md border border-border p-0.5">
-            <Button
-              type="button"
-              variant={sourceMode === "list" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 px-3 text-xs"
-              aria-pressed={sourceMode === "list"}
-              onClick={() => setSourceMode("list")}
+        </PanelHeader>
+        <div className="flex flex-col divide-y divide-border/70">
+          <div className="p-4">
+            <EndpointFields
+              label="Target"
+              idPrefix="restore-target"
+              connectionId={targetConnectionId}
+              onConnectionChange={setTargetConnectionId}
+              database={targetDatabase}
+              onDatabaseChange={setTargetDatabase}
+              databases={targetDatabases}
+              loadingDatabases={loadingTargetDbs}
+              connections={connections}
               disabled={running}
-            >
-              From backups
-            </Button>
-            <Button
-              type="button"
-              variant={sourceMode === "file" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 px-3 text-xs"
-              aria-pressed={sourceMode === "file"}
-              onClick={() => setSourceMode("file")}
-              disabled={running}
-            >
-              Browse for file
-            </Button>
+            />
           </div>
 
-          {sourceMode === "list" ? (
-            <select
-              aria-label="Backup to restore"
-              value={selectedBackupPath}
-              onChange={(e) => setSelectedBackupPath(e.target.value)}
-              disabled={running}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-            >
-              <option value="">{emptyBackupOption}</option>
-              {selectedBackupPath && !selectedBackupListed && (
-                <option value={selectedBackupPath}>
-                  {fileNameFromPath(selectedBackupPath)}
-                  {loadingBackups ? "" : " (not in backup list)"}
-                </option>
-              )}
-              {backups.map((backup) => (
-                <option key={backup.path} value={backup.path}>
-                  {backup.fileName} ({formatBytes(backup.sizeBytes)},{" "}
-                  {formatRelativeTime(backup.mtimeMs)})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Input
-                aria-label="Backup file"
-                value={filePath}
-                readOnly
-                placeholder="No file selected"
-                className="h-9 flex-1 text-xs"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => {
-                  handleBrowse().catch(() => undefined);
-                }}
+          <div className="flex flex-col gap-2 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[13px] leading-none font-medium">
+                Backup source
+              </span>
+              <SegmentedControl
+                ariaLabel="Backup source"
+                value={sourceMode}
+                onValueChange={setSourceMode}
                 disabled={running}
+                options={[
+                  { value: "list", label: "From backups" },
+                  { value: "file", label: "Browse for file" },
+                ]}
+              />
+            </div>
+
+            {sourceMode === "list" ? (
+              <select
+                aria-label="Backup to restore"
+                value={selectedBackupPath}
+                onChange={(e) => setSelectedBackupPath(e.target.value)}
+                disabled={running}
+                className={cn(fieldClassName, "h-8 px-2 text-[13px]")}
               >
-                <FolderOpen className="size-3.5" />
-                Browse…
-              </Button>
+                <option value="">{emptyBackupOption}</option>
+                {selectedBackupPath && !selectedBackupListed && (
+                  <option value={selectedBackupPath}>
+                    {fileNameFromPath(selectedBackupPath)}
+                    {loadingBackups ? "" : " (not in backup list)"}
+                  </option>
+                )}
+                {backups.map((backup) => (
+                  <option key={backup.path} value={backup.path}>
+                    {backup.fileName} ({formatBytes(backup.sizeBytes)},{" "}
+                    {formatRelativeTime(backup.mtimeMs)})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-label="Backup file"
+                  value={filePath}
+                  readOnly
+                  placeholder="No file selected"
+                  className="flex-1 font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    handleBrowse().catch(() => undefined);
+                  }}
+                  disabled={running}
+                >
+                  <FolderOpen />
+                  Browse…
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 p-4">
+            <input
+              type="checkbox"
+              aria-label="Back up target before restoring"
+              className="mt-px"
+              checked={backupTarget}
+              disabled={running}
+              onChange={(e) => setBackupTarget(e.target.checked)}
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-medium">
+                Back up target before restoring
+              </span>
+              <span className="text-xs leading-5 text-muted-foreground">
+                Dumps the target&apos;s current state to a local file first, in
+                case the restore isn&apos;t what you wanted.
+                {isTargetProd && " Selected by default for production targets."}
+              </span>
+            </span>
+          </label>
+
+          {targetDatabase && (
+            <div className="flex flex-col gap-2 p-4">
+              <div className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2.5 text-xs leading-5 text-destructive-foreground">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                <Label
+                  htmlFor="db-restore-confirm"
+                  className="block text-xs leading-5 font-normal text-destructive-foreground"
+                >
+                  Type{" "}
+                  <span className="font-mono font-medium">
+                    {targetDatabase}
+                  </span>{" "}
+                  to confirm you want to permanently replace it
+                  {targetLabel ? ` on "${targetLabel}"` : ""}.
+                </Label>
+              </div>
+              <Input
+                id="db-restore-confirm"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                disabled={running}
+                placeholder={targetDatabase}
+                className="font-mono text-xs"
+              />
+            </div>
+          )}
+
+          {(runLog.log.length > 0 || running) && (
+            <div className="p-4">
+              <RunLog
+                log={runLog.log}
+                running={running}
+                endRef={runLog.endRef}
+              />
             </div>
           )}
         </div>
 
-        <label className="flex items-start gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
-          <input
-            type="checkbox"
-            aria-label="Back up target before restoring"
-            className="mt-0.5 size-3.5"
-            checked={backupTarget}
-            disabled={running}
-            onChange={(e) => setBackupTarget(e.target.checked)}
-          />
-          <span>
-            <span className="font-medium">Back up target before restoring</span>
-            <span className="block text-muted-foreground">
-              Dumps the target&apos;s current state to a local file first, in
-              case the restore isn&apos;t what you wanted.
-              {isTargetProd && " Selected by default for production targets."}
-            </span>
-          </span>
-        </label>
-
-        {targetDatabase && (
-          <div className="flex flex-col gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 p-2.5">
-            <Label
-              htmlFor="db-restore-confirm"
-              className="text-xs text-destructive"
-            >
-              Type <span className="font-mono">{targetDatabase}</span> to
-              confirm you want to permanently replace it
-              {targetLabel ? ` on "${targetLabel}"` : ""}.
-            </Label>
-            <Input
-              id="db-restore-confirm"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              disabled={running}
-              placeholder={targetDatabase}
-              className="h-8 text-xs"
-            />
-          </div>
-        )}
-
-        {(runLog.log.length > 0 || running) && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              Log
-            </span>
-            <RunLog log={runLog.log} running={running} endRef={runLog.endRef} />
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-2">
+        <PanelFooter className="justify-end">
           {readOnlyMode && (
-            <p className="text-xs text-muted-foreground">
+            <p className="mr-auto">
               Read-only mode is on. Turn it off in Settings to restore.
             </p>
           )}
           {running ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={handleCancel}
-            >
-              <Ban className="size-3.5" />
+            <Button variant="outline" size="sm" onClick={handleCancel}>
+              <Ban />
               Cancel run
             </Button>
           ) : (
             <Button
               size="sm"
-              className="gap-1.5"
               variant="destructive"
               disabled={!canRun}
               onClick={() => {
                 handleRun().catch(() => undefined);
               }}
             >
-              <Play className="size-3.5" />
+              <Play />
               Run restore
             </Button>
           )}
-        </div>
-      </div>
+        </PanelFooter>
+      </Panel>
 
       <ProdConfirmDialog
         open={prodConfirmOpen}

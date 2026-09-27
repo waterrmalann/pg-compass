@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  CircleAlert,
+  Database,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  Table2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import type { EffectivePermissions } from "@/shared/types/roles";
@@ -52,63 +67,69 @@ export function EffectivePermissionsTab({
 
   if (!isAdmin) {
     return (
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        Resolving effective permissions for another principal requires a
-        superuser connection.
-      </p>
+      <EmptyState
+        icon={<ShieldCheck />}
+        title="Superuser required"
+        description="Resolving effective permissions for another role needs a superuser connection."
+      />
     );
   }
 
   if (error) {
     return (
-      <div className="flex max-w-2xl flex-col gap-2">
-        <p className="text-sm text-destructive">{error}</p>
+      <EmptyState
+        icon={<CircleAlert />}
+        title="Couldn't resolve permissions"
+        description={error}
+      >
         <Button
           variant="outline"
           size="sm"
-          className="self-start"
           onClick={() => {
             void load();
           }}
         >
+          <RefreshCw />
           Retry
         </Button>
-      </div>
+      </EmptyState>
     );
   }
   if (loading || !data) return <LoadingState label="Resolving permissions…" />;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4 text-sm">
-      <p className="text-sm text-muted-foreground">
+    <div className="flex flex-col gap-4">
+      <p className="text-xs leading-5 text-muted-foreground">
         Resolved permissions for{" "}
-        <span className="font-medium text-foreground">{roleName}</span>,
-        including privileges inherited through role membership.
+        <span className="font-mono text-foreground">{roleName}</span>, including
+        privileges inherited through role membership.
       </p>
-      <div className="rounded-lg border border-border p-4">
-        <SectionHeading>Databases</SectionHeading>
+      <Panel>
+        <PanelHeader>
+          <Database />
+          <PanelTitle>Databases</PanelTitle>
+          <PanelCount>{data.databases.length}</PanelCount>
+        </PanelHeader>
         {data.databases.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            No accessible databases.
-          </p>
+          <EmptyText>No accessible databases.</EmptyText>
         ) : (
-          <ul className="flex flex-col divide-y divide-border">
+          <ul className="flex flex-col divide-y divide-border/70">
             {data.databases.map((db) => (
               <li
                 key={db.name}
-                className="flex items-center justify-between py-1.5"
+                className="flex h-10 items-center justify-between gap-2 px-4"
               >
-                <span className="font-mono text-xs">{db.name}</span>
-                <Badge variant={db.level === "none" ? "outline" : "secondary"}>
+                <span className="font-mono text-[12.5px]">{db.name}</span>
+                <Badge variant={db.level === "none" ? "outline" : "default"}>
                   {formatLevel(db.level)}
                 </Badge>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </Panel>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <PermissionList
           title="Readable tables"
           items={data.readableTables.map(
@@ -125,29 +146,33 @@ export function EffectivePermissionsTab({
         />
       </div>
 
-      <div className="rounded-lg border border-border p-4">
-        <SectionHeading>Inherited roles</SectionHeading>
+      <Panel>
+        <PanelHeader>
+          <Shield />
+          <PanelTitle>Inherited roles</PanelTitle>
+          <PanelCount>{data.inheritedRoles.length}</PanelCount>
+        </PanelHeader>
         {data.inheritedRoles.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No inherited roles.</p>
+          <EmptyText>No inherited roles.</EmptyText>
         ) : (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5 p-4">
             {data.inheritedRoles.map((name) => (
-              <Badge key={name} variant="outline" className="font-mono">
+              <Badge key={name} className="font-mono">
                 {name}
               </Badge>
             ))}
           </div>
         )}
-      </div>
+      </Panel>
     </div>
   );
 }
 
-function SectionHeading({ children }: Readonly<{ children: string }>) {
+function EmptyText({ children }: Readonly<{ children: string }>) {
   return (
-    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <p className="px-4 py-6 text-center text-xs text-muted-foreground">
       {children}
-    </h3>
+    </p>
   );
 }
 
@@ -157,21 +182,34 @@ function PermissionList({
   emptyText,
 }: Readonly<{ title: string; items: string[]; emptyText: string }>) {
   return (
-    <div className="rounded-lg border border-border p-4">
-      <SectionHeading>{title}</SectionHeading>
+    <Panel>
+      <PanelHeader>
+        <Table2 />
+        <PanelTitle>{title}</PanelTitle>
+        <PanelCount>{items.length}</PanelCount>
+      </PanelHeader>
       {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{emptyText}</p>
+        <EmptyText>{emptyText}</EmptyText>
       ) : (
         <ScrollArea className="h-48" orientation="both">
-          <ul className="flex flex-col gap-0.5">
-            {items.map((item) => (
-              <li key={item} className="whitespace-nowrap font-mono text-xs">
-                {item}
-              </li>
-            ))}
+          <ul className="flex flex-col py-1.5">
+            {items.map((item) => {
+              const dot = item.indexOf(".");
+              return (
+                <li
+                  key={item}
+                  className="px-4 py-0.5 font-mono text-xs leading-5 whitespace-nowrap"
+                >
+                  <span className="text-muted-foreground">
+                    {item.slice(0, dot + 1)}
+                  </span>
+                  {item.slice(dot + 1)}
+                </li>
+              );
+            })}
           </ul>
         </ScrollArea>
       )}
-    </div>
+    </Panel>
   );
 }

@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import { Users } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import { useSettings } from "@/hooks/use-settings";
 import type { RolesSnapshot } from "@/shared/types/roles";
 import { RoleDetail } from "./role-detail";
@@ -70,12 +73,13 @@ export function RolesPane({
           onAfterMutation={onAfterMutation}
         />
       ) : (
-        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 p-6">
-          <p className="max-w-sm text-center text-sm text-muted-foreground">
-            Select a role to view its attributes, memberships, and database
-            access.
-          </p>
-        </div>
+        <Panel className="flex-1">
+          <EmptyState
+            icon={<Users />}
+            title="No role selected"
+            description="Select a role to see its attributes, memberships and database access."
+          />
+        </Panel>
       )}
     </div>
   );

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import type { AccessLevel } from "@/shared/types/roles";
 import type { IpcResult } from "@/shared/types/ipc";
@@ -55,8 +56,11 @@ export function Field({
 
 export function LoadingState({ label }: Readonly<{ label: string }>) {
   return (
-    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-      <Loader2 className="mr-2 size-4 animate-spin" />
+    <div
+      role="status"
+      className="flex h-full min-h-24 items-center justify-center gap-2 text-xs text-muted-foreground"
+    >
+      <Loader2 className="size-3.5 animate-spin" />
       {label}
     </div>
   );
@@ -67,14 +71,18 @@ export function ErrorState({
   onRetry,
 }: Readonly<{ message: string; onRetry?: () => void }>) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <p className="max-w-sm text-sm text-muted-foreground">{message}</p>
+    <EmptyState
+      icon={<CircleAlert />}
+      title="Something went wrong"
+      description={message}
+    >
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          <RefreshCw className="size-3.5" /> Retry
+          <RefreshCw />
+          Retry
         </Button>
       )}
-    </div>
+    </EmptyState>
   );
 }
 

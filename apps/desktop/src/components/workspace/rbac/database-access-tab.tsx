@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { Database, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -10,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MissingValue } from "@/components/workspace/relation-list-table";
 import type { AccessLevel, PgDatabaseInfo, PgRole } from "@/shared/types/roles";
 import { AccessLevelControl } from "./access-level-control";
 import { LoadingState, formatLevel } from "./shared";
@@ -48,29 +56,36 @@ export function DatabaseAccessTab({
 
   if (databases.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No databases are connectable on this server.
-      </p>
+      <EmptyState
+        icon={<Database />}
+        title="No databases"
+        description="No databases on this server accept connections."
+      />
     );
   }
 
   return (
-    <div className="flex max-w-5xl flex-col gap-2">
-      <p className="text-sm text-muted-foreground">
-        Each database grants one of three access levels for{" "}
-        <span className="font-medium text-foreground">{role.name}</span>. Read
-        only grants CONNECT, USAGE on the public schema, and SELECT on tables;
-        read + write adds INSERT, UPDATE, DELETE. Use &quot;Manage tables&quot;
-        to grant specific tables — in any schema — their own read or read/write
-        level.
+    <div className="flex flex-col gap-3">
+      <p className="max-w-[72ch] text-xs leading-5 text-muted-foreground">
+        Read only grants CONNECT, USAGE on the public schema and SELECT on
+        tables. Read + write adds INSERT, UPDATE and DELETE. Use Manage in the
+        Tables column to give specific tables, in any schema, their own level.
       </p>
-      <div className="overflow-hidden rounded-lg border border-border">
+      <Panel>
+        <PanelHeader>
+          <Database />
+          <PanelTitle>Database access</PanelTitle>
+          <PanelCount>{databases.length}</PanelCount>
+          <span className="ml-auto truncate text-xs text-muted-foreground">
+            For <span className="font-mono">{role.name}</span>
+          </span>
+        </PanelHeader>
         <Table>
-          <TableHeader className="bg-card">
+          <TableHeader>
             <TableRow>
               <TableHead>Database</TableHead>
               <TableHead>Owner</TableHead>
-              <TableHead>Size</TableHead>
+              <TableHead className="text-right">Size</TableHead>
               <TableHead>Access level</TableHead>
               <TableHead>Tables</TableHead>
             </TableRow>
@@ -89,7 +104,7 @@ export function DatabaseAccessTab({
             ))}
           </TableBody>
         </Table>
-      </div>
+      </Panel>
     </div>
   );
 }
@@ -118,17 +133,14 @@ function DatabaseAccessRow({
 
   return (
     <TableRow>
-      <TableCell className="font-mono text-xs">
-        <span className="flex items-center gap-2">
-          <Database className="size-3.5 text-muted-foreground" />
-          {db.name}
-        </span>
+      <TableCell className="font-mono text-[12.5px] font-medium">
+        {db.name}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      <TableCell className="font-mono text-xs text-muted-foreground">
         {db.owner}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
-        {db.size ?? "—"}
+      <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
+        {db.size ?? <MissingValue />}
       </TableCell>
       <TableCell>
         {isAdmin ? (
@@ -139,7 +151,7 @@ function DatabaseAccessRow({
             onChange={(level) => onSetDbAccessLevel(db, level)}
           />
         ) : (
-          <Badge variant={db.level === "none" ? "outline" : "secondary"}>
+          <Badge variant={db.level === "none" ? "outline" : "default"}>
             {formatLevel(db.level)}
           </Badge>
         )}
@@ -148,16 +160,17 @@ function DatabaseAccessRow({
         {canManageTables ? (
           <>
             <Button
-              variant="outline"
+              variant="ghost"
               size="xs"
               disabled={disabled}
               onClick={() => setSheetOpen(true)}
+              aria-label={`Manage table access on ${db.name}`}
             >
-              <Layers className="size-3.5" />
-              Manage tables
-              <Badge variant="secondary" className="text-[10px]">
+              <Layers />
+              Manage
+              <span className="font-mono text-[11px] text-subtle-foreground tabular-nums">
                 {grantedCount}/{db.tables.length}
-              </Badge>
+              </span>
             </Button>
             <TableAccessSheet
               open={sheetOpen}
@@ -169,7 +182,7 @@ function DatabaseAccessRow({
             />
           </>
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <MissingValue />
         )}
       </TableCell>
     </TableRow>

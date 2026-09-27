@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Database,
-  Loader2,
   Shield,
   ScrollText,
   Users,
@@ -10,14 +9,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ViewerShell } from "@/components/workspace/viewer-shell";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import type { RolesSnapshot } from "@/shared/types/roles";
 import type { UsersViewerPath } from "@/shared/types/workspace";
-import { ErrorState, unwrap } from "./rbac/shared";
+import { ErrorState, LoadingState, unwrap } from "./rbac/shared";
 import { RolesPane } from "./rbac/roles-pane";
 import { DatabaseCards } from "./rbac/database-cards";
 import { TriggersPane } from "./rbac/triggers-pane";
@@ -153,10 +151,7 @@ export function UsersViewer({ path }: Readonly<UsersViewerProps>) {
           }}
         />
       ) : (
-        <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-          <Loader2 className="mr-2 size-4 animate-spin" />
-          Loading users and roles…
-        </div>
+        <LoadingState label="Loading users and roles…" />
       );
   } else {
     content = (
@@ -168,22 +163,22 @@ export function UsersViewer({ path }: Readonly<UsersViewerProps>) {
           className="flex min-h-0 flex-1 flex-col gap-2"
         >
           <TabsList>
-            <TabsTrigger value="users" className="gap-1.5">
-              <Users className="size-3.5" />
-              Users & roles
+            <TabsTrigger value="users">
+              <Users />
+              Users and roles
             </TabsTrigger>
-            <TabsTrigger value="databases" className="gap-1.5">
-              <Database className="size-3.5" />
+            <TabsTrigger value="databases">
+              <Database />
               Databases
             </TabsTrigger>
             {isAdmin && (
-              <TabsTrigger value="triggers" className="gap-1.5">
-                <Zap className="size-3.5" />
+              <TabsTrigger value="triggers">
+                <Zap />
                 Triggers
               </TabsTrigger>
             )}
-            <TabsTrigger value="audit" className="gap-1.5">
-              <ScrollText className="size-3.5" />
+            <TabsTrigger value="audit">
+              <ScrollText />
               Audit log
             </TabsTrigger>
           </TabsList>
@@ -237,7 +232,7 @@ export function UsersViewer({ path }: Readonly<UsersViewerProps>) {
           },
         },
         {
-          label: "Users & RBAC",
+          label: "Users and roles",
           view: {
             type: "users",
             path,
@@ -265,60 +260,40 @@ function DashboardSummary({ snapshot }: Readonly<{ snapshot: RolesSnapshot }>) {
   const stats = snapshot.stats;
   const currentUser = snapshot.currentUser;
   const items = [
-    {
-      label: "Databases",
-      value: stats.totalDatabases,
-      icon: <Database className="size-3.5" />,
-    },
-    {
-      label: "Users",
-      value: stats.totalUsers,
-      icon: <Users className="size-3.5" />,
-    },
-    {
-      label: "Roles",
-      value: stats.totalRoles,
-      icon: <Shield className="size-3.5" />,
-    },
-    {
-      label: "Superusers",
-      value: stats.superusersCount,
-      icon: <Shield className="size-3.5" />,
-    },
+    { label: "Databases", value: stats.totalDatabases, icon: <Database /> },
+    { label: "Users", value: stats.totalUsers, icon: <Users /> },
+    { label: "Roles", value: stats.totalRoles, icon: <Shield /> },
+    { label: "Superusers", value: stats.superusersCount, icon: <Shield /> },
     {
       label: "Active connections",
       value: stats.activeConnections,
-      icon: <Activity className="size-3.5" />,
+      icon: <Activity />,
     },
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-      <div className="flex items-center gap-2 pr-2">
-        <Badge variant="secondary">
-          {currentUser.isSuperuser ? "Superuser" : "Non-superuser"}
-        </Badge>
-        <span className="text-xs text-muted-foreground">
-          Signed in as{" "}
-          <span className="font-mono text-foreground">{currentUser.name}</span>
+    <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-border bg-card px-4 py-2 text-xs shadow-xs/5">
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">Signed in as</span>
+        <span className="font-mono text-[12.5px] text-foreground">
+          {currentUser.name}
         </span>
+        <Badge>{currentUser.isSuperuser ? "Superuser" : "Non-superuser"}</Badge>
       </div>
-      <ScrollArea className="min-w-0 flex-1" orientation="horizontal">
-        <div className="flex items-center gap-1.5">
-          {items.map((item) => (
-            <div
-              key={item.label}
-              className="flex shrink-0 items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs"
-            >
-              <span className="text-muted-foreground">{item.icon}</span>
-              <span className="text-muted-foreground">{item.label}</span>
-              <span className="font-mono font-medium">
-                {item.value === -1 ? "—" : item.value}
-              </span>
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 sm:ml-auto">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:text-muted-foreground"
+          >
+            {item.icon}
+            <span className="text-muted-foreground">{item.label}</span>
+            <span className="font-mono text-foreground tabular-nums">
+              {item.value === -1 ? "—" : item.value}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
