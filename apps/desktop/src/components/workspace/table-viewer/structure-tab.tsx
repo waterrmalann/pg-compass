@@ -25,23 +25,28 @@ interface StructureTabProps {
 }
 
 function formatType(col: ColumnStructure): string {
-  let base = col.dataType;
+  // information_schema reports enums, domains and extension types (vector,
+  // geometry) as USER-DEFINED and arrays as ARRAY; the udt name is the
+  // useful label for both.
+  if (col.dataType === "USER-DEFINED") return col.udtName;
+  if (col.dataType === "ARRAY") return `${col.udtName.replace(/^_/, "")}[]`;
   if (col.characterMaxLength != null) {
-    base += `(${String(col.characterMaxLength)})`;
-    return base;
+    return `${col.dataType}(${String(col.characterMaxLength)})`;
   }
-  if (col.numericPrecision == null) {
-    return base;
+  // Integer and float types report a binary precision (32, 53…) that isn't
+  // part of the declared type, so only numeric shows precision and scale.
+  if (col.dataType !== "numeric" || col.numericPrecision == null) {
+    return col.dataType;
   }
-  base +=
-    col.numericScale == null
-      ? `(${String(col.numericPrecision)})`
-      : `(${String(col.numericPrecision)},${String(col.numericScale)})`;
-  return base;
+  if (col.numericScale == null) {
+    return `numeric(${String(col.numericPrecision)})`;
+  }
+  return `numeric(${String(col.numericPrecision)},${String(col.numericScale)})`;
 }
 
 function renderSample(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
+  if (value instanceof Date) return value.toISOString();
   if (typeof value === "object") return JSON.stringify(value);
   return String(value as string | number | boolean);
 }

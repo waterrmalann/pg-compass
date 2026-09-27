@@ -23,6 +23,8 @@ interface CardDataViewProps {
 
 function isStructuredValue(value: unknown): boolean {
   if (value === null || value === undefined) return false;
+  // Timestamps arrive as Date objects; they render as scalars, not "{}".
+  if (value instanceof Date) return false;
   return typeof value === "object";
 }
 
