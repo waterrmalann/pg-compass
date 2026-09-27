@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ListTree } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import {
   Table,
@@ -70,84 +72,73 @@ export function IndexesTab({
   );
 
   if (loading && indexes.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (indexes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No indexes found on this table.
-      </div>
+      <Panel className="h-full">
+        <EmptyState
+          icon={<ListTree />}
+          title="No indexes found on this table."
+        />
+      </Panel>
     );
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card">
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Properties</TableHead>
-            <TableHead>Size</TableHead>
-            <TableHead>Scans</TableHead>
-            <TableHead>Tuples Read</TableHead>
-            <TableHead>Tuples Fetched</TableHead>
-            <TableHead>Definition</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {indexes.map((idx) => (
-            <TableRow key={idx.name} className="hover:bg-muted/50">
-              <TableCell className="font-medium">{idx.name}</TableCell>
-              <TableCell>
-                <Badge variant="secondary" className="font-mono text-[10px]">
-                  {idx.type}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  {idx.isPrimary && (
-                    <Badge
-                      variant="default"
-                      className="text-[10px] px-1.5 py-0"
-                    >
-                      PK
-                    </Badge>
-                  )}
-                  {idx.isUnique && !idx.isPrimary && (
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] px-1.5 py-0"
-                    >
-                      Unique
-                    </Badge>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-xs tabular-nums text-muted-foreground">
-                {idx.size}
-              </TableCell>
-              <TableCell className="text-xs tabular-nums text-muted-foreground">
-                {idx.scans.toLocaleString()}
-              </TableCell>
-              <TableCell className="text-xs tabular-nums text-muted-foreground">
-                {idx.tuplesRead.toLocaleString()}
-              </TableCell>
-              <TableCell className="text-xs tabular-nums text-muted-foreground">
-                {idx.tuplesFetched.toLocaleString()}
-              </TableCell>
-              <TableCell className="max-w-100 truncate font-mono text-[10px] text-muted-foreground">
-                <span title={idx.definition}>{idx.definition}</span>
-              </TableCell>
+    <Panel className="max-h-full">
+      <div className="min-h-0 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Properties</TableHead>
+              <TableHead className="text-right">Size</TableHead>
+              <TableHead className="text-right">Scans</TableHead>
+              <TableHead className="text-right">Tuples read</TableHead>
+              <TableHead className="text-right">Tuples fetched</TableHead>
+              <TableHead>Definition</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {indexes.map((idx) => (
+              <TableRow key={idx.name}>
+                <TableCell className="font-mono text-[12.5px] font-medium">
+                  {idx.name}
+                </TableCell>
+                <TableCell>
+                  <Badge className="font-mono">{idx.type}</Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {idx.isPrimary && <Badge>Primary key</Badge>}
+                    {idx.isUnique && !idx.isPrimary && (
+                      <Badge variant="outline">Unique</Badge>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground tabular-nums">
+                  {idx.size}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground tabular-nums">
+                  {idx.scans.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground tabular-nums">
+                  {idx.tuplesRead.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground tabular-nums">
+                  {idx.tuplesFetched.toLocaleString()}
+                </TableCell>
+                <TableCell className="max-w-100 truncate font-mono text-xs text-muted-foreground">
+                  <span title={idx.definition}>{idx.definition}</span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Panel>
   );
 }

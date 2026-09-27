@@ -77,8 +77,8 @@ export function DataCopyButton({
         <Button
           type="button"
           variant="ghost"
-          size="icon-sm"
-          className={className ?? "size-8"}
+          size="icon-xs"
+          className={className}
           aria-label={label}
           disabled={text === null}
           onClick={(event) => {

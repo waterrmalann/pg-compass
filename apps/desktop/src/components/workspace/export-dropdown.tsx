@@ -21,8 +21,6 @@ interface ExportDropdownProps {
   whereClause?: string;
   /** Whether query-based export is available (query tab has results). */
   hasQueryResults?: boolean;
-  /** Keep the compact 32px toolbar height. */
-  thin?: boolean;
 }
 
 export function ExportDropdown({
@@ -126,43 +124,29 @@ export function ExportDropdown({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
-          >
-            <Download className="size-3.5" />
+          <Button type="button" variant="ghost" size="xs">
+            <Download />
             Export
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem
-            onClick={handleExportAll}
-            disabled={exportBusy}
-            className="gap-2"
-          >
-            <FileSpreadsheet className="size-4" />
+          <DropdownMenuItem onClick={handleExportAll} disabled={exportBusy}>
+            <FileSpreadsheet />
             Export all
           </DropdownMenuItem>
           {canExportQuery && effectiveSql && (
             <DropdownMenuItem
               onClick={handleExportQuery}
               disabled={exportBusy}
-              className="gap-2"
             >
-              <FileDown className="size-4" />
+              <FileDown />
               Export selected query
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={handleSqlDump}
-            disabled={exportBusy}
-            className="gap-2"
-          >
-            <Database className="size-4" />
-            SQL Dump
+          <DropdownMenuItem onClick={handleSqlDump} disabled={exportBusy}>
+            <Database />
+            SQL dump
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

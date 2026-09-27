@@ -11,22 +11,24 @@ interface JsonTreeProps {
 
 export function JsonTree({ value, depth = 0 }: Readonly<JsonTreeProps>) {
   if (value === null || value === undefined) {
-    return <span className="italic text-muted-foreground/60">null</span>;
+    return <span className="text-info-foreground">null</span>;
   }
 
   if (typeof value === "boolean") {
-    return <span className="text-primary">{value ? "true" : "false"}</span>;
+    return (
+      <span className="text-info-foreground">{value ? "true" : "false"}</span>
+    );
   }
 
   if (typeof value === "number") {
     return (
-      <span className="tabular-nums text-foreground">{String(value)}</span>
+      <span className="tabular-nums text-info-foreground">{String(value)}</span>
     );
   }
 
   if (typeof value === "string") {
     return (
-      <span className="break-all text-muted-foreground">
+      <span className="break-all text-success-foreground">
         {JSON.stringify(value)}
       </span>
     );
@@ -63,9 +65,7 @@ function JsonObject({
       >
         <ChevronRight className="size-3" />
         <span>{"{"}</span>
-        <span className="text-muted-foreground/60">
-          {entries.length} fields
-        </span>
+        <span className="text-subtle-foreground">{entries.length} fields</span>
         <span>{"}"}</span>
       </button>
     );
@@ -83,10 +83,13 @@ function JsonObject({
         />
         <span>{"{"}</span>
       </button>
-      <div className="ml-4 border-l border-border/50 pl-2">
+      <div className="ml-4 border-l border-border pl-2">
         {entries.map(([key, val]) => (
           <div key={key} className="flex gap-1 py-0.5">
-            <span className="shrink-0 text-foreground/80">{key}:</span>
+            <span className="shrink-0 text-foreground/85">
+              {key}
+              <span className="text-muted-foreground">:</span>
+            </span>
             <JsonTree value={val} depth={depth + 1} />
           </div>
         ))}
@@ -116,7 +119,7 @@ function JsonArray({
       >
         <ChevronRight className="size-3" />
         <span>[</span>
-        <span className="text-muted-foreground/60">{items.length} items</span>
+        <span className="text-subtle-foreground">{items.length} items</span>
         <span>]</span>
       </button>
     );
@@ -140,12 +143,12 @@ function JsonArray({
         />
         <span>[</span>
       </button>
-      <div className="ml-4 border-l border-border/50 pl-2">
+      <div className="ml-4 border-l border-border pl-2">
         {displayItems.map((item, index) => {
           const key = `arr-${String(index)}`;
           return (
             <div key={key} className="flex gap-1 py-0.5">
-              <span className="shrink-0 tabular-nums text-muted-foreground/60">
+              <span className="shrink-0 tabular-nums text-subtle-foreground">
                 {index}:
               </span>
               <JsonTree value={item} depth={depth + 1} />
@@ -155,7 +158,7 @@ function JsonArray({
         {hiddenCount > 0 && (
           <button
             type="button"
-            className="py-0.5 text-primary hover:underline"
+            className="py-0.5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             onClick={() => setShowAll(true)}
           >
             [ …{hiddenCount} more items ]

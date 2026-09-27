@@ -1,4 +1,3 @@
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export const COLOR_OPTIONS = [
@@ -22,24 +21,34 @@ export function ConnectionColorPicker({
   onChange,
 }: Readonly<ConnectionColorPickerProps>) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label>Color</Label>
-      <div className="flex gap-2">
-        {COLOR_OPTIONS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={cn(
-              "size-8 rounded-full border-2 transition-transform hover:scale-110",
-              value === c
-                ? "border-foreground scale-110"
-                : "border-transparent",
-            )}
-            style={{ backgroundColor: c }}
-            onClick={() => onChange(value === c ? undefined : c)}
-            aria-label={`Select color ${c}`}
-          />
-        ))}
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[13px] leading-none font-medium">Color</span>
+      <div className="flex items-center gap-1" role="group" aria-label="Color">
+        {COLOR_OPTIONS.map((c) => {
+          const selected = value === c;
+          return (
+            <button
+              key={c}
+              type="button"
+              className={cn(
+                "flex size-6 cursor-pointer items-center justify-center rounded-md outline-none transition-colors duration-150 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
+                selected && "bg-accent",
+              )}
+              onClick={() => onChange(selected ? undefined : c)}
+              aria-label={`Select color ${c}`}
+              aria-pressed={selected}
+            >
+              <span
+                className={cn(
+                  "size-3 rounded-full",
+                  selected &&
+                    "ring-2 ring-foreground/70 ring-offset-2 ring-offset-popover",
+                )}
+                style={{ backgroundColor: c }}
+              />
+            </button>
+          );
+        })}
       </div>
     </div>
   );

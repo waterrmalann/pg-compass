@@ -19,9 +19,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { fieldClassName, Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { ColumnInfo } from "@/shared/types/table-data";
+import { cn } from "@/lib/utils";
 
 const MULTILINE_TYPES = new Set([
   "json",
@@ -93,9 +94,7 @@ export function formatPrimaryKeyValue(value: unknown): string {
 export function PrimaryKeyValue({ value }: Readonly<{ value: unknown }>) {
   if (value === null || value === undefined) {
     return (
-      <span className="font-mono text-xs italic text-muted-foreground">
-        NULL
-      </span>
+      <span className="font-mono text-xs text-muted-foreground">NULL</span>
     );
   }
   return (
@@ -119,7 +118,7 @@ export function FieldEditor(props: Readonly<FieldEditorProps>): ReactNode {
     return (
       <div
         data-testid={`null-pill-${props.column.name}`}
-        className="rounded-md border border-dashed border-muted-foreground/40 px-2 py-1 text-center font-mono text-xs italic text-muted-foreground"
+        className="flex h-8 items-center justify-center rounded-lg border border-dashed border-input font-mono text-xs text-subtle-foreground"
       >
         NULL
       </div>
@@ -146,7 +145,7 @@ export function FieldEditor(props: Readonly<FieldEditorProps>): ReactNode {
         onChange={(event) => props.onChange(event.target.value)}
         disabled={props.disabled}
         data-testid={`row-enum-${props.column.name}`}
-        className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+        className={cn(fieldClassName, "h-8 px-2 font-mono text-xs")}
       >
         {enumLabels.map((label) => (
           <option
@@ -164,7 +163,7 @@ export function FieldEditor(props: Readonly<FieldEditorProps>): ReactNode {
   if (props.column.dataType === "bool") {
     const checked = props.rawValue.trim().toLowerCase() === "true";
     return (
-      <div className="flex h-8 items-center justify-between rounded-md border border-input bg-muted/30 px-2">
+      <div className="flex h-8 items-center justify-between rounded-lg border border-input bg-muted/40 px-2.5">
         <span className="font-mono text-xs">{checked ? "True" : "False"}</span>
         <Switch
           checked={checked}
@@ -192,7 +191,10 @@ export function FieldEditor(props: Readonly<FieldEditorProps>): ReactNode {
         value={props.rawValue}
         onChange={(event) => props.onChange(event.target.value)}
         disabled={props.disabled}
-        className="min-h-16 w-full resize-y rounded-md border border-input bg-transparent px-2 py-1 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+        className={cn(
+          fieldClassName,
+          "min-h-16 resize-y px-2.5 py-1.5 font-mono text-xs",
+        )}
         spellCheck={false}
       />
     );
@@ -251,7 +253,10 @@ function ForeignKeyFieldEditor(props: Readonly<ForeignKeyFieldEditorProps>) {
         disabled={props.disabled}
         onClick={() => setOpen(true)}
         data-testid={`fk-trigger-${props.column.name}`}
-        className="flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-2 text-left text-xs hover:bg-muted/40 disabled:opacity-50"
+        className={cn(
+          fieldClassName,
+          "flex h-8 cursor-pointer items-center justify-between gap-2 px-2.5 text-left text-xs hover:bg-accent/50",
+        )}
       >
         <span className="truncate">
           {lastLabel ? <span className="font-medium">{lastLabel}</span> : null}

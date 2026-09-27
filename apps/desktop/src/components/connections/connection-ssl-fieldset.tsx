@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
+import { fieldClassName, Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { cn } from "@/lib/utils";
 import { FileSearch } from "lucide-react";
 import type { SSLConfig } from "@/shared/types/connection";
 
@@ -15,15 +17,14 @@ export function ConnectionSSLFieldset({
   onChange,
 }: Readonly<ConnectionSSLFieldsetProps>) {
   return (
-    <fieldset className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3">
+    <fieldset className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3">
       <Label
         htmlFor="ssl-enabled"
-        className="flex min-h-8 cursor-pointer items-center gap-2"
+        className="flex min-h-6 cursor-pointer items-center gap-2"
       >
         <input
           id="ssl-enabled"
           type="checkbox"
-          className="size-4 accent-primary"
           checked={value.enabled}
           onChange={(e) =>
             onChange((s) => ({ ...s, enabled: e.target.checked }))
@@ -32,15 +33,14 @@ export function ConnectionSSLFieldset({
         <span>Enable SSL</span>
       </Label>
       {value.enabled && (
-        <div className="flex flex-col gap-2 pl-6">
+        <div className="flex flex-col gap-3 pl-6">
           <Label
             htmlFor="ssl-reject"
-            className="flex min-h-8 cursor-pointer items-center gap-2"
+            className="flex min-h-6 cursor-pointer items-center gap-2"
           >
             <input
               id="ssl-reject"
               type="checkbox"
-              className="size-4 accent-primary"
               checked={value.rejectUnauthorized ?? true}
               onChange={(e) =>
                 onChange((s) => ({
@@ -127,32 +127,15 @@ function CaField({
         <Label htmlFor={source === "file" ? "ssl-ca-file" : "ssl-ca-inline"}>
           CA certificate
         </Label>
-        <div
-          role="group"
-          aria-label="CA certificate source"
-          className="inline-flex h-8 items-center rounded-lg bg-muted p-[3px]"
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant={source === "file" ? "secondary" : "ghost"}
-            className="h-8 px-3 text-xs"
-            aria-pressed={source === "file"}
-            onClick={() => handleSourceChange("file")}
-          >
-            File
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={source === "inline" ? "secondary" : "ghost"}
-            className="h-8 px-3 text-xs"
-            aria-pressed={source === "inline"}
-            onClick={() => handleSourceChange("inline")}
-          >
-            Inline
-          </Button>
-        </div>
+        <SegmentedControl
+          ariaLabel="CA certificate source"
+          value={source}
+          onValueChange={handleSourceChange}
+          options={[
+            { value: "file", label: "File" },
+            { value: "inline", label: "Inline" },
+          ]}
+        />
       </div>
 
       {source === "file" ? (
@@ -166,7 +149,10 @@ function CaField({
       ) : (
         <textarea
           id="ssl-ca-inline"
-          className="min-h-24 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            fieldClassName,
+            "min-h-24 resize-y px-2.5 py-2 font-mono text-xs",
+          )}
           placeholder="Paste PEM text or base64-encoded PEM contents"
           value={value}
           onChange={(e) => handleValueChange(e.target.value)}
@@ -252,8 +238,8 @@ function PathInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      <Button type="button" variant="outline" size="sm" onClick={handleBrowse}>
-        <FileSearch className="size-4" />
+      <Button type="button" variant="outline" onClick={handleBrowse}>
+        <FileSearch />
         Browse
       </Button>
     </div>

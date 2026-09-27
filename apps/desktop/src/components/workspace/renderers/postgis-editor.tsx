@@ -26,7 +26,7 @@ import iconUrl from "leaflet/dist/images/marker-icon.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import icon2xUrl from "leaflet/dist/images/marker-icon-2x.png";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { fieldClassName, Input } from "@/components/ui/input";
 import { DialogFooter } from "@/components/ui/dialog";
 import {
   editRegistry,
@@ -38,6 +38,7 @@ import {
   extractPoint,
   pointToEWKT,
 } from "@/components/workspace/renderers/postgis-parse";
+import { cn } from "@/lib/utils";
 
 // Leaflet's default marker icon URLs resolve through the bundler's image
 // loader; without these overrides Leaflet emits requests to the wrong path.
@@ -167,7 +168,7 @@ export function GeometryMapEditor({
   return (
     <div className="flex flex-col gap-3" data-testid="postgis-editor">
       <div
-        className="h-64 overflow-hidden rounded-md border border-border"
+        className="h-64 overflow-hidden rounded-lg border border-border"
         data-testid="postgis-map-wrapper"
       >
         <MapContainer
@@ -188,7 +189,7 @@ export function GeometryMapEditor({
 
       <div className="grid grid-cols-3 gap-2">
         <label className="flex flex-col gap-1" htmlFor="postgis-longitude">
-          <span className="text-[10px] text-muted-foreground">Longitude</span>
+          <span className="text-xs text-muted-foreground">Longitude</span>
           <Input
             id="postgis-longitude"
             value={lng}
@@ -198,7 +199,7 @@ export function GeometryMapEditor({
           />
         </label>
         <label className="flex flex-col gap-1" htmlFor="postgis-latitude">
-          <span className="text-[10px] text-muted-foreground">Latitude</span>
+          <span className="text-xs text-muted-foreground">Latitude</span>
           <Input
             id="postgis-latitude"
             value={lat}
@@ -208,7 +209,7 @@ export function GeometryMapEditor({
           />
         </label>
         <label className="flex flex-col gap-1" htmlFor="postgis-srid">
-          <span className="text-[10px] text-muted-foreground">SRID</span>
+          <span className="text-xs text-muted-foreground">SRID</span>
           <Input
             id="postgis-srid"
             value={srid}
@@ -220,18 +221,23 @@ export function GeometryMapEditor({
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-muted-foreground">WKT / EWKT</span>
+        <span className="text-xs text-muted-foreground">WKT / EWKT</span>
         <textarea
           value={wkt}
           onChange={(e) => handleWktChange(e.target.value)}
           placeholder="SRID=4326;POINT(-122.419 37.775)"
           spellCheck={false}
           data-testid="postgis-wkt"
-          className="min-h-20 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className={cn(
+            fieldClassName,
+            "min-h-20 resize-y px-2.5 py-2 font-mono text-xs",
+          )}
         />
       </label>
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="text-xs text-destructive-foreground">{error}</p>
+      ) : null}
 
       <DialogFooter className="gap-2">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>

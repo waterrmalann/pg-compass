@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ArrowUpRight, Compass } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { GITHUB_REPO_URL } from "@/shared/constants/help";
 
 interface AboutDialogProps {
@@ -30,45 +29,43 @@ export function AboutDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" showCloseButton>
         <DialogHeader>
-          <DialogTitle>About PG Compass</DialogTitle>
+          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Compass className="size-5" strokeWidth={2.25} />
+          </div>
+          <DialogTitle>PG Compass</DialogTitle>
           <DialogDescription>{APP_DESCRIPTION}</DialogDescription>
         </DialogHeader>
 
-        <Separator />
-
-        <div className="flex flex-col gap-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Version</span>
-            <span className="font-mono text-xs">{appVersion}</span>
+        <dl className="divide-y divide-border border-y border-border text-[13px]">
+          <div className="flex h-10 items-center justify-between">
+            <dt className="text-muted-foreground">Version</dt>
+            <dd className="font-mono text-xs">{appVersion}</dd>
           </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">License</span>
-            <span className="text-xs">MIT</span>
+          <div className="flex h-10 items-center justify-between">
+            <dt className="text-muted-foreground">License</dt>
+            <dd className="text-xs">MIT</dd>
           </div>
+        </dl>
 
-          <Separator />
-
-          <div className="flex flex-col gap-2">
-            <a
-              href={WEBSITE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ExternalLink className="size-3" />
-              Website
-            </a>
-            <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ExternalLink className="size-3" />
-              GitHub Repository
-            </a>
-          </div>
+        <div className="flex flex-col items-start gap-1 pb-1">
+          <a
+            href={WEBSITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[13px] text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Website
+            <ArrowUpRight className="size-3.5" />
+          </a>
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[13px] text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Source on GitHub
+            <ArrowUpRight className="size-3.5" />
+          </a>
         </div>
 
         <DialogFooter showCloseButton />

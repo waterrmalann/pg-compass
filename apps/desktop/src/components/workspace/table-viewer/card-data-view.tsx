@@ -1,3 +1,5 @@
+import { LayoutList } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { typeRegistry } from "@/components/workspace/renderers/type-registry";
 import { JsonTree } from "@/components/workspace/table-viewer/json-tree";
@@ -53,41 +55,34 @@ export function CardDataView({
   const compact = useDensity() === "compact";
 
   if (rows.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No rows to display.
-      </div>
-    );
+    return <EmptyState icon={<LayoutList />} title="No rows to display." />;
   }
-
-  const copyButtonSize = compact ? "size-6" : "size-8";
 
   return (
     <ScrollArea className="h-full">
-      <div className={cn("flex flex-col p-1", compact ? "gap-2" : "gap-3")}>
+      <div className={cn("flex flex-col p-3", compact ? "gap-2" : "gap-3")}>
         {rows.map((row, rowIndex) => {
           const rowKey = `card-${String(rowIndex)}`;
           const pkValues = pkValuesFor(row, editContext.primaryKey);
           return (
             <div
               key={rowKey}
-              className="group rounded-lg border border-border bg-card"
+              className="group rounded-lg border border-border bg-background shadow-xs/5 transition-colors duration-150"
             >
               <div
                 className={cn(
-                  "flex items-center justify-between border-b border-border px-3",
-                  compact ? "py-0.5" : "py-1.5",
+                  "flex items-center justify-between border-b border-border/70 pr-1.5 pl-3",
+                  compact ? "h-8" : "h-9",
                 )}
               >
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="font-mono text-[11px] text-subtle-foreground">
                   Document {rowIndex + 1}
                 </span>
-                <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <div className="flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                   <DataCopyButton
                     label={`Copy document ${String(rowIndex + 1)}`}
                     text={serializeRow(columns, row)}
                     successMessage="Row copied as JSON"
-                    className={copyButtonSize}
                   />
                   <RowEditButton
                     columns={columns}
@@ -111,7 +106,7 @@ export function CardDataView({
                       "flex gap-2",
                       compact
                         ? "items-baseline py-0.5"
-                        : "border-b border-border/30 py-1.5 last:border-b-0",
+                        : "border-b border-border/70 py-1.5 last:border-b-0",
                     )}
                   >
                     <div
@@ -122,13 +117,13 @@ export function CardDataView({
                     >
                       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                         <span
-                          className="truncate text-xs font-medium text-foreground/80"
+                          className="truncate font-mono text-xs text-muted-foreground"
                           title={compact ? col.dataType : undefined}
                         >
                           {col.name}
                         </span>
                         {compact ? null : (
-                          <span className="text-[11px] text-muted-foreground/60">
+                          <span className="font-mono text-[11px] text-subtle-foreground">
                             {col.dataType}
                           </span>
                         )}
@@ -137,13 +132,10 @@ export function CardDataView({
                         label={`Copy column name ${col.name}`}
                         text={col.name}
                         successMessage="Column name copied"
-                        className={cn(
-                          "shrink-0 opacity-0 group-hover/label:opacity-100 focus-visible:opacity-100",
-                          copyButtonSize,
-                        )}
+                        className="shrink-0 opacity-0 group-hover/label:opacity-100 focus-visible:opacity-100"
                       />
                     </div>
-                    <div className="group/value flex min-w-0 flex-1 items-start gap-1 font-mono text-xs">
+                    <div className="group/value flex min-w-0 flex-1 items-start gap-1 font-mono text-[12.5px]">
                       <div className="min-w-0 flex-1">
                         <EditableCell
                           col={col}
@@ -168,10 +160,7 @@ export function CardDataView({
                         label={`Copy ${col.name} value`}
                         text={serializeCellValue(row[col.name])}
                         successMessage="Cell value copied"
-                        className={cn(
-                          "shrink-0 opacity-0 group-hover/value:opacity-100 focus-visible:opacity-100",
-                          copyButtonSize,
-                        )}
+                        className="shrink-0 opacity-0 group-hover/value:opacity-100 focus-visible:opacity-100"
                       />
                     </div>
                   </div>

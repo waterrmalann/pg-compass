@@ -104,7 +104,7 @@ export function StructuredValueEditor({
   return (
     <div
       ref={hostRef}
-      className="overflow-hidden rounded-md border border-input bg-background"
+      className="overflow-hidden rounded-lg border border-input bg-code shadow-xs/5 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/24"
       data-structured-editor
     />
   );

@@ -75,7 +75,7 @@ function writeSettings(storeDir: string, readOnlyMode: boolean): void {
 
 async function openUsersDataTab(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Open E2E Database" }).click();
-  await expect(page.getByText("Schema Name")).toBeVisible();
+  await expect(page.getByText("Schema name")).toBeVisible();
   await page.getByRole("row", { name: /app/i }).click();
   await expect(page.getByRole("tab", { name: "Tables" })).toBeVisible();
   await page.getByRole("row", { name: /users/i }).click();
@@ -162,7 +162,7 @@ test("views expose no edit affordance even when read-only mode is off", async ({
   const { app, page } = await launch(runtime);
   try {
     await page.getByRole("button", { name: "Open E2E Database" }).click();
-    await expect(page.getByText("Schema Name")).toBeVisible();
+    await expect(page.getByText("Schema name")).toBeVisible();
     await page.getByRole("row", { name: /app/i }).click();
     await page.getByRole("tab", { name: "Views" }).click();
     await page.getByRole("row", { name: /active_users/i }).click();
@@ -171,7 +171,7 @@ test("views expose no edit affordance even when read-only mode is off", async ({
     await expect(
       page.locator('[data-testid="cell-editor-target"]'),
     ).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Add Data" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add data" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Update" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
   } finally {

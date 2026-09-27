@@ -122,7 +122,7 @@ describe("ConnectionItem", () => {
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(
       await screen.findByRole("menuitem", {
-        name: "Copy Connection String",
+        name: "Copy connection string",
       }),
     );
 

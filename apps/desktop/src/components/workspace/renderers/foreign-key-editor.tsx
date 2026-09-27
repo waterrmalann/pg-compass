@@ -122,7 +122,7 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
               ? `Search ${props.foreignKey.table} by ${props.foreignKey.labelColumn} or ${props.foreignKey.column}…`
               : `Search ${props.foreignKey.table} by ${props.foreignKey.column}…`
           }
-          className="h-9 pl-7 font-mono text-xs"
+          className="pl-7 font-mono text-xs"
           data-testid="fk-search-input"
         />
         {query ? (
@@ -130,15 +130,15 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
             type="button"
             aria-label="Clear search"
             onClick={() => setQuery("")}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer rounded-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <X className="size-3" />
           </button>
         ) : null}
       </div>
 
-      <div className="rounded-md border border-border">
-        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
           <span>
             {props.foreignKey.schema}.{props.foreignKey.table}
           </span>
@@ -156,10 +156,10 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
                 type="button"
                 onClick={() => props.onSetNull?.()}
                 data-testid="fk-option-null"
-                className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left font-mono text-xs italic text-muted-foreground hover:bg-muted/60"
+                className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
               >
                 <span>(NULL)</span>
-                <span className="text-[10px] uppercase tracking-wide">
+                <span className="font-sans text-[11px] text-subtle-foreground">
                   no reference
                 </span>
               </button>
@@ -167,17 +167,19 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
           ) : null}
 
           {loading && results.length === 0 ? (
-            <li className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+            <li className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" /> Searching…
             </li>
           ) : null}
 
           {!loading && error ? (
-            <li className="px-2 py-3 text-xs text-destructive">{error}</li>
+            <li className="px-3 py-3 text-xs text-destructive-foreground">
+              {error}
+            </li>
           ) : null}
 
           {!loading && !error && results.length === 0 ? (
-            <li className="px-2 py-3 text-xs text-muted-foreground">
+            <li className="px-3 py-3 text-xs text-muted-foreground">
               No matches.
             </li>
           ) : null}
@@ -190,17 +192,15 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
                   type="button"
                   onClick={() => props.onPick(opt.value, opt.label)}
                   data-testid={`fk-option-${String(opt.value)}`}
-                  className={`flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/60 ${
-                    isCurrent ? "bg-primary/5" : ""
+                  className={`flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-accent/60 ${
+                    isCurrent ? "bg-accent" : ""
                   }`}
                 >
                   <span className="truncate">
                     {opt.label !== null ? (
                       <span className="font-medium">{opt.label}</span>
                     ) : (
-                      <span className="text-muted-foreground italic">
-                        no label
-                      </span>
+                      <span className="text-muted-foreground">no label</span>
                     )}
                   </span>
                   <span className="font-mono text-[11px] text-muted-foreground">
@@ -213,7 +213,7 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
         </ul>
 
         {hasMore ? (
-          <div className="border-t border-border px-2 py-1 text-[10px] text-muted-foreground">
+          <div className="border-t border-border px-3 py-1.5 text-[11px] text-subtle-foreground">
             Showing {SEARCH_LIMIT} matches — refine your search to narrow
             further.
           </div>
@@ -229,7 +229,7 @@ export function ForeignKeyPicker(props: Readonly<ForeignKeyPickerProps>) {
               : String(props.currentValue)}
           </span>
           {props.currentLabel ? (
-            <span className="ml-1 italic">({props.currentLabel})</span>
+            <span className="ml-1">({props.currentLabel})</span>
           ) : null}
         </span>
         {props.onUseRaw ? (

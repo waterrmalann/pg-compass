@@ -1,4 +1,4 @@
-import { Database, Settings } from "lucide-react";
+import { Compass, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -12,9 +12,11 @@ export function SidebarHeader({
   onOpenSettings: () => void;
 }>) {
   return (
-    <div className="flex items-center gap-2 px-4 py-3">
-      <Database className="size-4 text-sidebar-primary" />
-      <h1 className="flex-1 text-sm font-semibold tracking-tight">
+    <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+      <div className="flex size-5 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+        <Compass className="size-3.5" strokeWidth={2.25} />
+      </div>
+      <h1 className="flex-1 text-[13px] font-medium tracking-[-0.01em] text-sidebar-accent-foreground">
         PG Compass
       </h1>
       <Tooltip>
@@ -23,16 +25,13 @@ export function SidebarHeader({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-muted-foreground hover:text-foreground"
             aria-label="Open settings"
             onClick={onOpenSettings}
           >
-            <Settings className="size-4" />
+            <Settings />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right">
-          <p>Settings</p>
-        </TooltipContent>
+        <TooltipContent side="right">Settings</TooltipContent>
       </Tooltip>
     </div>
   );

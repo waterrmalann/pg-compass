@@ -4,20 +4,21 @@ import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
+// Chips (docs/DESIGN.md §9.3). Neutral by default; status variants are only
+// for deviations ("normal is neutral") and always tint, never fill solid.
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded px-1.5 text-[11px] leading-none font-medium whitespace-nowrap transition-colors [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
-        outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+        default: "border border-border/70 bg-muted/55 text-subtle-foreground",
+        secondary: "bg-muted text-subtle-foreground",
+        outline: "border border-border/70 text-subtle-foreground",
+        ghost: "text-subtle-foreground",
+        destructive: "bg-destructive/10 text-destructive-foreground",
+        warning: "bg-warning/10 text-warning-foreground",
+        success: "bg-success/10 text-success-foreground",
+        info: "bg-info/10 text-info-foreground",
       },
     },
     defaultVariants: {
@@ -45,4 +46,18 @@ function Badge({
   );
 }
 
-export { Badge, badgeVariants };
+/** Keyboard hint chip, e.g. ⌘K (docs/DESIGN.md §9.3). */
+function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
+  return (
+    <kbd
+      data-slot="kbd"
+      className={cn(
+        "inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-[11px] leading-none text-subtle-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { Badge, Kbd, badgeVariants };

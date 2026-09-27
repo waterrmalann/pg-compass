@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Zap } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -115,86 +117,84 @@ export function TriggersTab({
   }
 
   if (loading && triggers.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (triggers.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No triggers found on this table.
-      </div>
+      <Panel className="h-full">
+        <EmptyState icon={<Zap />} title="No triggers found on this table." />
+      </Panel>
     );
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card">
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Enabled</TableHead>
-            <TableHead>Timing</TableHead>
-            <TableHead>Events</TableHead>
-            <TableHead>Function</TableHead>
-            <TableHead>Definition</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {triggers.map((trigger) => (
-            <TableRow key={trigger.name} className="hover:bg-muted/50">
-              <TableCell className="font-medium">{trigger.name}</TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={trigger.enabled}
-                    disabled={
-                      settings.general.readOnlyMode ||
-                      pendingTrigger === trigger.name
-                    }
-                    aria-label={`${trigger.enabled ? "Disable" : "Enable"} trigger ${trigger.name}`}
-                    onCheckedChange={(checked) => {
-                      handleToggle(trigger, checked).catch(() => undefined);
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {pendingTrigger === trigger.name
-                      ? "Updating"
-                      : enabledLabel(trigger)}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary" className="font-mono text-[10px]">
-                  {trigger.timing}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {trigger.events.map((event) => (
-                    <Badge
-                      key={event}
-                      variant="outline"
-                      className="font-mono text-[10px]"
-                    >
-                      {event}
-                    </Badge>
-                  ))}
-                </div>
-              </TableCell>
-              <TableCell className="font-mono text-xs text-muted-foreground">
-                {trigger.functionName}
-              </TableCell>
-              <TableCell className="max-w-100 truncate font-mono text-[10px] text-muted-foreground">
-                <span title={trigger.definition}>{trigger.definition}</span>
-              </TableCell>
+    <Panel className="max-h-full">
+      <div className="min-h-0 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Enabled</TableHead>
+              <TableHead>Timing</TableHead>
+              <TableHead>Events</TableHead>
+              <TableHead>Function</TableHead>
+              <TableHead>Definition</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {triggers.map((trigger) => (
+              <TableRow key={trigger.name}>
+                <TableCell className="font-mono text-[12.5px] font-medium">
+                  {trigger.name}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={trigger.enabled}
+                      disabled={
+                        settings.general.readOnlyMode ||
+                        pendingTrigger === trigger.name
+                      }
+                      aria-label={`${trigger.enabled ? "Disable" : "Enable"} trigger ${trigger.name}`}
+                      onCheckedChange={(checked) => {
+                        handleToggle(trigger, checked).catch(() => undefined);
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {pendingTrigger === trigger.name
+                        ? "Updating"
+                        : enabledLabel(trigger)}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge className="font-mono">{trigger.timing}</Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {trigger.events.map((event) => (
+                      <Badge
+                        key={event}
+                        variant="outline"
+                        className="font-mono"
+                      >
+                        {event}
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {trigger.functionName}
+                </TableCell>
+                <TableCell className="max-w-100 truncate font-mono text-xs text-muted-foreground">
+                  <span title={trigger.definition}>{trigger.definition}</span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Panel>
   );
 }

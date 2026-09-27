@@ -3,6 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { ConnectionFields } from "@/shared/types/connection";
 import { ConnectionEnvImport } from "./connection-env-import";
 import type { ParsedEnvConnection } from "./parse-env-block";
@@ -31,28 +32,19 @@ export function ConnectionBasicFields({
   const [showUri, setShowUri] = useState(false);
   return (
     <>
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <Label>Connection Mode</Label>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] leading-none font-medium">Connection</span>
+        <div className="flex items-center gap-2">
           <ConnectionEnvImport onExtract={onEnvExtract} />
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={mode === "uri" ? "default" : "outline"}
-            size="sm"
-            onClick={() => onModeChange("uri")}
-          >
-            URI
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "fields" ? "default" : "outline"}
-            size="sm"
-            onClick={() => onModeChange("fields")}
-          >
-            Individual Fields
-          </Button>
+          <SegmentedControl
+            ariaLabel="Connection mode"
+            value={mode}
+            onValueChange={onModeChange}
+            options={[
+              { value: "uri", label: "URI" },
+              { value: "fields", label: "Individual fields" },
+            ]}
+          />
         </div>
       </div>
 
@@ -63,28 +55,27 @@ export function ConnectionBasicFields({
             <Input
               id="conn-uri"
               type={showUri ? "text" : "password"}
+              aria-invalid={errors.uri ? true : undefined}
               placeholder="postgresql://user:password@localhost:5432/mydb"
-              className="font-mono text-sm pr-9"
+              className="pr-8 font-mono text-xs"
               value={uri}
               onChange={(e) => onUriChange(e.target.value)}
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={() => setShowUri((value) => !value)}
-              className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground hover:text-foreground"
+              className="absolute top-1/2 right-1 -translate-y-1/2"
               aria-label={
                 showUri ? "Hide connection URI" : "Show connection URI"
               }
             >
-              {showUri ? (
-                <EyeOff className="size-3.5" />
-              ) : (
-                <Eye className="size-3.5" />
-              )}
-            </button>
+              {showUri ? <EyeOff /> : <Eye />}
+            </Button>
           </div>
           {errors.uri && (
-            <p className="text-xs text-destructive">{errors.uri}</p>
+            <p className="text-xs text-destructive-foreground">{errors.uri}</p>
           )}
         </div>
       )}
@@ -95,6 +86,7 @@ export function ConnectionBasicFields({
             <Label htmlFor="conn-host">Host</Label>
             <Input
               id="conn-host"
+              aria-invalid={errors.host ? true : undefined}
               placeholder="localhost"
               value={fields.host}
               onChange={(e) =>
@@ -102,13 +94,16 @@ export function ConnectionBasicFields({
               }
             />
             {errors.host && (
-              <p className="text-xs text-destructive">{errors.host}</p>
+              <p className="text-xs text-destructive-foreground">
+                {errors.host}
+              </p>
             )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="conn-port">Port</Label>
             <Input
               id="conn-port"
+              aria-invalid={errors.port ? true : undefined}
               type="number"
               placeholder="5432"
               value={fields.port}
@@ -120,13 +115,16 @@ export function ConnectionBasicFields({
               }
             />
             {errors.port && (
-              <p className="text-xs text-destructive">{errors.port}</p>
+              <p className="text-xs text-destructive-foreground">
+                {errors.port}
+              </p>
             )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="conn-database">Database</Label>
             <Input
               id="conn-database"
+              aria-invalid={errors.database ? true : undefined}
               placeholder="postgres"
               value={fields.database}
               onChange={(e) =>
@@ -134,7 +132,9 @@ export function ConnectionBasicFields({
               }
             />
             {errors.database && (
-              <p className="text-xs text-destructive">{errors.database}</p>
+              <p className="text-xs text-destructive-foreground">
+                {errors.database}
+              </p>
             )}
           </div>
           <div className="flex flex-col gap-1.5">

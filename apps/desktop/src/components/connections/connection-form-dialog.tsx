@@ -15,7 +15,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConnections } from "@/hooks/use-connections";
 import { useWorkspace } from "@/hooks/use-workspace";
@@ -243,7 +243,7 @@ export function ConnectionFormDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isEdit ? "Edit Connection" : "New Connection"}
+            {isEdit ? "Edit connection" : "New connection"}
           </DialogTitle>
           <DialogDescription>
             {isEdit
@@ -257,7 +257,7 @@ export function ConnectionFormDialog({
             <Label htmlFor="conn-label">Label</Label>
             <Input
               id="conn-label"
-              placeholder="My Database"
+              placeholder="Production replica"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
@@ -278,20 +278,19 @@ export function ConnectionFormDialog({
 
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger asChild>
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="w-full justify-between"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-sm text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span>Advanced Configuration</span>
-                <ChevronDown
+                <ChevronRight
                   className={cn(
-                    "size-4 transition-transform duration-200",
-                    advancedOpen && "rotate-180",
+                    "size-3.5 transition-transform duration-150",
+                    advancedOpen && "rotate-90",
                   )}
                 />
-              </Button>
+                SSL and SSH tunnel
+                <span className="h-px flex-1 bg-border" />
+              </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="flex flex-col gap-4 pt-3">
               <ConnectionSSLFieldset value={ssl} onChange={setSsl} />
@@ -303,13 +302,14 @@ export function ConnectionFormDialog({
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
-              {isEdit ? "Save Changes" : "Create Connection"}
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving && <Loader2 className="animate-spin" />}
+              {isEdit ? "Save changes" : "Create connection"}
             </Button>
           </DialogFooter>
         </form>

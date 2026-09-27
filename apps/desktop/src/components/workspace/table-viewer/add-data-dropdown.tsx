@@ -1,5 +1,5 @@
 /**
- * "Add Data" toolbar affordance for the Data tab. Offers two ways to insert
+ * "Add data" toolbar affordance for the Data tab. Offers two ways to insert
  * rows into a table:
  *
  *  - **Import JSON or CSV file** — a native open dialog, then a streamed,
@@ -139,29 +139,24 @@ export function AddDataDropdown({
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
+            variant="ghost"
+            size="xs"
             disabled={disabled || importing}
           >
-            <Plus className="size-3.5" />
-            Add Data
+            <Plus />
+            Add data
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-52">
-          <DropdownMenuItem
-            className="gap-2"
-            onSelect={() => void handleImport()}
-          >
-            <FileUp className="size-4" />
+          <DropdownMenuItem onSelect={() => void handleImport()}>
+            <FileUp />
             Import JSON or CSV file
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="gap-2"
             disabled={columns.length === 0}
             onSelect={() => setInsertOpen(true)}
           >
-            <FilePlus className="size-4" />
+            <FilePlus />
             Insert row
           </DropdownMenuItem>
         </DropdownMenuContent>

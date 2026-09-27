@@ -1,90 +1,189 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Quiet Utility tokens — see docs/DESIGN.md §2.
+ * Primitives (§2.1) are the only raw colours; everything else points at them.
+ */
 :root {
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-950: #0a0a0a;
+
+  --color-red-400: #ff6467;
+  --color-red-500: #fb2c36;
+  --color-red-700: #c10007;
+  --color-amber-400: #ffb900;
+  --color-amber-500: #fe9a00;
+  --color-amber-700: #bb4d00;
+  --color-emerald-400: #00d492;
+  --color-emerald-500: #00bc7d;
+  --color-emerald-700: #007a55;
+  --color-blue-400: #51a2ff;
+  --color-blue-500: #2b7fff;
+  --color-blue-700: #1447e6;
+
+  --viz-blue-l: #2a78d6;
+  --viz-blue-d: #3987e5;
+  --viz-orange-l: #eb6834;
+  --viz-orange-d: #d95926;
+  --viz-aqua-l: #1baf7a;
+  --viz-aqua-d: #199e70;
+  --viz-violet-l: #4a3aa7;
+  --viz-violet-d: #9085e9;
+  --viz-magenta-l: #e87ba4;
+  --viz-magenta-d: #d55181;
+}
+
+:root {
+  color-scheme: light;
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  --syntax-keyword: oklch(0.52 0.19 260);
-  --syntax-type: oklch(0.5 0.14 200);
-  --syntax-string: oklch(0.48 0.17 150);
-  --syntax-number: oklch(0.5 0.17 220);
-  --syntax-label: oklch(0.52 0.15 50);
+
+  --background: #ffffff;
+  --foreground: var(--color-neutral-800);
+  --card: #ffffff;
+  --card-foreground: var(--color-neutral-800);
+  --popover: #ffffff;
+  --popover-foreground: var(--color-neutral-800);
+
+  --primary: var(--color-neutral-800);
+  --primary-foreground: var(--color-neutral-50);
+  --secondary: color-mix(in oklab, #000 4%, transparent);
+  --secondary-foreground: var(--color-neutral-800);
+  --muted: color-mix(in oklab, #000 4%, transparent);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, #000);
+  --subtle-foreground: color-mix(in srgb, var(--foreground) 72%, transparent);
+  --accent: color-mix(in oklab, #000 4%, transparent);
+  --accent-foreground: var(--color-neutral-800);
+
+  --border: color-mix(in oklab, #000 8%, transparent);
+  --input: color-mix(in oklab, #000 10%, transparent);
+  --ring: var(--color-neutral-400);
+
+  --destructive: var(--color-red-500);
+  --destructive-foreground: var(--color-red-700);
+  --warning: var(--color-amber-500);
+  --warning-foreground: var(--color-amber-700);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-700);
+  --info: var(--color-blue-500);
+  --info-foreground: var(--color-blue-700);
+
+  --sidebar: var(--color-neutral-50);
+  --sidebar-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-800) 64%,
+    var(--sidebar)
+  );
+  --sidebar-primary: var(--color-neutral-800);
+  --sidebar-primary-foreground: var(--color-neutral-50);
+  --sidebar-accent: color-mix(in oklab, #000 4%, transparent);
+  --sidebar-accent-foreground: var(--color-neutral-800);
+  --sidebar-border: color-mix(in oklab, #000 6%, transparent);
+  --sidebar-ring: var(--color-neutral-400);
+
+  --code: #ffffff;
+  --code-foreground: var(--foreground);
+  --code-highlight: color-mix(in oklab, #000 4%, transparent);
+
+  --chart-ink: var(--color-neutral-600);
+  --chart-context: var(--color-neutral-300);
+  --chart-grid: color-mix(in oklab, #000 6%, transparent);
+  --chart-1: var(--viz-blue-l);
+  --chart-2: var(--viz-orange-l);
+  --chart-3: var(--viz-aqua-l);
+  --chart-4: var(--viz-violet-l);
+  --chart-5: var(--viz-magenta-l);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --syntax-keyword: oklch(0.65 0.19 260);
-  --syntax-type: oklch(0.7 0.14 200);
-  --syntax-string: oklch(0.72 0.17 150);
-  --syntax-number: oklch(0.7 0.17 220);
-  --syntax-label: oklch(0.75 0.15 50);
+  color-scheme: dark;
+  --background: color-mix(in srgb, var(--color-neutral-950) 96%, #fff);
+  --foreground: var(--color-neutral-100);
+  --card: color-mix(in srgb, var(--background) 98%, #fff);
+  --card-foreground: var(--color-neutral-100);
+  --popover: color-mix(in srgb, var(--background) 98%, #fff);
+  --popover-foreground: var(--color-neutral-100);
+
+  --primary: var(--color-neutral-100);
+  --primary-foreground: var(--color-neutral-800);
+  --secondary: color-mix(in oklab, #fff 4%, transparent);
+  --secondary-foreground: var(--color-neutral-100);
+  --muted: color-mix(in oklab, #fff 4%, transparent);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, #fff);
+  --subtle-foreground: color-mix(in srgb, var(--foreground) 72%, transparent);
+  --accent: color-mix(in oklab, #fff 4%, transparent);
+  --accent-foreground: var(--color-neutral-100);
+
+  --border: color-mix(in oklab, #fff 6%, transparent);
+  --input: color-mix(in oklab, #fff 8%, transparent);
+  --ring: var(--color-neutral-500);
+
+  --destructive: color-mix(in srgb, var(--color-red-500) 90%, #fff);
+  --destructive-foreground: var(--color-red-400);
+  --warning-foreground: var(--color-amber-400);
+  --success-foreground: var(--color-emerald-400);
+  --info-foreground: var(--color-blue-400);
+
+  --sidebar: color-mix(in srgb, var(--color-neutral-950) 97%, #fff);
+  --sidebar-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-100) 64%,
+    var(--sidebar)
+  );
+  --sidebar-primary: var(--color-neutral-100);
+  --sidebar-primary-foreground: var(--color-neutral-800);
+  --sidebar-accent: color-mix(in oklab, #fff 4%, transparent);
+  --sidebar-accent-foreground: var(--color-neutral-100);
+  --sidebar-border: color-mix(in oklab, #fff 5%, transparent);
+  --sidebar-ring: var(--color-neutral-400);
+
+  --code: color-mix(in srgb, var(--background) 98%, #fff);
+  --code-highlight: color-mix(in oklab, #fff 4%, transparent);
+
+  --chart-ink: var(--color-neutral-400);
+  --chart-context: var(--color-neutral-700);
+  --chart-grid: color-mix(in oklab, #fff 6%, transparent);
+  --chart-1: var(--viz-blue-d);
+  --chart-2: var(--viz-orange-d);
+  --chart-3: var(--viz-aqua-d);
+  --chart-4: var(--viz-violet-d);
+  --chart-5: var(--viz-magenta-d);
 }
 
 @theme inline {
+  --font-sans: "Geist", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono:
+    "Geist Mono", "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Elevation (§6). Depth comes from light edges, not drop shadows. */
+  --shadow-edge:
+    0 -1px 0 0 color-mix(in oklab, #fff 6%, transparent),
+    0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-shine:
+    inset 0 1px 0 0 color-mix(in oklab, #fff 16%, transparent),
+    0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-floating: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -97,18 +196,20 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -117,38 +218,104 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --font-sans:
-    "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono:
-    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-highlight: var(--code-highlight);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-ink: var(--chart-ink);
+  --color-chart-context: var(--chart-context);
+  --color-chart-grid: var(--chart-grid);
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply antialiased;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading text-balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+  }
+
+  /* Checkbox (§9.8): 16px, 4px radius, primary fill + check glyph. */
+  input[type="checkbox"] {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    border: 1px solid var(--input);
+    border-radius: 4px;
+    background-color: var(--background);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+    cursor: pointer;
+    transition:
+      background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  input[type="checkbox"]::before {
+    content: "";
+    width: 0.625rem;
+    height: 0.625rem;
+    background-color: var(--primary-foreground);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    transform: scale(0);
+    transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  input[type="checkbox"]:checked {
+    border-color: var(--primary);
+    background-color: var(--primary);
+  }
+  input[type="checkbox"]:checked::before {
+    transform: scale(1);
+  }
+  input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.64;
+  }
+
+  /* Hairline scrollbars that sit on any surface. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 16%, transparent)
+      transparent;
   }
 }
 
 /*
- * Data-view density. `comfortable` uses the component defaults (TableCell
- * p-2 / TableHead h-10); `compact` tightens vertical rhythm across every
- * table in the workspace (data, structure, indexes, relation lists, …) via
- * the data-density attribute on the workspace root — no per-table wiring.
+ * Data-view density (§9.17). `comfortable` uses the h-10 row default;
+ * `compact` switches every workspace table to the h-8 dense variant via the
+ * data-density attribute on the workspace root — no per-table wiring.
  *
- * Left unlayered on purpose: Tailwind's padding/height utilities live in the
+ * Left unlayered on purpose: Tailwind's height/padding utilities live in the
  * `utilities` cascade layer, which would otherwise win over a layered rule
  * regardless of selector specificity. Unlayered rules outrank every layer.
  */
 [data-density="compact"] [data-slot="table-cell"] {
+  height: 2rem;
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
@@ -158,11 +325,11 @@
 }
 
 @layer components {
+  /* Opt back into ::-webkit-scrollbar styling (Chromium ignores it while
+     the standard scrollbar-width/color properties are set). */
   .workspace-tab-scrollbar {
-    scrollbar-color: color-mix(in oklab, var(--foreground) 28%, transparent)
-      transparent;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
+    scrollbar-width: auto;
+    scrollbar-color: auto;
   }
 
   .workspace-tab-scrollbar::-webkit-scrollbar {
@@ -174,12 +341,22 @@
   }
 
   .workspace-tab-scrollbar::-webkit-scrollbar-thumb {
-    background: color-mix(in oklab, var(--foreground) 28%, transparent);
+    background: color-mix(in oklab, var(--foreground) 16%, transparent);
     border-radius: 999px;
   }
 
   .workspace-tab-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklab, var(--foreground) 42%, transparent);
+    background: color-mix(in oklab, var(--foreground) 28%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 150ms !important;
+    animation-duration: 150ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

@@ -40,7 +40,7 @@ function ExpandableVector({ vector }: { vector: number[] }) {
         [{preview}, …{" "}
         <button
           onClick={() => setExpanded(true)}
-          className="text-primary hover:underline"
+          className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           {dims} dimensions
         </button>
@@ -51,7 +51,7 @@ function ExpandableVector({ vector }: { vector: number[] }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] text-muted-foreground">
+      <span className="text-[11px] text-subtle-foreground">
         {dims} dimensions
       </span>
 
