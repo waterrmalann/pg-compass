@@ -5,7 +5,6 @@ import process from "node:process";
 const versionFiles = [
   "apps/desktop/package.json",
   "apps/landing/package.json",
-  "apps/landing-redesign/package.json",
 ];
 
 const semverPattern =
