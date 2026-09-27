@@ -22,7 +22,10 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        // Radix wraps children in a `display: table` div that grows to fit
+        // unwrapped content, which defeats `truncate` and lets the sidebar
+        // scroll sideways. Block layout keeps children at the viewport width.
+        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&>div]:block!"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
