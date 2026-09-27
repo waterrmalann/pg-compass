@@ -8,10 +8,10 @@ import { stringify } from "@/lib/utils";
 
 const nullRenderer: TypeRenderer = {
   renderCell() {
-    return <span className="italic text-muted-foreground/60">null</span>;
+    return <span className="text-muted-foreground">null</span>;
   },
   renderCard() {
-    return <span className="italic text-muted-foreground/60">null</span>;
+    return <span className="text-muted-foreground">null</span>;
   },
 };
 
@@ -55,10 +55,7 @@ const booleanRenderer: TypeRenderer = {
   renderCell(value: unknown) {
     const bool = Boolean(value);
     return (
-      <Badge
-        variant={bool ? "default" : "secondary"}
-        className="text-[10px] px-1.5 py-0"
-      >
+      <Badge variant={bool ? "default" : "outline"} className="font-mono">
         {bool ? "true" : "false"}
       </Badge>
     );
@@ -66,10 +63,7 @@ const booleanRenderer: TypeRenderer = {
   renderCard(value: unknown) {
     const bool = Boolean(value);
     return (
-      <Badge
-        variant={bool ? "default" : "secondary"}
-        className="text-[10px] px-1.5 py-0"
-      >
+      <Badge variant={bool ? "default" : "outline"} className="font-mono">
         {bool ? "true" : "false"}
       </Badge>
     );

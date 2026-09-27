@@ -1,3 +1,5 @@
+import { Rows3 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -36,11 +38,7 @@ export function TableDataView({
   editContext,
 }: Readonly<TableDataViewProps>) {
   if (rows.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No rows to display.
-      </div>
-    );
+    return <EmptyState icon={<Rows3 />} title="No rows to display." />;
   }
 
   // Row-edit affordance gating: when off, the gutter column is not rendered
@@ -56,13 +54,15 @@ export function TableDataView({
       <Table>
         <TableHeader className="sticky top-0 z-10 bg-card">
           <TableRow>
-            <TableHead className="w-8 sticky left-0 z-20 bg-card" />
+            <TableHead className="sticky left-0 z-20 w-8 bg-card px-0" />
             {columns.map((col) => (
-              <TableHead key={col.name} className="whitespace-nowrap">
+              <TableHead key={col.name} className="h-12 whitespace-nowrap">
                 <div className="group/header flex items-center gap-1">
-                  <div className="flex flex-col gap-0.5">
-                    <span>{col.name}</span>
-                    <span className="text-[11px] font-normal text-muted-foreground/70">
+                  <div className="flex flex-col">
+                    <span className="font-mono text-[12.5px] text-foreground">
+                      {col.name}
+                    </span>
+                    <span className="font-mono text-[11px] font-normal text-subtle-foreground">
                       {col.dataType}
                     </span>
                   </div>
@@ -70,7 +70,7 @@ export function TableDataView({
                     label={`Copy column name ${col.name}`}
                     text={col.name}
                     successMessage="Column name copied"
-                    className="size-8 opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100"
+                    className="opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100"
                   />
                 </div>
               </TableHead>
@@ -82,9 +82,9 @@ export function TableDataView({
             const rowKey = `row-${String(rowIndex)}`;
             const pkValues = pkValuesFor(row, editContext.primaryKey);
             return (
-              <TableRow key={rowKey} className="group hover:bg-muted/50">
+              <TableRow key={rowKey} className="group">
                 <TableCell className="w-8 p-0 align-middle">
-                  <div className="flex h-full items-center justify-center gap-0.5 px-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                  <div className="flex h-full items-center justify-center gap-0.5 px-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                     <DataCopyButton
                       label={`Copy row ${String(rowIndex + 1)}`}
                       text={serializeRow(columns, row)}
@@ -109,7 +109,7 @@ export function TableDataView({
                 {columns.map((col) => (
                   <TableCell
                     key={col.name}
-                    className="max-w-75 truncate font-mono text-xs"
+                    className="max-w-75 truncate pr-2 font-mono text-[12.5px]"
                   >
                     <div className="group/cell flex min-w-0 items-center gap-1">
                       <div className="min-w-0 flex-1 truncate">
@@ -132,7 +132,7 @@ export function TableDataView({
                         label={`Copy ${col.name} value`}
                         text={serializeCellValue(row[col.name])}
                         successMessage="Cell value copied"
-                        className="size-8 shrink-0 opacity-0 group-hover/cell:opacity-100 focus-visible:opacity-100"
+                        className="shrink-0 opacity-0 group-hover/cell:opacity-100 focus-visible:opacity-100"
                       />
                     </div>
                   </TableCell>

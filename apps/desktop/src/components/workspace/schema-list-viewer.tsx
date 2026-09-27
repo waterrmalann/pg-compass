@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { FolderTree } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import {
   Table,
   TableBody,
@@ -57,38 +60,45 @@ export function SchemaListViewer({ path }: Readonly<SchemaListViewerProps>) {
       refreshLabel="Refresh connection schemas and relation counts"
     >
       {rows.length === 0 ? (
-        <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-          No schemas found for this database.
-        </div>
+        <Panel className="h-full">
+          <EmptyState
+            icon={<FolderTree />}
+            title="No schemas found for this database."
+          />
+        </Panel>
       ) : (
-        <div className="h-full overflow-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-card">
-              <TableRow>
-                <TableHead>Schema Name</TableHead>
-                <TableHead>Tables</TableHead>
-                <TableHead>Views</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((schema) => (
-                <TableRow
-                  key={schema.name}
-                  className="cursor-pointer"
-                  onClick={() => handleOpenSchema(schema.name)}
-                >
-                  <TableCell className="font-medium">{schema.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {schema.tables.length}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {schema.views.length}
-                  </TableCell>
+        <Panel className="max-h-full">
+          <div className="min-h-0 overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead>Schema name</TableHead>
+                  <TableHead className="w-40 text-right">Tables</TableHead>
+                  <TableHead className="w-40 text-right">Views</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {rows.map((schema) => (
+                  <TableRow
+                    key={schema.name}
+                    className="cursor-pointer"
+                    onClick={() => handleOpenSchema(schema.name)}
+                  >
+                    <TableCell className="font-mono text-[12.5px] font-medium">
+                      {schema.name}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {schema.tables.length}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {schema.views.length}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Panel>
       )}
     </ViewerShell>
   );

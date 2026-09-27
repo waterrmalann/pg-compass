@@ -49,10 +49,10 @@ export function RowEditButton(props: Readonly<RowEditButtonProps>) {
         onClick={() => setOpen(true)}
         className={
           props.className ??
-          "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          "inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         }
       >
-        <Pencil className="size-3.5" />
+        <Pencil className="size-3" />
       </button>
       {open ? (
         <RowEditDialog

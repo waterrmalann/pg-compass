@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Dialog,
   DialogContent,
@@ -111,7 +112,7 @@ export function ExportDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Export Data</DialogTitle>
+          <DialogTitle>Export data</DialogTitle>
           <DialogDescription>
             {isQueryExport
               ? "Export the results of your query."
@@ -119,40 +120,24 @@ export function ExportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Format selector */}
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            Format
-          </span>
-          <div className="flex items-center gap-0.5 self-start rounded-md border border-border p-0.5">
-            <Button
-              type="button"
-              variant={format === "csv" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 px-4 text-xs"
-              onClick={() => setFormat("csv")}
-            >
-              CSV
-            </Button>
-            <Button
-              type="button"
-              variant={format === "json" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 px-4 text-xs"
-              onClick={() => setFormat("json")}
-            >
-              JSON
-            </Button>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] font-medium">Format</span>
+          <SegmentedControl
+            ariaLabel="Export format"
+            value={format}
+            onValueChange={setFormat}
+            options={[
+              { value: "csv", label: "CSV" },
+              { value: "json", label: "JSON" },
+            ]}
+          />
         </div>
 
         {/* Show the query for query-based exports */}
         {isQueryExport && sql && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              Query
-            </span>
-            <pre className="max-h-32 overflow-auto rounded-md bg-muted p-2 font-mono text-xs">
+            <span className="text-xs text-muted-foreground">Query</span>
+            <pre className="max-h-32 overflow-auto rounded-lg border border-border bg-code p-3 font-mono text-xs leading-5">
               {sql}
             </pre>
           </div>
@@ -167,17 +152,8 @@ export function ExportDialog({
           >
             Cancel
           </Button>
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={handleExport}
-            disabled={exporting}
-          >
-            {exporting ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Download className="size-3.5" />
-            )}
+          <Button size="sm" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="animate-spin" /> : <Download />}
             Export
           </Button>
         </DialogFooter>

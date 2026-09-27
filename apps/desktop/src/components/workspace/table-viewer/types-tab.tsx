@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight, Shapes } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -52,24 +54,12 @@ function summary(type: TableTypeInfo): string {
   }
 }
 
-function kindVariant(
-  kind: TableTypeInfo["kind"],
-): "default" | "secondary" | "outline" {
-  if (kind === "ENUM") return "secondary";
-  if (kind === "DOMAIN") return "outline";
-  return "default";
-}
-
 function TypeDetails({ type }: Readonly<{ type: TableTypeInfo }>) {
   if (type.kind === "ENUM") {
     return (
       <div className="flex flex-wrap gap-1">
         {type.enumLabels.map((label) => (
-          <Badge
-            key={label}
-            variant="outline"
-            className="font-mono text-[10px]"
-          >
+          <Badge key={label} variant="outline" className="font-mono">
             {label}
           </Badge>
         ))}
@@ -108,9 +98,9 @@ function TypeDetails({ type }: Readonly<{ type: TableTypeInfo }>) {
   }
 
   return (
-    <div className="overflow-auto rounded-md border border-border">
+    <div className="overflow-auto rounded-lg border border-border bg-background">
       <Table>
-        <TableHeader className="bg-card">
+        <TableHeader>
           <TableRow>
             <TableHead>Attribute</TableHead>
             <TableHead>Type</TableHead>
@@ -120,14 +110,14 @@ function TypeDetails({ type }: Readonly<{ type: TableTypeInfo }>) {
         <TableBody>
           {type.compositeAttributes.map((attribute) => (
             <TableRow key={attribute.name}>
-              <TableCell className="font-medium">{attribute.name}</TableCell>
+              <TableCell className="font-mono text-[12.5px] font-medium">
+                {attribute.name}
+              </TableCell>
               <TableCell>
-                <Badge variant="secondary" className="font-mono text-[10px]">
-                  {attribute.dataType}
-                </Badge>
+                <Badge className="font-mono">{attribute.dataType}</Badge>
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {attribute.isNullable ? "YES" : "NOT NULL"}
+                {attribute.isNullable ? "Nullable" : "NOT NULL"}
               </TableCell>
             </TableRow>
           ))}
@@ -187,103 +177,105 @@ export function TypesTab({
   );
 
   if (loading && types.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (types.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No user-defined types found on this table.
-      </div>
+      <Panel className="h-full">
+        <EmptyState
+          icon={<Shapes />}
+          title="No user-defined types found on this table."
+        />
+      </Panel>
     );
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card">
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Schema</TableHead>
-            <TableHead>Kind</TableHead>
-            <TableHead>Used By</TableHead>
-            <TableHead>Summary</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {types.map((type) => {
-            const key = typeKey(type);
-            const expanded = expandedType === key;
+    <Panel className="max-h-full">
+      <div className="min-h-0 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Schema</TableHead>
+              <TableHead>Kind</TableHead>
+              <TableHead>Used by</TableHead>
+              <TableHead>Summary</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {types.map((type) => {
+              const key = typeKey(type);
+              const expanded = expandedType === key;
 
-            return (
-              <Fragment key={key}>
-                <TableRow key={key} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-expanded={expanded}
-                      onClick={() => {
-                        setExpandedType(expanded ? null : key);
-                      }}
-                    >
-                      <ChevronRight
-                        className={cn(
-                          "size-3.5 shrink-0 text-muted-foreground transition-transform",
-                          expanded && "rotate-90",
-                        )}
-                      />
-                      <span>{type.name}</span>
-                    </button>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {type.schema}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={kindVariant(type.kind)}
-                      className="font-mono text-[10px]"
-                    >
-                      {type.kind}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {type.usedByColumns.map((column) => (
-                        <Badge
-                          key={`${column.name}-${String(column.isArray)}`}
-                          variant="outline"
-                          className="font-mono text-[10px]"
-                        >
-                          {column.name}
-                          {column.isArray ? "[]" : ""}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-100 truncate text-xs text-muted-foreground">
-                    <span title={summary(type)}>{summary(type)}</span>
-                  </TableCell>
-                </TableRow>
-                {expanded && (
-                  <TableRow key={`${key}-details`}>
-                    <TableCell colSpan={5} className="bg-muted/20 p-3">
-                      <div className="mb-2 text-xs text-muted-foreground">
-                        Used by {usedByLabel(type)}
+              return (
+                <Fragment key={key}>
+                  <TableRow key={key}>
+                    <TableCell className="font-mono text-[12.5px] font-medium">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-expanded={expanded}
+                        onClick={() => {
+                          setExpandedType(expanded ? null : key);
+                        }}
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                            expanded && "rotate-90",
+                          )}
+                        />
+                        <span>{type.name}</span>
+                      </button>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {type.schema}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className="font-mono">{type.kind}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {type.usedByColumns.map((column) => (
+                          <Badge
+                            key={`${column.name}-${String(column.isArray)}`}
+                            variant="outline"
+                            className="font-mono"
+                          >
+                            {column.name}
+                            {column.isArray ? "[]" : ""}
+                          </Badge>
+                        ))}
                       </div>
-                      <TypeDetails type={type} />
+                    </TableCell>
+                    <TableCell className="max-w-100 truncate text-xs text-muted-foreground">
+                      <span title={summary(type)}>{summary(type)}</span>
                     </TableCell>
                   </TableRow>
-                )}
-              </Fragment>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+                  {expanded && (
+                    <TableRow
+                      key={`${key}-details`}
+                      className="hover:bg-transparent"
+                    >
+                      <TableCell
+                        colSpan={5}
+                        className="bg-muted/40 px-4 py-3 whitespace-normal"
+                      >
+                        <div className="mb-2 text-xs text-muted-foreground">
+                          Used by {usedByLabel(type)}
+                        </div>
+                        <TypeDetails type={type} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </Panel>
   );
 }

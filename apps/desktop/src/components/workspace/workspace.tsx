@@ -12,6 +12,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { useConnections } from "@/hooks/use-connections";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { useDensity } from "@/hooks/use-density";
 import { useWorkspaceShortcuts } from "@/hooks/use-workspace-shortcuts";
@@ -71,7 +72,7 @@ export function Workspace() {
 
   return (
     <main
-      className="flex flex-1 flex-col overflow-hidden"
+      className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background"
       data-density={density}
     >
       <ApplicationTitle>{buildWindowTitle(activeTab?.view)}</ApplicationTitle>
@@ -104,19 +105,33 @@ function WorkspaceTabBar({
   onCloseTab: (id: string) => void;
   onCloseAllTabs: () => void;
 }>) {
+  const { connections } = useConnections();
+
+  // Resolve colours from the live connection list so every tab of a
+  // connection is tinted (not only ones opened from the sidebar) and colour
+  // edits apply immediately. The colour stored on the tab is a fallback.
+  function colorFor(tab: WorkspaceTab): string | undefined {
+    const { view } = tab;
+    if (view.type === "database-manager") return undefined;
+    const connection = connections.find(
+      (item) => item.id === view.path.connectionId,
+    );
+    return connection ? connection.color : tab.color;
+  }
+
   if (tabs.length === 0) {
     return (
-      <div className="flex h-10 min-h-10 items-center border-b border-border bg-card px-3">
+      <div className="flex h-10 min-h-10 items-center border-b border-border bg-sidebar px-4">
         <span className="text-xs text-muted-foreground">No tabs open</span>
       </div>
     );
   }
 
   return (
-    <div className="workspace-tab-scrollbar flex h-10 min-h-10 items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-card px-2 pt-1">
+    <div className="workspace-tab-scrollbar flex h-10 min-h-10 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-sidebar px-1.5">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
-        const tabStyle = getTabStyle(tab.color, isActive);
+        const color = colorFor(tab);
 
         function handleTabAuxClick(event: ReactMouseEvent<HTMLButtonElement>) {
           if (event.button !== 1) return;
@@ -135,17 +150,28 @@ function WorkspaceTabBar({
             <ContextMenuTrigger asChild>
               <div
                 title={tab.title}
+                data-active={isActive}
                 className={cn(
-                  "group flex h-8 w-44 min-w-32 max-w-44 shrink-0 items-center gap-1 rounded-t-md border border-transparent px-2 text-xs",
+                  "group flex h-7 w-44 min-w-32 max-w-44 shrink-0 items-center gap-1.5 rounded-md border pr-0.5 pl-2.5 text-xs transition-colors duration-150",
                   isActive
-                    ? "border-border border-b-card bg-background text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "border-border bg-background font-medium text-foreground shadow-xs/5 dark:shadow-edge"
+                    : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                  color && connectionTintClassName(isActive),
                 )}
-                style={tabStyle}
+                style={
+                  color ? ({ "--tab-tint": color } as CSSProperties) : undefined
+                }
               >
+                {color ? (
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                ) : null}
                 <button
                   type="button"
-                  className="h-full min-w-0 flex-1 cursor-pointer truncate text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-full min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onMouseDown={handleTabMouseDown}
                   onAuxClick={handleTabAuxClick}
                   onClick={(event) => {
@@ -158,15 +184,18 @@ function WorkspaceTabBar({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
-                  className="size-8 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                  size="icon-xs"
+                  className={cn(
+                    "size-5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [&_svg]:size-3",
+                    isActive && "opacity-100",
+                  )}
                   aria-label={`Close ${tab.title}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onCloseTab(tab.id);
                   }}
                 >
-                  <X className="size-3" />
+                  <X />
                 </Button>
               </div>
             </ContextMenuTrigger>
@@ -185,18 +214,16 @@ function WorkspaceTabBar({
   );
 }
 
-function getTabStyle(
-  color: string | undefined,
-  isActive: boolean,
-): CSSProperties | undefined {
-  if (!color) return undefined;
-
-  return {
-    backgroundColor: `color-mix(in oklab, ${color} ${isActive ? "20%" : "12%"}, transparent)`,
-    borderColor: isActive
-      ? `color-mix(in oklab, ${color} 55%, var(--border))`
-      : `color-mix(in oklab, ${color} 30%, transparent)`,
-  };
+/**
+ * Tabs from a coloured connection carry a light tint of that colour so tabs
+ * from different databases are easy to tell apart (docs/DESIGN.md §15). The
+ * colour is user data, so it is applied through the `--tab-tint` variable.
+ */
+function connectionTintClassName(isActive: boolean): string {
+  if (isActive) {
+    return "border-[color:color-mix(in_oklab,var(--tab-tint)_45%,var(--border))] bg-[color:color-mix(in_oklab,var(--tab-tint)_16%,var(--background))]";
+  }
+  return "border-[color:color-mix(in_oklab,var(--tab-tint)_22%,transparent)] bg-[color:color-mix(in_oklab,var(--tab-tint)_9%,transparent)] hover:bg-[color:color-mix(in_oklab,var(--tab-tint)_15%,transparent)]";
 }
 
 function WorkspaceTabPanels({
@@ -263,8 +290,8 @@ function TabViewRenderer({ tab }: Readonly<{ tab: WorkspaceTab }>) {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-background">
-      <span className="text-sm text-muted-foreground">
+    <div className="flex h-full items-center justify-center bg-background">
+      <span className="text-xs text-muted-foreground">
         Unsupported viewer type.
       </span>
     </div>

@@ -55,7 +55,7 @@ describe("QueryTab QOL controls", () => {
 
     render(<QueryTab connectionId="conn-1" schema="app" table="users" />);
 
-    await user.click(screen.getByRole("button", { name: "Run Query" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
     await waitFor(() =>
@@ -97,7 +97,7 @@ describe("QueryTab QOL controls", () => {
         onRefreshComplete={onRefreshComplete}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Run Query" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     await waitFor(() =>
       expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(1),
     );

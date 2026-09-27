@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import {
   Table,
@@ -29,15 +36,12 @@ const CONSTRAINT_TYPE_ORDER: ConstraintInfo["type"][] = [
   "EXCLUDE",
 ];
 
-const CONSTRAINT_BADGE_VARIANT: Record<
-  ConstraintInfo["type"],
-  "default" | "secondary" | "outline"
-> = {
-  "PRIMARY KEY": "default",
-  "FOREIGN KEY": "secondary",
-  UNIQUE: "secondary",
-  CHECK: "outline",
-  EXCLUDE: "outline",
+const CONSTRAINT_TITLE: Record<ConstraintInfo["type"], string> = {
+  "PRIMARY KEY": "Primary key",
+  "FOREIGN KEY": "Foreign keys",
+  UNIQUE: "Unique",
+  CHECK: "Check",
+  EXCLUDE: "Exclusion",
 };
 
 function groupByType(
@@ -106,41 +110,36 @@ export function ConstraintsTab({
   );
 
   if (loading && constraints.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (constraints.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No constraints found on this table.
-      </div>
+      <Panel className="h-full">
+        <EmptyState
+          icon={<KeyRound />}
+          title="No constraints found on this table."
+        />
+      </Panel>
     );
   }
 
   const groups = groupByType(constraints);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-1">
+    <div className="flex h-full flex-col gap-4 overflow-auto">
       {Array.from(groups.entries()).map(([type, items]) => (
-        <section key={type}>
-          <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Badge
-              variant={CONSTRAINT_BADGE_VARIANT[type]}
-              className="text-[10px]"
-            >
+        <Panel key={type} className="shrink-0">
+          <PanelHeader>
+            <PanelTitle>{CONSTRAINT_TITLE[type]}</PanelTitle>
+            <PanelCount>{items.length}</PanelCount>
+            <span className="ml-auto font-mono text-[11px] text-subtle-foreground">
               {type}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              ({items.length})
             </span>
-          </h3>
-          <div className="overflow-auto rounded-lg border border-border">
+          </PanelHeader>
+          <div className="overflow-auto">
             <Table>
-              <TableHeader className="bg-card">
+              <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Columns</TableHead>
@@ -150,31 +149,30 @@ export function ConstraintsTab({
               </TableHeader>
               <TableBody>
                 {items.map((c) => (
-                  <TableRow key={c.name} className="hover:bg-muted/50">
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableRow key={c.name}>
+                    <TableCell className="font-mono text-[12.5px] font-medium">
+                      {c.name}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {c.columns.map((col) => (
-                          <Badge
-                            key={col}
-                            variant="outline"
-                            className="font-mono text-[10px]"
-                          >
+                          <Badge key={col} className="font-mono">
                             {col}
                           </Badge>
                         ))}
                       </div>
                     </TableCell>
                     {type === "FOREIGN KEY" && (
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="font-mono text-xs">
                         {c.foreignTable && (
-                          <span className="font-mono">
-                            {c.foreignTable}({c.foreignColumns.join(", ")})
-                          </span>
+                          <QualifiedReference
+                            table={c.foreignTable}
+                            columns={c.foreignColumns}
+                          />
                         )}
                       </TableCell>
                     )}
-                    <TableCell className="max-w-100 truncate font-mono text-[10px] text-muted-foreground">
+                    <TableCell className="max-w-100 truncate font-mono text-xs text-muted-foreground">
                       <span title={c.definition ?? undefined}>
                         {c.definition}
                       </span>
@@ -184,8 +182,25 @@ export function ConstraintsTab({
               </TableBody>
             </Table>
           </div>
-        </section>
+        </Panel>
       ))}
     </div>
+  );
+}
+
+/** `schema.` in muted, the relation name in foreground (§9.17). */
+function QualifiedReference({
+  table,
+  columns,
+}: Readonly<{ table: string; columns: string[] }>) {
+  const dot = table.lastIndexOf(".");
+  const schemaPart = dot >= 0 ? table.slice(0, dot + 1) : "";
+  const namePart = dot >= 0 ? table.slice(dot + 1) : table;
+  return (
+    <span>
+      <span className="text-muted-foreground">{schemaPart}</span>
+      <span className="font-medium text-foreground">{namePart}</span>
+      <span className="text-muted-foreground">({columns.join(", ")})</span>
+    </span>
   );
 }

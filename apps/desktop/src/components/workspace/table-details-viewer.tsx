@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { RelationSubTabsList } from "@/components/workspace/relation-sub-tabs";
 import { ViewerShell } from "@/components/workspace/viewer-shell";
 import { DataTab } from "@/components/workspace/table-viewer/data-tab";
 import { StructureTab } from "@/components/workspace/table-viewer/structure-tab";
@@ -99,31 +100,19 @@ export function TableDetailsViewer({
             activeSubTab: value as typeof session.activeSubTab,
           })
         }
-        className="flex h-full min-h-0 flex-col"
+        className="flex h-full min-h-0 flex-col gap-3"
       >
-        <TabsList variant="line" className="h-8 shrink-0">
-          <TabsTrigger value="data" className="h-8 px-3 text-xs">
-            Data
-          </TabsTrigger>
-          <TabsTrigger value="structure" className="h-8 px-3 text-xs">
-            Structure
-          </TabsTrigger>
-          <TabsTrigger value="indexes" className="h-8 px-3 text-xs">
-            Indexes
-          </TabsTrigger>
-          <TabsTrigger value="constraints" className="h-8 px-3 text-xs">
-            Constraints
-          </TabsTrigger>
-          <TabsTrigger value="triggers" className="h-8 px-3 text-xs">
-            Triggers
-          </TabsTrigger>
-          <TabsTrigger value="types" className="h-8 px-3 text-xs">
-            Types
-          </TabsTrigger>
-          <TabsTrigger value="query" className="h-8 px-3 text-xs">
-            Query
-          </TabsTrigger>
-        </TabsList>
+        <RelationSubTabsList
+          tabs={[
+            "data",
+            "structure",
+            "indexes",
+            "constraints",
+            "triggers",
+            "types",
+            "query",
+          ]}
+        />
 
         <TabsContent value="data" className="min-h-0 flex-1">
           <DataTab

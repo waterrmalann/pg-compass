@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { fieldClassName, Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 const DATE_TYPES = new Set(["date"]);
 const TIME_TYPES = new Set(["time", "timetz"]);
@@ -106,7 +107,7 @@ export function DateTimeEditor({
           value={timezone}
           disabled={disabled}
           aria-label="Timezone offset"
-          className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
+          className={cn(fieldClassName, "h-8 w-auto px-2 font-mono text-xs")}
           onChange={(event) => {
             onChange(withTimezone(visualValue, event.target.value));
           }}

@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Braces, CircleAlert, Loader2, Table2, Trash2 } from "lucide-react";
+import {
+  Braces,
+  CircleAlert,
+  Loader2,
+  Table2,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Table,
   TableBody,
@@ -154,19 +163,22 @@ export function DeleteDataDialog({
 
         <div className="flex min-h-0 min-w-0 flex-col gap-3 overflow-x-hidden overflow-y-auto pr-1">
           <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               Current filter
             </span>
             <Input
               value={filterText}
               readOnly
-              className="h-8 min-w-0 font-mono text-xs"
+              className="min-w-0 font-mono text-xs"
               aria-label="Current delete filter"
             />
           </div>
 
-          <div className="border-destructive/40 bg-destructive/10 text-destructive flex min-w-0 gap-2 rounded-md border px-3 py-2 text-xs">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          <div
+            role="note"
+            className="flex min-w-0 gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs leading-5 text-warning-foreground"
+          >
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
             <p className="min-w-0">
               Unintended documents may be deleted if new documents are added or
               existing documents are changed while this dialog is open. Review
@@ -175,31 +187,22 @@ export function DeleteDataDialog({
           </div>
 
           <div className="flex min-w-0 items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               Preview sample
             </span>
-            <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
-              <Button
-                type="button"
-                variant={previewMode === "table" ? "secondary" : "ghost"}
-                size="icon-sm"
-                className="size-8"
-                onClick={() => setPreviewMode("table")}
-                aria-label="Table preview"
-              >
-                <Table2 className="size-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant={previewMode === "json" ? "secondary" : "ghost"}
-                size="icon-sm"
-                className="size-8"
-                onClick={() => setPreviewMode("json")}
-                aria-label="JSON preview"
-              >
-                <Braces className="size-3.5" />
-              </Button>
-            </div>
+            <SegmentedControl
+              ariaLabel="Preview mode"
+              value={previewMode}
+              onValueChange={setPreviewMode}
+              options={[
+                {
+                  value: "table",
+                  icon: <Table2 />,
+                  ariaLabel: "Table preview",
+                },
+                { value: "json", icon: <Braces />, ariaLabel: "JSON preview" },
+              ]}
+            />
           </div>
 
           <DeletePreview
@@ -226,17 +229,12 @@ export function DeleteDataDialog({
             type="button"
             variant="destructive"
             size="sm"
-            className="gap-1.5"
             disabled={!canDelete}
             onClick={() => {
               void handleDelete();
             }}
           >
-            {deleting ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="size-3.5" />
-            )}
+            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
             Delete
           </Button>
         </DialogFooter>
@@ -262,25 +260,32 @@ function DeletePreview({
 }>) {
   if (loading) {
     return (
-      <div className="flex h-52 items-center justify-center rounded-md border border-border">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      <div className="h-52 rounded-lg border border-border">
+        <LoadingState />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-52 flex-col items-center justify-center gap-2 rounded-md border border-border px-4 text-center">
-        <CircleAlert className="size-5 text-destructive" />
-        <p className="max-w-lg text-xs text-destructive">{error}</p>
+      <div className="h-52 rounded-lg border border-border">
+        <EmptyState
+          icon={<CircleAlert className="text-destructive-foreground" />}
+          title="Preview failed."
+          description={
+            <span className="font-mono text-destructive-foreground">
+              {error}
+            </span>
+          }
+        />
       </div>
     );
   }
 
   if (rows.length === 0) {
     return (
-      <div className="flex h-52 items-center justify-center rounded-md border border-border text-sm text-muted-foreground">
-        No documents match the current filter.
+      <div className="h-52 rounded-lg border border-border">
+        <EmptyState title="No documents match the current filter." />
       </div>
     );
   }
@@ -288,7 +293,7 @@ function DeletePreview({
   if (mode === "json") {
     return (
       <ScrollArea
-        className="h-52 min-w-0 rounded-md border border-border bg-muted/30"
+        className="h-52 min-w-0 rounded-lg border border-border bg-code"
         data-testid="delete-preview-json-scroll"
       >
         <pre className="max-w-full overflow-x-auto p-3 font-mono text-xs">
@@ -300,7 +305,7 @@ function DeletePreview({
 
   return (
     <div
-      className="h-52 min-w-0 max-w-full overflow-auto rounded-md border border-border"
+      className="h-52 min-w-0 max-w-full overflow-auto rounded-lg border border-border"
       data-testid="delete-preview-table-scroll"
     >
       <Table className="w-max min-w-full table-fixed">
@@ -309,11 +314,13 @@ function DeletePreview({
             {columns.map((column) => (
               <TableHead
                 key={column.name}
-                className="w-36 max-w-36 whitespace-nowrap px-2"
+                className="h-12 w-36 max-w-36 px-3 whitespace-nowrap"
               >
-                <div className="flex flex-col gap-0.5">
-                  <span className="truncate">{column.name}</span>
-                  <span className="text-[10px] font-normal text-muted-foreground/60">
+                <div className="flex flex-col">
+                  <span className="truncate font-mono text-[12.5px] text-foreground">
+                    {column.name}
+                  </span>
+                  <span className="font-mono text-[11px] font-normal text-subtle-foreground">
                     {column.dataType}
                   </span>
                 </div>
@@ -327,7 +334,7 @@ function DeletePreview({
               {columns.map((column) => (
                 <TableCell
                   key={column.name}
-                  className="w-36 max-w-36 truncate px-2 font-mono text-xs whitespace-nowrap"
+                  className="w-36 max-w-36 truncate px-3 font-mono text-xs whitespace-nowrap"
                 >
                   {formatCellValue(row[column.name])}
                 </TableCell>

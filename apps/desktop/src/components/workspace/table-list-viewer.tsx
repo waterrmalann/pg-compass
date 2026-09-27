@@ -8,9 +8,11 @@ interface TableListViewerProps {
   path: TableListViewerPath;
 }
 
-function formatEstimatedRowCount(value: number | null | undefined): string {
+function formatEstimatedRowCount(
+  value: number | null | undefined,
+): string | null {
   if (value == null) {
-    return "Unknown";
+    return null;
   }
 
   return new Intl.NumberFormat().format(value);
@@ -34,7 +36,7 @@ export function TableListViewer({ path }: Readonly<TableListViewerProps>) {
         return {
           name: tableName,
           rowCount: formatEstimatedRowCount(stats?.estimatedRowCount),
-          sizeOnDisk: stats?.sizeOnDisk ?? "Unknown",
+          sizeOnDisk: stats?.sizeOnDisk ?? null,
         };
       }) ?? []
     );

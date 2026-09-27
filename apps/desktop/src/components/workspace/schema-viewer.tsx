@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Eye, Table2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ViewerShell } from "@/components/workspace/viewer-shell";
 import {
@@ -12,9 +13,11 @@ interface SchemaViewerProps {
   path: SchemaViewerPath;
 }
 
-function formatEstimatedRowCount(value: number | null | undefined): string {
+function formatEstimatedRowCount(
+  value: number | null | undefined,
+): string | null {
   if (value == null) {
-    return "Unknown";
+    return null;
   }
 
   return new Intl.NumberFormat().format(value);
@@ -46,7 +49,7 @@ export function SchemaViewer({ path }: Readonly<SchemaViewerProps>) {
       return {
         name: tableName,
         rowCount: formatEstimatedRowCount(stats?.estimatedRowCount),
-        sizeOnDisk: stats?.sizeOnDisk ?? "Unknown",
+        sizeOnDisk: stats?.sizeOnDisk ?? null,
       };
     });
   }, [schemaNode]);
@@ -58,8 +61,8 @@ export function SchemaViewer({ path }: Readonly<SchemaViewerProps>) {
 
     return schemaNode.views.map((view) => ({
       name: view.name,
-      rowCount: "Unknown",
-      sizeOnDisk: "Unknown",
+      rowCount: null,
+      sizeOnDisk: null,
       definition: view.definition ?? undefined,
     }));
   }, [schemaNode]);
@@ -117,18 +120,32 @@ export function SchemaViewer({ path }: Readonly<SchemaViewerProps>) {
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="h-full min-h-0"
+        className="h-full min-h-0 gap-3"
       >
-        <TabsList variant="line" className="h-8">
-          <TabsTrigger value="tables" className="h-8 px-3 text-xs">
+        <TabsList className="shrink-0">
+          <TabsTrigger value="tables">
+            <Table2 />
             Tables
+            <span
+              aria-hidden
+              className="font-mono text-[11px] text-subtle-foreground"
+            >
+              {tableRows.length}
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="views" className="h-8 px-3 text-xs">
+          <TabsTrigger value="views">
+            <Eye />
             Views
+            <span
+              aria-hidden
+              className="font-mono text-[11px] text-subtle-foreground"
+            >
+              {viewRows.length}
+            </span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="tables" className="min-h-0 flex-1 pt-2">
+        <TabsContent value="tables" className="min-h-0 flex-1">
           <RelationListTable
             rows={tableRows}
             onOpenRow={(row) => handleOpenTable(row.name)}
@@ -136,7 +153,7 @@ export function SchemaViewer({ path }: Readonly<SchemaViewerProps>) {
           />
         </TabsContent>
 
-        <TabsContent value="views" className="min-h-0 flex-1 pt-2">
+        <TabsContent value="views" className="min-h-0 flex-1">
           <RelationListTable
             rows={viewRows}
             onOpenRow={(row) => handleOpenView(row.name)}

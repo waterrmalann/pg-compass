@@ -34,7 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { fieldClassName, Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { ColumnInfo } from "@/shared/types/table-data";
@@ -46,6 +46,7 @@ import {
   isStructuredEditType,
   StructuredValueEditor,
 } from "@/components/workspace/renderers/structured-value-editor";
+import { cn } from "@/lib/utils";
 
 export interface EditableCellProps {
   col: ColumnInfo;
@@ -283,9 +284,9 @@ function EditDialog(props: Readonly<EditDialogProps>) {
         }}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+          <DialogTitle className="flex items-center gap-2">
             <span className="font-mono">{props.col.name}</span>
-            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            <span className="rounded border border-border/70 bg-muted/55 px-1.5 py-0.5 font-mono text-[11px] font-normal text-subtle-foreground">
               {props.col.dataType}
             </span>
           </DialogTitle>
@@ -312,7 +313,9 @@ function EditDialog(props: Readonly<EditDialogProps>) {
           />
         )}
 
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        {error ? (
+          <p className="text-xs text-destructive-foreground">{error}</p>
+        ) : null}
 
         {!isModal || !ModalComponent ? (
           <DialogFooter className="gap-2">
@@ -321,6 +324,7 @@ function EditDialog(props: Readonly<EditDialogProps>) {
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="sm:mr-auto"
                 disabled={saving}
                 onClick={() => {
                   void handleSetNull();
@@ -346,7 +350,7 @@ function EditDialog(props: Readonly<EditDialogProps>) {
                 void handleSave();
               }}
             >
-              {saving ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
+              {saving ? <Loader2 className="animate-spin" /> : "Save"}
             </Button>
           </DialogFooter>
         ) : null}
@@ -373,7 +377,7 @@ function EditorBody({
     return (
       <div
         data-testid="cell-bool-toggle"
-        className="flex items-center justify-between rounded-md border border-input bg-muted/30 px-3 py-2"
+        className="flex h-9 items-center justify-between rounded-lg border border-input bg-muted/40 px-3"
       >
         <Label htmlFor="cell-bool-switch" className="font-mono text-xs">
           {checked ? "True" : "False"}
@@ -397,7 +401,7 @@ function EditorBody({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         data-testid="cell-enum-select"
-        className="h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+        className={cn(fieldClassName, "h-8 px-2.5 font-mono text-xs")}
       >
         {enumLabels.map((label) => (
           <option
@@ -428,7 +432,10 @@ function EditorBody({
         value={raw}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="min-h-32 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+        className={cn(
+          fieldClassName,
+          "min-h-32 resize-y px-2.5 py-2 font-mono text-xs",
+        )}
         spellCheck={false}
       />
     );

@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { FileSearch } from "lucide-react";
 import type { SSHConfig } from "@/shared/types/connection";
 
@@ -28,26 +29,25 @@ export function ConnectionSSHFieldset({
   }
 
   return (
-    <fieldset className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3">
+    <fieldset className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3">
       <Label
         htmlFor="ssh-enabled"
-        className="flex min-h-8 cursor-pointer items-center gap-2"
+        className="flex min-h-6 cursor-pointer items-center gap-2"
       >
         <input
           id="ssh-enabled"
           type="checkbox"
-          className="size-4 accent-primary"
           checked={value.enabled}
           onChange={(e) =>
             onChange((s) => ({ ...s, enabled: e.target.checked }))
           }
         />
-        <span>Enable SSH Tunnel</span>
+        <span>Enable SSH tunnel</span>
       </Label>
       {value.enabled && (
-        <div className="grid grid-cols-2 gap-2 pl-6">
+        <div className="grid grid-cols-2 gap-3 pl-6">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ssh-host">SSH Host</Label>
+            <Label htmlFor="ssh-host">SSH host</Label>
             <Input
               id="ssh-host"
               value={value.host}
@@ -57,7 +57,7 @@ export function ConnectionSSHFieldset({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ssh-port">SSH Port</Label>
+            <Label htmlFor="ssh-port">SSH port</Label>
             <Input
               id="ssh-port"
               type="number"
@@ -71,7 +71,7 @@ export function ConnectionSSHFieldset({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ssh-user">SSH User</Label>
+            <Label htmlFor="ssh-user">SSH user</Label>
             <Input
               id="ssh-user"
               value={value.user}
@@ -81,39 +81,25 @@ export function ConnectionSSHFieldset({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ssh-auth">Auth Method</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={
-                  value.authMethod === "password" ? "default" : "outline"
-                }
-                size="sm"
-                className="flex-1"
-                onClick={() =>
-                  onChange((s) => ({ ...s, authMethod: "password" }))
-                }
-              >
-                Password
-              </Button>
-              <Button
-                type="button"
-                variant={
-                  value.authMethod === "privateKey" ? "default" : "outline"
-                }
-                size="sm"
-                className="flex-1"
-                onClick={() =>
-                  onChange((s) => ({ ...s, authMethod: "privateKey" }))
-                }
-              >
-                Key
-              </Button>
-            </div>
+            <span className="text-[13px] leading-none font-medium">
+              Auth method
+            </span>
+            <SegmentedControl
+              ariaLabel="SSH auth method"
+              className="w-full"
+              value={value.authMethod}
+              onValueChange={(authMethod) =>
+                onChange((s) => ({ ...s, authMethod }))
+              }
+              options={[
+                { value: "password", label: "Password" },
+                { value: "privateKey", label: "Key" },
+              ]}
+            />
           </div>
           {value.authMethod === "password" && (
             <div className="col-span-2 flex flex-col gap-1.5">
-              <Label htmlFor="ssh-password">SSH Password</Label>
+              <Label htmlFor="ssh-password">SSH password</Label>
               <Input
                 id="ssh-password"
                 type="password"
@@ -144,10 +130,9 @@ export function ConnectionSSHFieldset({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={handleBrowsePrivateKey}
                   >
-                    <FileSearch className="size-4" />
+                    <FileSearch />
                     Browse
                   </Button>
                 </div>

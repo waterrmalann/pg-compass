@@ -1,5 +1,10 @@
 import { useEffect, useRef, useMemo } from "react";
-import { EditorState, Compartment, type Extension } from "@codemirror/state";
+import {
+  EditorState,
+  Compartment,
+  type Extension,
+  Prec,
+} from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -11,7 +16,7 @@ import { sql, PostgreSQL, type SQLNamespace } from "@codemirror/lang-sql";
 import { autocompletion, type Completion } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { linter, type Diagnostic } from "@codemirror/lint";
-import { pgTheme } from "./pg-theme";
+import { pgSingleLineTheme, pgTheme } from "./pg-theme";
 import { getShortcut } from "@/shared/constants/shortcuts";
 
 export interface CompletionColumn {
@@ -242,7 +247,9 @@ export function useCodemirror(
         ),
       ];
 
-      if (!singleLine) {
+      if (singleLine) {
+        extensions.push(Prec.high(pgSingleLineTheme));
+      } else {
         extensions.push(lineNumbers());
       }
 

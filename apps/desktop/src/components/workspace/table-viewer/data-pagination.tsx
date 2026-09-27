@@ -5,6 +5,8 @@ import {
   ChevronsRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fieldClassName } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 75, 100] as const;
 
@@ -30,16 +32,16 @@ export function DataPagination({
   const end = Math.min(page * pageSize, totalCount);
 
   return (
-    <div className="flex items-center justify-between border-t border-border px-3 py-2">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>
-          {start}–{end} of {totalCount.toLocaleString()}
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3">
+        <span className="tabular-nums">
+          {start.toLocaleString()}–{end.toLocaleString()} of{" "}
+          {totalCount.toLocaleString()}
         </span>
-        <span className="text-muted-foreground/40">|</span>
-        <label className="flex items-center gap-1">
+        <label className="flex items-center gap-1.5">
           Rows per page
           <select
-            className="h-8 rounded-md border border-input bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className={cn(fieldClassName, "h-7 w-auto px-1.5 text-xs")}
             value={pageSize}
             disabled={disabled}
             onChange={(e) => {
@@ -55,53 +57,49 @@ export function DataPagination({
         </label>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-8"
           disabled={disabled || page <= 1}
           onClick={() => onPageChange(1)}
           aria-label="First page"
         >
-          <ChevronsLeft className="size-3.5" />
+          <ChevronsLeft />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-8"
           disabled={disabled || page <= 1}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
         >
-          <ChevronLeft className="size-3.5" />
+          <ChevronLeft />
         </Button>
-        <span className="min-w-12 text-center text-xs text-muted-foreground">
+        <span className="min-w-14 text-center font-mono text-[11px] text-subtle-foreground tabular-nums">
           {page} / {totalPages}
         </span>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-8"
           disabled={disabled || page >= totalPages}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"
         >
-          <ChevronRight className="size-3.5" />
+          <ChevronRight />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-8"
           disabled={disabled || page >= totalPages}
           onClick={() => onPageChange(totalPages)}
           aria-label="Last page"
         >
-          <ChevronsRight className="size-3.5" />
+          <ChevronsRight />
         </Button>
       </div>
     </div>

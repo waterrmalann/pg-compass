@@ -3,63 +3,79 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
 /**
- * CodeMirror theme that reads from the app's CSS custom properties
- * so it automatically follows dark/light mode.
+ * CodeMirror chrome that reads the app's CSS custom properties, so it follows
+ * dark/light mode. Mirrors the code block recipe in docs/DESIGN.md §9.19.
  */
 const pgEditorTheme = EditorView.theme({
   "&": {
-    backgroundColor: "var(--background)",
+    backgroundColor: "transparent",
     color: "var(--foreground)",
-    fontSize: "12px",
+    fontSize: "12.5px",
     fontFamily: "var(--font-mono)",
+  },
+  ".cm-scroller": {
+    fontFamily: "var(--font-mono)",
+    lineHeight: "20px",
   },
   ".cm-content": {
     caretColor: "var(--foreground)",
     fontFamily: "var(--font-mono)",
-    padding: "8px 0",
+    padding: "12px 0",
+  },
+  ".cm-line": {
+    padding: "0 12px",
   },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--foreground)",
   },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "oklch(from var(--accent) l c h / 50%)",
-  },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection":
+    {
+      backgroundColor:
+        "color-mix(in oklab, var(--foreground) 14%, transparent) !important",
+    },
   ".cm-activeLine": {
-    backgroundColor: "oklch(from var(--accent) l c h / 20%)",
+    backgroundColor: "var(--code-highlight)",
   },
   ".cm-gutters": {
-    backgroundColor: "var(--muted)",
-    color: "var(--muted-foreground)",
-    borderRight: "1px solid var(--border)",
+    backgroundColor: "transparent",
+    color: "color-mix(in oklab, var(--muted-foreground) 60%, transparent)",
+    border: "none",
     fontFamily: "var(--font-mono)",
     fontSize: "12px",
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "oklch(from var(--accent) l c h / 30%)",
+    backgroundColor: "transparent",
+    color: "var(--muted-foreground)",
   },
   ".cm-lineNumbers .cm-gutterElement": {
-    padding: "0 8px 0 4px",
-    minWidth: "2em",
+    padding: "0 0 0 12px",
+    minWidth: "2ch",
+    textAlign: "right",
   },
-  // Autocomplete tooltip
+  // Autocomplete and lint tooltips are popovers (§6).
   ".cm-tooltip": {
     backgroundColor: "var(--popover)",
     color: "var(--popover-foreground)",
     border: "1px solid var(--border)",
-    borderRadius: "calc(var(--radius) - 2px)",
-    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+    borderRadius: "var(--radius)",
+    boxShadow:
+      "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+    overflow: "hidden",
   },
   ".cm-tooltip.cm-tooltip-autocomplete": {
+    padding: "4px",
     "& > ul": {
       fontFamily: "var(--font-mono)",
       fontSize: "12px",
     },
     "& > ul > li": {
-      padding: "2px 8px",
+      padding: "3px 8px",
+      borderRadius: "calc(var(--radius) - 2px)",
+      color: "var(--muted-foreground)",
     },
     "& > ul > li[aria-selected]": {
       backgroundColor: "var(--accent)",
-      color: "var(--accent-foreground)",
+      color: "var(--foreground)",
     },
   },
   ".cm-completionLabel": {
@@ -67,51 +83,94 @@ const pgEditorTheme = EditorView.theme({
   },
   ".cm-completionDetail": {
     fontStyle: "normal",
-    color: "var(--muted-foreground)",
+    color: "var(--subtle-foreground)",
+    marginLeft: "8px",
+  },
+  ".cm-diagnostic": {
+    fontFamily: "var(--font-sans)",
+    fontSize: "12px",
+    padding: "6px 10px",
+  },
+  ".cm-diagnostic-error": {
+    borderLeft: "2px solid var(--destructive)",
+  },
+  ".cm-lintRange-error": {
+    backgroundImage: "none",
+    textDecoration: "underline wavy var(--destructive)",
+    textUnderlineOffset: "3px",
   },
   // Search panel
   ".cm-panels": {
-    backgroundColor: "var(--muted)",
+    backgroundColor: "var(--card)",
     color: "var(--foreground)",
+    fontFamily: "var(--font-sans)",
+    fontSize: "12px",
+  },
+  ".cm-panels.cm-panels-bottom": {
+    borderTop: "1px solid var(--border)",
   },
   ".cm-searchMatch": {
-    backgroundColor: "oklch(from var(--ring) l c h / 30%)",
+    backgroundColor: "color-mix(in oklab, var(--warning) 22%, transparent)",
   },
   ".cm-searchMatch.cm-searchMatch-selected": {
-    backgroundColor: "oklch(from var(--ring) l c h / 50%)",
+    backgroundColor: "color-mix(in oklab, var(--warning) 40%, transparent)",
   },
-  // Placeholder
+  ".cm-selectionMatch": {
+    backgroundColor: "color-mix(in oklab, var(--foreground) 8%, transparent)",
+  },
   ".cm-placeholder": {
     color: "var(--muted-foreground)",
     fontFamily: "var(--font-mono)",
   },
-  // Focus ring
   "&.cm-focused": {
     outline: "none",
   },
 });
 
+// Mostly monochrome syntax so code reads like the rest of the UI (§9.19).
 const pgHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: "var(--syntax-keyword)", fontWeight: "600" },
+  { tag: tags.keyword, color: "var(--foreground)", fontWeight: "500" },
   {
     tag: tags.operatorKeyword,
-    color: "var(--syntax-keyword)",
-    fontWeight: "600",
+    color: "var(--foreground)",
+    fontWeight: "500",
   },
-  { tag: tags.typeName, color: "var(--syntax-type)" },
-  { tag: tags.string, color: "var(--syntax-string)" },
-  { tag: tags.number, color: "var(--syntax-number)" },
-  { tag: tags.bool, color: "var(--syntax-number)" },
   {
-    tag: tags.null,
-    color: "var(--syntax-number)",
-    fontStyle: "italic",
+    tag: [tags.name, tags.variableName, tags.propertyName],
+    color: "color-mix(in oklab, var(--foreground) 85%, transparent)",
   },
-  { tag: tags.operator, color: "var(--foreground)" },
+  { tag: tags.typeName, color: "var(--foreground)" },
+  { tag: tags.function(tags.variableName), color: "var(--foreground)" },
+  { tag: tags.string, color: "var(--success-foreground)" },
+  { tag: tags.special(tags.string), color: "var(--success-foreground)" },
+  { tag: tags.number, color: "var(--info-foreground)" },
+  { tag: tags.bool, color: "var(--info-foreground)" },
+  { tag: tags.null, color: "var(--info-foreground)" },
+  { tag: tags.operator, color: "var(--muted-foreground)" },
   { tag: tags.punctuation, color: "var(--muted-foreground)" },
-  { tag: tags.comment, color: "var(--muted-foreground)", fontStyle: "italic" },
-  { tag: tags.labelName, color: "var(--syntax-label)" },
-  { tag: tags.special(tags.string), color: "var(--syntax-string)" },
+  { tag: tags.comment, color: "var(--muted-foreground)" },
+  { tag: tags.labelName, color: "var(--foreground)" },
+  { tag: tags.invalid, textDecoration: "underline wavy var(--destructive)" },
 ]);
 
 export const pgTheme = [pgEditorTheme, syntaxHighlighting(pgHighlightStyle)];
+
+/**
+ * Single-line (filter) editors sit inside a 32px field. Sizing lives here
+ * rather than in Tailwind classes because CodeMirror injects its styles
+ * unlayered at runtime, which outranks Tailwind's utilities layer.
+ */
+export const pgSingleLineTheme = EditorView.theme({
+  "&": {
+    maxHeight: "30px",
+  },
+  ".cm-scroller": {
+    scrollbarWidth: "none",
+  },
+  ".cm-content": {
+    padding: "5px 0",
+  },
+  ".cm-line": {
+    padding: "0 8px",
+  },
+});

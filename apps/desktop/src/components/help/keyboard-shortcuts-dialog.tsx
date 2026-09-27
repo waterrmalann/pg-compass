@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge, Kbd } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   SHORTCUTS,
@@ -37,7 +38,7 @@ export function KeyboardShortcutsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="pb-0 sm:max-w-lg"
         onKeyDown={(event) => {
           if (
             event.target instanceof Element &&
@@ -48,41 +49,37 @@ export function KeyboardShortcutsDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Keyboard Shortcuts</DialogTitle>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>
             Search the shortcuts available in the current platform.
           </DialogDescription>
         </DialogHeader>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             autoFocus
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search shortcuts"
-            className="h-8 pl-8 text-xs"
+            className="pl-8 text-[13px]"
           />
         </div>
-        <div className="max-h-80 overflow-y-auto rounded-md border border-border">
+        <div className="-mx-5 max-h-80 overflow-y-auto border-t border-border">
           {visible.length === 0 ? (
-            <p className="p-4 text-center text-xs text-muted-foreground">
+            <p className="px-5 py-6 text-center text-xs text-muted-foreground">
               No shortcuts match.
             </p>
           ) : (
             visible.map((shortcut) => (
               <div
                 key={shortcut.id}
-                className="flex items-center justify-between gap-4 border-b border-border px-3 py-2 last:border-b-0"
+                className="flex h-11 items-center justify-between gap-4 border-b border-border/70 px-5 last:border-b-0"
               >
-                <div>
-                  <p className="text-sm">{shortcut.label}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {shortcut.category}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[13px]">{shortcut.label}</p>
+                  <Badge variant="outline">{shortcut.category}</Badge>
                 </div>
-                <kbd className="rounded border border-border bg-muted px-2 py-1 font-mono text-[10px]">
-                  {shortcutLabel(shortcut, platform)}
-                </kbd>
+                <Kbd>{shortcutLabel(shortcut, platform)}</Kbd>
               </div>
             ))
           )}

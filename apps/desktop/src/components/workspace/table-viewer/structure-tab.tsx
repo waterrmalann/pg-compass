@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Columns3 } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import {
   Table,
@@ -11,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { MissingValue } from "@/components/workspace/relation-list-table";
 import type { ColumnStructure } from "@/shared/types/table-data";
 
 interface StructureTabProps {
@@ -92,84 +95,81 @@ export function StructureTab({
   );
 
   if (loading && columns.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (columns.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No columns found.
-      </div>
+      <Panel className="h-full">
+        <EmptyState icon={<Columns3 />} title="No columns found." />
+      </Panel>
     );
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card">
-          <TableRow>
-            <TableHead className="w-8">#</TableHead>
-            <TableHead>Column</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Nullable</TableHead>
-            <TableHead>Default</TableHead>
-            <TableHead>Sample Values</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {columns.map((col) => (
-            <TableRow key={col.name} className="hover:bg-muted/50">
-              <TableCell className="text-xs tabular-nums text-muted-foreground">
-                {col.ordinalPosition}
-              </TableCell>
-              <TableCell className="font-medium">{col.name}</TableCell>
-              <TableCell>
-                <Badge variant="secondary" className="font-mono text-[11px]">
-                  {formatType(col)}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                {col.isNullable ? (
-                  <span className="text-xs text-muted-foreground">YES</span>
-                ) : (
-                  <span className="text-xs font-medium">NOT NULL</span>
-                )}
-              </TableCell>
-              <TableCell className="max-w-50 truncate font-mono text-xs text-muted-foreground">
-                {col.columnDefault ?? (
-                  <span className="italic text-muted-foreground/50">none</span>
-                )}
-              </TableCell>
-              <TableCell className="max-w-75">
-                <div className="flex flex-wrap gap-1">
-                  {col.sampleValues.length > 0 ? (
-                    col.sampleValues.slice(0, 3).map((val, i) => {
-                      const key = `sample-${col.name}-${String(i)}`;
-                      return (
-                        <span
-                          key={key}
-                          className="inline-block max-w-30 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]"
-                          title={renderSample(val)}
-                        >
-                          {renderSample(val)}
-                        </span>
-                      );
-                    })
-                  ) : (
-                    <span className="text-xs italic text-muted-foreground/50">
-                      no data
-                    </span>
-                  )}
-                </div>
-              </TableCell>
+    <Panel className="max-h-full">
+      <div className="min-h-0 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead className="w-12 text-right">#</TableHead>
+              <TableHead>Column</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Nullable</TableHead>
+              <TableHead>Default</TableHead>
+              <TableHead>Sample values</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {columns.map((col) => (
+              <TableRow key={col.name}>
+                <TableCell className="text-right font-mono text-[11px] text-subtle-foreground tabular-nums">
+                  {col.ordinalPosition}
+                </TableCell>
+                <TableCell className="font-mono text-[12.5px] font-medium">
+                  {col.name}
+                </TableCell>
+                <TableCell>
+                  <Badge className="font-mono">{formatType(col)}</Badge>
+                </TableCell>
+                <TableCell>
+                  {col.isNullable ? (
+                    <span className="text-xs text-muted-foreground">
+                      Nullable
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs">NOT NULL</span>
+                  )}
+                </TableCell>
+                <TableCell className="max-w-50 truncate font-mono text-xs text-muted-foreground">
+                  {col.columnDefault ?? <MissingValue />}
+                </TableCell>
+                <TableCell className="max-w-75">
+                  <div className="flex gap-1 overflow-hidden">
+                    {col.sampleValues.length > 0 ? (
+                      col.sampleValues.slice(0, 3).map((val, i) => {
+                        const key = `sample-${col.name}-${String(i)}`;
+                        return (
+                          <Badge
+                            key={key}
+                            variant="outline"
+                            className="block max-w-30 truncate font-mono leading-5 font-normal"
+                            title={renderSample(val)}
+                          >
+                            {renderSample(val)}
+                          </Badge>
+                        );
+                      })
+                    ) : (
+                      <MissingValue />
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Panel>
   );
 }

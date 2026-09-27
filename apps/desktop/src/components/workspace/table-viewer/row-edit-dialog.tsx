@@ -258,9 +258,9 @@ export function RowEditDialog(props: Readonly<RowEditDialogProps>) {
         }}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+          <DialogTitle className="flex items-center gap-2">
             <span>{isInsert ? "Insert row" : "Edit row"}</span>
-            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            <span className="rounded border border-border/70 bg-muted/55 px-1.5 py-0.5 font-mono text-[11px] font-normal text-subtle-foreground">
               {props.schema}.{props.table}
             </span>
           </DialogTitle>
@@ -288,15 +288,15 @@ export function RowEditDialog(props: Readonly<RowEditDialogProps>) {
                   key={col.name}
                   data-testid={`row-field-${col.name}`}
                   data-changed={changed ? "true" : "false"}
-                  className={`grid grid-cols-[10rem_1fr_auto] items-start gap-2 rounded-md border px-2 py-1.5 ${
-                    changed
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-transparent"
+                  className={`grid grid-cols-[10rem_1fr_auto] items-start gap-3 rounded-lg border px-2.5 py-1.5 transition-colors duration-150 ${
+                    changed ? "border-border bg-accent" : "border-transparent"
                   }`}
                 >
                   <div className="flex flex-col">
-                    <span className="font-mono text-xs">{col.name}</span>
-                    <span className="text-[10px] text-muted-foreground/70">
+                    <span className="font-mono text-xs leading-5">
+                      {col.name}
+                    </span>
+                    <span className="font-mono text-[11px] text-subtle-foreground">
                       {col.dataType}
                       {pkSet.has(col.name) ? " · pk" : ""}
                     </span>
@@ -315,7 +315,7 @@ export function RowEditDialog(props: Readonly<RowEditDialogProps>) {
                       />
                     )}
                     {errors[col.name] ? (
-                      <p className="mt-1 text-[11px] text-destructive">
+                      <p className="mt-1 text-[11px] text-destructive-foreground">
                         {errors[col.name]}
                       </p>
                     ) : null}
@@ -327,20 +327,20 @@ export function RowEditDialog(props: Readonly<RowEditDialogProps>) {
                           type="button"
                           variant="ghost"
                           size="icon-sm"
-                          className="size-8"
+                          className="mt-0.5"
                           disabled={saving || !changed}
                           onClick={() => revertField(col.name)}
                           aria-label={`Revert ${col.name}`}
                           data-testid={`revert-${col.name}`}
                         >
-                          <RotateCcw className="size-3" />
+                          <RotateCcw />
                         </Button>
                         {col.isNullable === true ? (
                           <Button
                             type="button"
                             variant={draft?.setNull ? "secondary" : "ghost"}
                             size="sm"
-                            className="h-8 px-2 text-[10px]"
+                            className="mt-0.5 px-2 font-mono text-[11px]"
                             disabled={saving}
                             onClick={() => setDraftNull(col.name)}
                             data-testid={`setnull-${col.name}`}
@@ -384,7 +384,7 @@ export function RowEditDialog(props: Readonly<RowEditDialogProps>) {
             data-testid="row-editor-save"
           >
             {saving ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="animate-spin" />
             ) : isInsert ? (
               "Insert"
             ) : (

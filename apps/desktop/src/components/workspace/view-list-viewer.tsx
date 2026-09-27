@@ -22,8 +22,8 @@ export function ViewListViewer({ path }: Readonly<ViewListViewerProps>) {
     return (
       schema?.views.map((view) => ({
         name: view.name,
-        rowCount: "Unknown",
-        sizeOnDisk: "Unknown",
+        rowCount: null,
+        sizeOnDisk: null,
         definition: view.definition ?? undefined,
       })) ?? []
     );

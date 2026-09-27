@@ -31,8 +31,8 @@ export function LicenseDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-72 rounded-md border bg-muted/30 p-4">
-          <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+        <ScrollArea className="max-h-72 rounded-lg border border-border bg-code">
+          <pre className="p-3 font-mono text-xs leading-5 whitespace-pre-wrap text-muted-foreground">
             {LICENSE_TEXT}
           </pre>
         </ScrollArea>

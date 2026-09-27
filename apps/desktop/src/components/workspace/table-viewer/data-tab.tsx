@@ -6,10 +6,19 @@ import {
   Search,
   CircleAlert,
   Pencil,
+  Rows3,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   SqlEditor,
   type CompletionSchema,
@@ -73,17 +82,20 @@ function DataContent({
 }>) {
   if (error && rows.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-        <CircleAlert className="size-5 text-destructive" />
-        <p className="text-sm text-muted-foreground">No rows to display.</p>
-        <p className="max-w-lg text-xs text-destructive">{error}</p>
-      </div>
+      <EmptyState
+        icon={<CircleAlert className="text-destructive-foreground" />}
+        title="No rows to display."
+        description={
+          <span className="font-mono text-destructive-foreground">{error}</span>
+        }
+      />
     );
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
       {error ? (
-        <div className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-destructive/10 px-4 py-2 text-xs text-destructive-foreground">
+          <CircleAlert className="size-3.5 shrink-0" />
           Refresh failed: {error}. Showing the last successful result.
         </div>
       ) : null}
@@ -323,164 +335,136 @@ export function DataTab({
     void fetchRows(page, pageSize, whereClause, true);
   }, [fetchRows, page, pageSize, whereClause]);
 
+  const updatedLabel = lastRefreshedAt
+    ? `Updated ${lastRefreshedAt.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`
+    : "";
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* Toolbar */}
-      <div className="flex flex-col border-b border-border px-3 py-2 gap-1.5">
-        {/* Row 1: Search + view toggle */}
-        <div className="flex items-center gap-2">
-          <form
-            onSubmit={handleWhereSubmit}
-            className="flex min-w-0 flex-1 items-center gap-2"
-          >
-            <div className="relative min-w-0 flex-1">
-              <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
-              <SqlEditor
-                value={pendingWhere}
-                onChange={setPendingWhere}
-                onSubmit={() => {
-                  setPage(1);
-                  setWhereClause(pendingWhere);
-                }}
-                placeholder="WHERE clause — e.g. id > 10 AND status = 'active'"
-                schema={completionSchema}
-                singleLine
-                minHeight="32px"
-                className="h-8 pl-5"
-              />
-            </div>
-            <Button
-              type="submit"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-            >
-              Filter
-            </Button>
-            {whereClause && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={handleClearFilter}
-              >
-                Clear
-              </Button>
-            )}
-          </form>
-
-          <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
-            <Button
-              type="button"
-              variant={viewMode === "table" ? "secondary" : "ghost"}
-              size="icon-sm"
-              className="size-8"
-              onClick={() => setViewMode("table")}
-              aria-label="Table view"
-            >
-              <Table2 className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant={viewMode === "card" ? "secondary" : "ghost"}
-              size="icon-sm"
-              className="size-8"
-              onClick={() => setViewMode("card")}
-              aria-label="Card view"
-            >
-              <LayoutList className="size-3.5" />
-            </Button>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Toolbar: filter + view switcher */}
+      <div className="flex shrink-0 items-center gap-2">
+        <form
+          onSubmit={handleWhereSubmit}
+          className="flex min-w-0 flex-1 items-center gap-2"
+        >
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <SqlEditor
+              value={pendingWhere}
+              onChange={setPendingWhere}
+              onSubmit={() => {
+                setPage(1);
+                setWhereClause(pendingWhere);
+              }}
+              placeholder="WHERE clause — e.g. id > 10 AND status = 'active'"
+              schema={completionSchema}
+              singleLine
+              minHeight="32px"
+              className="h-8 pl-6"
+            />
           </div>
-        </div>
+          <Button type="submit" variant="outline">
+            Filter
+          </Button>
+          {whereClause && (
+            <Button type="button" variant="ghost" onClick={handleClearFilter}>
+              Clear
+            </Button>
+          )}
+        </form>
 
-        {/* Row 2: Action buttons */}
-        <div className="flex items-center gap-1.5">
+        <SegmentedControl
+          ariaLabel="Data view mode"
+          value={viewMode}
+          onValueChange={setViewMode}
+          options={[
+            { value: "table", icon: <Table2 />, ariaLabel: "Table view" },
+            { value: "card", icon: <LayoutList />, ariaLabel: "Card view" },
+          ]}
+        />
+      </div>
+
+      <Panel className="flex-1">
+        <PanelHeader className="px-3">
+          <Rows3 />
+          <PanelTitle>Rows</PanelTitle>
+          {!loading && <PanelCount>{totalCount.toLocaleString()}</PanelCount>}
           <span
-            className="mr-auto text-[11px] text-muted-foreground"
+            className="ml-1 truncate text-xs text-muted-foreground"
             title={lastRefreshedAt?.toLocaleString()}
           >
-            {lastRefreshedAt
-              ? `Updated ${lastRefreshedAt.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}`
-              : ""}
+            {updatedLabel}
           </span>
-          {isTable && !settings.general.readOnlyMode && (
-            <AddDataDropdown
+          <div className="ml-auto flex items-center gap-1">
+            {isTable && !settings.general.readOnlyMode && (
+              <AddDataDropdown
+                connectionId={connectionId}
+                schema={schema}
+                table={table}
+                columns={columns}
+                primaryKey={primaryKey}
+                disabled={loading}
+                onDataChanged={handleDataChanged}
+              />
+            )}
+            {isTable && (
+              <>
+                <Button type="button" variant="ghost" size="xs" disabled>
+                  <Pencil />
+                  Update
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  disabled={loading || settings.general.readOnlyMode || !!error}
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2 />
+                  Delete
+                </Button>
+              </>
+            )}
+
+            <ExportDropdown
               connectionId={connectionId}
               schema={schema}
               table={table}
+              whereClause={whereClause || undefined}
+            />
+          </div>
+        </PanelHeader>
+
+        {/* Content */}
+        <div className="min-h-0 flex-1">
+          {loading ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <DataContent
+              viewMode={viewMode}
               columns={columns}
-              primaryKey={primaryKey}
-              disabled={loading}
-              onDataChanged={handleDataChanged}
+              rows={rows}
+              error={error}
+              editContext={editContext}
             />
           )}
-          {isTable && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs"
-                disabled
-              >
-                <Pencil className="size-3.5" />
-                Update
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs"
-                disabled={loading || settings.general.readOnlyMode || !!error}
-                onClick={() => setDeleteDialogOpen(true)}
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </Button>
-            </>
-          )}
-
-          <ExportDropdown
-            connectionId={connectionId}
-            schema={schema}
-            table={table}
-            whereClause={whereClause || undefined}
-            thin
-          />
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="min-h-0 flex-1">
-        {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <DataContent
-            viewMode={viewMode}
-            columns={columns}
-            rows={rows}
-            error={error}
-            editContext={editContext}
-          />
-        )}
-      </div>
-
-      {/* Pagination */}
-      <DataPagination
-        page={page}
-        pageSize={pageSize}
-        totalCount={totalCount}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        disabled={loading}
-      />
+        <DataPagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          disabled={loading}
+        />
+      </Panel>
 
       {isTable && (
         <DeleteDataDialog

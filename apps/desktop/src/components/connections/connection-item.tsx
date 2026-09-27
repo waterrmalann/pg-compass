@@ -5,6 +5,7 @@ import {
   Database,
   Edit,
   Loader2,
+  MoreHorizontal,
   Plug,
   PlugZap,
   RefreshCw,
@@ -207,17 +208,17 @@ export function ConnectionItem({
   function renderSchemaTree() {
     if (schemasLoading) {
       return (
-        <>
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-28" />
-        </>
+        <div className="flex flex-col gap-2 px-2 py-1.5">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-28" />
+        </div>
       );
     }
 
     if (schemas.length === 0) {
       return (
-        <span className="text-xs text-muted-foreground">
+        <span className="px-2 py-1.5 text-xs text-muted-foreground">
           No user schemas with tables or views found.
         </span>
       );
@@ -234,7 +235,6 @@ export function ConnectionItem({
         onOpenTableInNewTab={handleOpenTableInNewTab}
         onOpenView={handleOpenViewViewer}
         selection={treeSelection}
-        accentColor={connection.color}
       />
     ));
   }
@@ -356,27 +356,17 @@ export function ConnectionItem({
       {/* Connection row */}
       <section
         className={cn(
-          "relative flex items-center gap-2 rounded-md pl-2 pr-1 py-1 transition-colors",
-          isConnectionLeaf ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+          "relative flex h-8 items-center gap-1.5 rounded-md pr-1 pl-1 transition-colors duration-150",
+          isConnectionLeaf
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
       >
-        {/* Color / selection indicator */}
-        {isConnectionActive && (
-          <div
-            className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary"
-            style={
-              connection.color
-                ? { backgroundColor: connection.color }
-                : undefined
-            }
-          />
-        )}
-
         {/* Expand arrow (only when connected) */}
         <button
           type="button"
           className={cn(
-            "flex size-4 shrink-0 items-center justify-center",
+            "flex size-4 shrink-0 items-center justify-center rounded-sm",
             connected
               ? "cursor-pointer text-muted-foreground hover:text-foreground"
               : "invisible",
@@ -389,7 +379,7 @@ export function ConnectionItem({
         >
           <ChevronRight
             className={cn(
-              "size-3 transition-transform duration-200",
+              "size-3 transition-transform duration-150",
               expanded && "rotate-90",
             )}
           />
@@ -397,7 +387,7 @@ export function ConnectionItem({
 
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring rounded-sm"
           onClick={() => {
             handleDatabaseClick().catch(() => undefined);
           }}
@@ -406,65 +396,71 @@ export function ConnectionItem({
           <Database
             className={cn(
               "size-4 shrink-0",
-              isConnectionActive
-                ? "text-sidebar-foreground"
+              connected || isConnectionActive
+                ? "text-sidebar-accent-foreground"
                 : "text-muted-foreground",
             )}
           />
           <span
             className={cn(
-              "flex-1 truncate text-sm",
-              isConnectionActive && "font-medium",
+              "truncate text-[13px] font-medium",
+              isConnectionActive || connected
+                ? "text-sidebar-accent-foreground"
+                : "text-sidebar-foreground",
             )}
-            style={connection.color ? { color: connection.color } : undefined}
           >
             {connection.label}
           </span>
+          {connection.color ? (
+            <span
+              aria-hidden
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: connection.color }}
+            />
+          ) : null}
         </button>
 
-        <div className="relative flex h-7 w-16 shrink-0 items-center justify-end gap-0.5">
+        <div className="relative flex h-7 w-14 shrink-0 items-center justify-end gap-0.5">
           {connection.favourite && (
-            <Star className="text-primary fill-primary size-3 shrink-0 opacity-100 transition-opacity group-hover/connection:opacity-0 group-focus-within/connection:opacity-0" />
+            <Star className="mr-1.5 size-3 shrink-0 fill-current text-muted-foreground opacity-100 transition-opacity group-hover/connection:opacity-0 group-focus-within/connection:opacity-0" />
+          )}
+          {connecting && (
+            <Loader2 className="absolute right-8 size-3.5 animate-spin text-muted-foreground" />
           )}
 
-          <div className="flex items-center justify-end gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover/connection:opacity-100 group-hover/connection:pointer-events-auto group-focus-within/connection:opacity-100 group-focus-within/connection:pointer-events-auto">
+          <div className="absolute inset-y-0 right-0 flex items-center justify-end gap-0.5 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/connection:opacity-100 group-hover/connection:pointer-events-auto group-focus-within/connection:opacity-100 group-focus-within/connection:pointer-events-auto">
             {!connected && !connecting && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="size-8"
+                    size="icon-xs"
                     onClick={(event) => {
                       event.stopPropagation();
                       handleConnect().catch(() => undefined);
                     }}
                     aria-label="Connect"
                   >
-                    <Plug className="size-3" />
+                    <Plug />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right">Connect</TooltipContent>
               </Tooltip>
             )}
-            {connecting && (
-              <Loader2 className="size-3 animate-spin text-muted-foreground" />
-            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="size-7"
+                  size="icon-xs"
                   aria-label="More actions"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <span className="text-xs leading-none">⋯</span>
+                  <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => onEdit(connection)}>
-                  <Edit className="mr-2 size-3" />
+                  <Edit />
                   Edit
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -472,13 +468,13 @@ export function ConnectionItem({
                     handleCopyConnectionString().catch(() => undefined);
                   }}
                 >
-                  <Copy className="mr-2 size-3" />
-                  Copy Connection String
+                  <Copy />
+                  Copy connection string
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => toggleFavourite(connection.id)}
                 >
-                  <Star className="mr-2 size-3" />
+                  <Star />
                   {connection.favourite ? "Unfavourite" : "Favourite"}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -487,9 +483,7 @@ export function ConnectionItem({
                   }}
                   disabled={connecting || schemasLoading}
                 >
-                  <RefreshCw
-                    className={`mr-2 size-3 ${schemasLoading ? "animate-spin" : ""}`}
-                  />
+                  <RefreshCw className={schemasLoading ? "animate-spin" : ""} />
                   {schemasLoading ? "Refreshing" : "Refresh"}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -497,21 +491,21 @@ export function ConnectionItem({
                     handleOpenUsers().catch(() => undefined);
                   }}
                 >
-                  <Users className="mr-2 size-3" />
+                  <Users />
                   Users
                 </DropdownMenuItem>
                 {connected && (
                   <DropdownMenuItem onClick={handleDisconnect}>
-                    <PlugZap className="mr-2 size-3" />
+                    <PlugZap />
                     Disconnect
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
+                  variant="destructive"
                   onClick={() => setDeleteOpen(true)}
                 >
-                  <Trash2 className="mr-2 size-3" />
+                  <Trash2 />
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -522,7 +516,7 @@ export function ConnectionItem({
 
       {/* Expandable schema/table tree */}
       {((connected && expanded) || searchActive) && (
-        <div className="ml-[18px] flex min-w-0 flex-col gap-px border-l border-sidebar-border py-1 pl-2 pr-1">
+        <div className="ml-3 flex min-w-0 flex-col gap-px border-l border-sidebar-border py-0.5 pl-1.5">
           {renderSchemaTree()}
         </div>
       )}
@@ -543,6 +537,7 @@ export function ConnectionItem({
             <Button
               type="button"
               variant="outline"
+              size="sm"
               disabled={deleting}
               onClick={() => setDeleteOpen(false)}
             >
@@ -551,10 +546,11 @@ export function ConnectionItem({
             <Button
               type="button"
               variant="destructive"
+              size="sm"
               disabled={deleting}
               onClick={() => void handleConfirmDelete()}
             >
-              {deleting ? <Loader2 className="size-4 animate-spin" /> : null}
+              {deleting ? <Loader2 className="animate-spin" /> : null}
               Delete saved connection
             </Button>
           </DialogFooter>

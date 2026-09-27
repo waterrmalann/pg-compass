@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Database, Loader2, SearchX } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useConnections } from "@/hooks/use-connections";
 import { ConnectionItem } from "@/components/connections/connection-item";
 import type { ConnectionConfig } from "@/shared/types/connection";
@@ -110,14 +110,14 @@ export function SidebarContent({
   if (loading) {
     return (
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-2 px-3 py-4">
+        <div className="flex flex-col gap-1 p-2">
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={`skeleton-${String(i)}`}
-              className="flex items-center gap-2 px-2 py-1.5"
+              className="flex h-8 items-center gap-2 px-2"
             >
-              <div className="size-4 rounded bg-sidebar-accent" />
-              <div className="h-3 flex-1 rounded bg-sidebar-accent" />
+              <div className="size-4 animate-pulse rounded bg-sidebar-accent" />
+              <div className="h-2.5 flex-1 animate-pulse rounded bg-sidebar-accent" />
             </div>
           ))}
         </div>
@@ -128,15 +128,11 @@ export function SidebarContent({
   if (connections.length === 0) {
     return (
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-          <div className="rounded-lg bg-sidebar-accent p-3">
-            <Database className="size-6 text-muted-foreground" />
-          </div>
-          <p className="text-sm text-muted-foreground">No connections yet</p>
-          <p className="text-xs text-muted-foreground/60">
-            Add a PostgreSQL connection to start exploring your databases.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Database />}
+          title="No connections yet"
+          description="Add a PostgreSQL connection to start exploring your databases."
+        />
       </ScrollArea>
     );
   }
@@ -146,7 +142,7 @@ export function SidebarContent({
       return (
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+            <Loader2 className="size-3.5 animate-spin" />
             Searching cached relation trees…
           </div>
         </ScrollArea>
@@ -155,32 +151,21 @@ export function SidebarContent({
     if (connectedConnections.length === 0) {
       return (
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-            <div className="rounded-lg bg-sidebar-accent p-3">
-              <SearchX className="size-6 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              No connected instances
-            </p>
-            <p className="text-xs text-muted-foreground/60">
-              Clear search, then connect to an instance to search its schemas
-              and relations.
-            </p>
-          </div>
+          <EmptyState
+            icon={<SearchX />}
+            title="No connected instances"
+            description="Clear search, then connect to an instance to search its schemas and relations."
+          />
         </ScrollArea>
       );
     }
     return (
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-          <div className="rounded-lg bg-sidebar-accent p-3">
-            <SearchX className="size-6 text-muted-foreground" />
-          </div>
-          <p className="text-sm text-muted-foreground">No matching relations</p>
-          <p className="text-xs text-muted-foreground/60">
-            Try a connection, schema, table, or view name.
-          </p>
-        </div>
+        <EmptyState
+          icon={<SearchX />}
+          title="No matching relations"
+          description="Try a connection, schema, table, or view name."
+        />
       </ScrollArea>
     );
   }
@@ -188,7 +173,7 @@ export function SidebarContent({
   if (searchActive) {
     return (
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-0.5 px-2 py-2">
+        <div className="flex flex-col gap-px p-2">
           {filteredConnections.map(({ connection, schemas }) => (
             <ConnectionItem
               key={connection.id}
@@ -209,12 +194,10 @@ export function SidebarContent({
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div className="flex flex-col gap-0.5 px-2 py-2">
+      <div className="flex flex-col gap-px p-2">
         {favourites.length > 0 && (
           <>
-            <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
-              Favourites
-            </p>
+            <SectionLabel>Favourites</SectionLabel>
             {favourites.map((c) => (
               <ConnectionItem
                 key={c.id}
@@ -226,18 +209,11 @@ export function SidebarContent({
                 }
               />
             ))}
-            {others.length > 0 && (
-              <Separator className="my-1.5 bg-sidebar-border" />
-            )}
           </>
         )}
         {others.length > 0 && (
           <>
-            {favourites.length > 0 && (
-              <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
-                Connections
-              </p>
-            )}
+            {favourites.length > 0 && <SectionLabel>Connections</SectionLabel>}
             {others.map((c) => (
               <ConnectionItem
                 key={c.id}
@@ -253,5 +229,13 @@ export function SidebarContent({
         )}
       </div>
     </ScrollArea>
+  );
+}
+
+function SectionLabel({ children }: Readonly<{ children: string }>) {
+  return (
+    <p className="mt-4 mb-1 px-2 text-xs text-muted-foreground first:mt-1">
+      {children}
+    </p>
   );
 }

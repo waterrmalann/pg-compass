@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Play, Table2, LayoutList, Square } from "lucide-react";
+import {
+  CircleAlert,
+  LayoutList,
+  Play,
+  Rows3,
+  Square,
+  Table2,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Kbd } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   SqlEditor,
   type CompletionSchema,
@@ -14,6 +24,7 @@ import { ExportDropdown } from "@/components/workspace/export-dropdown";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import type { ColumnInfo } from "@/shared/types/table-data";
+import { getShortcut, shortcutLabel } from "@/shared/constants/shortcuts";
 
 type ViewMode = "table" | "card";
 
@@ -240,132 +251,129 @@ export function QueryTab({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* Editor area */}
-      <div
-        className="flex flex-col gap-2 border-b border-border p-3"
-        data-query-editor
-      >
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Editor */}
+      <Panel className="shrink-0" data-query-editor>
         <SqlEditor
           value={sql}
           onChange={setSql}
           onSubmit={handleRun}
           placeholder="Write a SELECT query…"
           schema={completionSchema}
-          minHeight="96px"
+          minHeight="120px"
         />
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">
-            Only SELECT statements are allowed. Press Ctrl+Enter to run.
+        <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            Only SELECT statements are allowed.
           </span>
-          {loading ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => void handleCancel()}
-            >
-              <Square className="size-3.5" />
-              Cancel
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className="gap-1.5"
-              onClick={handleRun}
-              disabled={!sql.trim()}
-            >
-              <Play className="size-3.5" />
-              Run Query
-            </Button>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Kbd>{shortcutLabel(getShortcut("run-query"))}</Kbd>
+            {loading ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleCancel()}
+              >
+                <Square />
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleRun}
+                disabled={!sql.trim()}
+              >
+                <Play />
+                Run query
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      </Panel>
 
       {/* Error display */}
       {error && (
-        <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {error}
+        <div
+          role="alert"
+          className="flex shrink-0 items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive-foreground"
+        >
+          <CircleAlert className="mt-px size-3.5 shrink-0" />
+          <span className="min-w-0 font-mono break-words">{error}</span>
         </div>
       )}
 
       {/* Results */}
-      {hasRun && (
-        <>
-          <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-            <span className="text-xs text-muted-foreground">
-              {totalCount.toLocaleString()} row{totalCount === 1 ? "" : "s"}{" "}
-              returned
-              {lastRefreshedAt
-                ? ` · updated ${lastRefreshedAt.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}`
-                : ""}
-            </span>
-            <div className="flex items-center gap-2">
-              <ExportDropdown
-                connectionId={connectionId}
-                schema={schema}
-                table={table}
-                sql={lastSuccessfulSql ?? sql}
-                hasQueryResults={hasRun && rows.length > 0}
-              />
-              <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
-                <Button
-                  type="button"
-                  variant={viewMode === "table" ? "secondary" : "ghost"}
-                  size="icon-sm"
-                  className="size-8"
-                  onClick={() => setViewMode("table")}
-                  aria-label="Table view"
-                >
-                  <Table2 className="size-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant={viewMode === "card" ? "secondary" : "ghost"}
-                  size="icon-sm"
-                  className="size-8"
-                  onClick={() => setViewMode("card")}
-                  aria-label="Card view"
-                >
-                  <LayoutList className="size-3.5" />
-                </Button>
+      <Panel className="flex-1">
+        {hasRun ? (
+          <>
+            <PanelHeader className="px-3">
+              <Rows3 />
+              <PanelTitle>Results</PanelTitle>
+              <span className="truncate text-xs text-muted-foreground">
+                {totalCount.toLocaleString()} row{totalCount === 1 ? "" : "s"}{" "}
+                returned
+                {lastRefreshedAt
+                  ? ` · updated ${lastRefreshedAt.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
+                  : ""}
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <ExportDropdown
+                  connectionId={connectionId}
+                  schema={schema}
+                  table={table}
+                  sql={lastSuccessfulSql ?? sql}
+                  hasQueryResults={hasRun && rows.length > 0}
+                />
+                <SegmentedControl
+                  ariaLabel="Result view mode"
+                  value={viewMode}
+                  onValueChange={setViewMode}
+                  options={[
+                    {
+                      value: "table",
+                      icon: <Table2 />,
+                      ariaLabel: "Table view",
+                    },
+                    {
+                      value: "card",
+                      icon: <LayoutList />,
+                      ariaLabel: "Card view",
+                    },
+                  ]}
+                />
               </div>
+            </PanelHeader>
+
+            <div className="min-h-0 flex-1">
+              <QueryResultView
+                viewMode={viewMode}
+                columns={columns}
+                rows={rows}
+              />
             </div>
-          </div>
 
-          <div className="min-h-0 flex-1">
-            <QueryResultView
-              viewMode={viewMode}
-              columns={columns}
-              rows={rows}
+            <DataPagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              disabled={loading}
             />
+          </>
+        ) : (
+          <div className="flex flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
+            {loading
+              ? "Running query…"
+              : "Write a query and press Run query to see results."}
           </div>
-
-          <DataPagination
-            page={page}
-            pageSize={pageSize}
-            totalCount={totalCount}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            disabled={loading}
-          />
-        </>
-      )}
-
-      {/* Initial state before running */}
-      {!hasRun && !error && (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          {loading
-            ? "Running query…"
-            : "Write a query and press Run to see results."}
-        </div>
-      )}
+        )}
+      </Panel>
     </div>
   );
 }

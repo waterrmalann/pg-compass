@@ -80,7 +80,7 @@ test("explores, queries, exports, and updates settings in the real Electron app"
   await page.getByRole("menuitem", { name: "Favourite" }).click();
 
   await page.getByRole("button", { name: "Open E2E Database" }).click();
-  await expect(page.getByText("Schema Name")).toBeVisible();
+  await expect(page.getByText("Schema name")).toBeVisible();
   await page.getByRole("row", { name: /app/i }).click();
   await expect(page.getByRole("tab", { name: "Tables" })).toBeVisible();
 
@@ -119,7 +119,7 @@ test("explores, queries, exports, and updates settings in the real Electron app"
   await expect(page.getByRole("row", { name: /Enabled/i })).toBeVisible();
 
   await page.getByRole("tab", { name: "Query" }).click();
-  await page.getByRole("button", { name: "Run Query" }).click();
+  await page.getByRole("button", { name: "Run query" }).click();
   await expect(page.getByText(/rows returned/)).toBeVisible();
 
   const queryEditor = page.locator("[data-query-editor] .cm-content");
@@ -128,7 +128,7 @@ test("explores, queries, exports, and updates settings in the real Electron app"
     process.platform === "darwin" ? "Meta+A" : "Control+A",
   );
   await page.keyboard.type("SELECT pg_sleep(10)");
-  await page.getByRole("button", { name: "Run Query" }).click();
+  await page.getByRole("button", { name: "Run query" }).click();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByText("Query cancelled.")).toBeVisible();
@@ -143,12 +143,12 @@ test("explores, queries, exports, and updates settings in the real Electron app"
 
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Appearance" }).click();
-  await page.getByRole("tab", { name: "Light" }).click();
+  await page.getByRole("radio", { name: /Light/ }).click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
   await page.getByRole("button", { name: "General" }).click();
   await page.getByRole("button", { name: "View" }).click();
   await expect(
-    page.getByRole("heading", { name: "Keyboard Shortcuts" }),
+    page.getByRole("heading", { name: "Keyboard shortcuts" }),
   ).toBeVisible();
 
   await app.close();
