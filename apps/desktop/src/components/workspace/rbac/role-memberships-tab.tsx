@@ -1,4 +1,11 @@
+import { Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -8,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MissingValue } from "@/components/workspace/relation-list-table";
 import { BUILTIN_ROLE_DESCRIPTIONS } from "@/shared/constants/builtin-roles";
 import type { PgMembership, PgRole } from "@/shared/types/roles";
 
@@ -30,55 +38,67 @@ export function RoleMembershipsTab({
 
   if (!isAdmin) {
     return (
-      <div className="flex max-w-2xl flex-col gap-2">
-        <p className="text-sm text-muted-foreground">
-          You can view the roles this principal belongs to. Reassigning roles
-          requires a superuser connection.
-        </p>
-        <div className="rounded-lg border border-border">
-          {parentSet.size === 0 ? (
-            <p className="p-3 text-xs text-muted-foreground">
-              Not a member of any other role.
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {Array.from(parentSet.values()).map((m) => (
-                <li key={m.parentName} className="px-3 py-2 text-sm">
-                  <div className="flex items-center">
+      <Panel className="max-w-3xl">
+        <PanelHeader>
+          <Shield />
+          <PanelTitle>Member of</PanelTitle>
+          <PanelCount>{parentSet.size}</PanelCount>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Changing memberships needs a superuser
+          </span>
+        </PanelHeader>
+        {parentSet.size === 0 ? (
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+            Not a member of any other role.
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border/70">
+            {Array.from(parentSet.values()).map((m) => (
+              <li
+                key={m.parentName}
+                className="flex flex-col gap-0.5 px-4 py-2.5"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[12.5px] font-medium">
                     {m.parentName}
-                    {m.withAdminOption && (
-                      <Badge variant="secondary" className="ml-2">
-                        Admin
-                      </Badge>
-                    )}
-                  </div>
-                  {BUILTIN_ROLE_DESCRIPTIONS[m.parentName] && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {BUILTIN_ROLE_DESCRIPTIONS[m.parentName]}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
+                  </span>
+                  {m.withAdminOption && <Badge>Admin</Badge>}
+                </div>
+                {BUILTIN_ROLE_DESCRIPTIONS[m.parentName] && (
+                  <p className="text-xs text-muted-foreground">
+                    {BUILTIN_ROLE_DESCRIPTIONS[m.parentName]}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
     );
   }
 
   return (
-    <div className="flex max-w-2xl flex-col gap-2">
-      <p className="text-sm text-muted-foreground">
-        Toggle which roles this principal inherits privileges from.
-      </p>
-      <div className="overflow-hidden rounded-lg border border-border">
+    <Panel className="max-w-3xl">
+      <PanelHeader>
+        <Shield />
+        <PanelTitle>Member of</PanelTitle>
+        <PanelCount>{parentSet.size}</PanelCount>
+        <span className="ml-auto text-xs text-muted-foreground">
+          Inherits privileges from the roles switched on
+        </span>
+      </PanelHeader>
+      {candidateParents.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+          There are no group roles to join.
+        </p>
+      ) : (
         <Table>
-          <TableHeader className="bg-card">
+          <TableHeader>
             <TableRow>
               <TableHead>Role</TableHead>
-              <TableHead>Granted</TableHead>
+              <TableHead>Member</TableHead>
               <TableHead>Can re-grant</TableHead>
-              <TableHead>Use</TableHead>
+              <TableHead>Description</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -88,7 +108,9 @@ export function RoleMembershipsTab({
               const description = BUILTIN_ROLE_DESCRIPTIONS[parent.name];
               return (
                 <TableRow key={parent.name}>
-                  <TableCell className="font-medium">{parent.name}</TableCell>
+                  <TableCell className="font-mono text-[12.5px] font-medium">
+                    {parent.name}
+                  </TableCell>
                   <TableCell>
                     <Switch
                       checked={isMember}
@@ -101,20 +123,20 @@ export function RoleMembershipsTab({
                   </TableCell>
                   <TableCell>
                     {membership?.withAdminOption ? (
-                      <Badge variant="secondary">Admin</Badge>
+                      <Badge>Admin</Badge>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <MissingValue />
                     )}
                   </TableCell>
-                  <TableCell className="max-w-xs whitespace-normal text-xs text-muted-foreground">
-                    {description ?? "—"}
+                  <TableCell className="max-w-xs text-xs whitespace-normal text-muted-foreground">
+                    {description ?? <MissingValue />}
                   </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
-      </div>
-    </div>
+      )}
+    </Panel>
   );
 }

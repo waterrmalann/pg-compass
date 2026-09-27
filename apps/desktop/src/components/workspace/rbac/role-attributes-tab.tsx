@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Key, Loader2, Pencil, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fieldClassName } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { cn } from "@/lib/utils";
 import type { PgRole } from "@/shared/types/roles";
 import { formatBool } from "./shared";
 
@@ -45,7 +48,8 @@ export function RoleAttributesTab({
               disabled={disabled}
               onClick={onResetPassword}
             >
-              <Key className="size-3.5" /> Reset my password
+              <Key />
+              Reset my password
             </Button>
           )}
           <Button
@@ -54,7 +58,8 @@ export function RoleAttributesTab({
             disabled={disabled}
             onClick={onEdit}
           >
-            <Shield className="size-3.5" /> Edit attributes
+            <Shield />
+            Edit attributes
           </Button>
         </div>
       )}
@@ -92,26 +97,23 @@ function RoleDescriptionField({
 
   if (!editing) {
     return (
-      <div className="flex flex-col gap-1 rounded-lg border border-border p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            Description
-          </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex min-h-6 items-center justify-between gap-2">
+          <span className="text-[13px] font-medium">Description</span>
           {isAdmin && (
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
+              size="xs"
               disabled={disabled}
               onClick={() => setEditing(true)}
             >
-              <Pencil className="size-3" />
+              <Pencil />
               Edit
             </Button>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-[13px] leading-5 text-muted-foreground">
           {description ?? "No description set."}
         </p>
       </div>
@@ -119,7 +121,7 @@ function RoleDescriptionField({
   }
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-border p-3">
+    <div className="flex flex-col gap-1.5">
       <Label htmlFor="role-description">Description</Label>
       <textarea
         id="role-description"
@@ -127,7 +129,7 @@ function RoleDescriptionField({
         onChange={(e) => setValue(e.target.value)}
         disabled={saving}
         placeholder="What is this role for?"
-        className="min-h-20 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(fieldClassName, "min-h-20 resize-y px-2.5 py-2")}
       />
       <div className="flex gap-2">
         <Button
@@ -138,7 +140,7 @@ function RoleDescriptionField({
           }}
           disabled={saving || disabled}
         >
-          {saving && <Loader2 className="size-3.5 animate-spin" />}
+          {saving && <Loader2 className="animate-spin" />}
           Save
         </Button>
         <Button
@@ -165,33 +167,45 @@ function AttributeGrid({ role }: Readonly<{ role: PgRole }>) {
   const connectionLimit =
     role.connectionLimit === -1 ? "unlimited" : String(role.connectionLimit);
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-border p-4 text-sm">
-      <AttributeRow label="Login" value={formatBool(role.canLogin)} />
-      <AttributeRow label="Superuser" value={formatBool(role.isSuperuser)} />
-      <AttributeRow
-        label="Can create role"
-        value={formatBool(role.canCreateRole)}
-      />
-      <AttributeRow
-        label="Can create database"
-        value={formatBool(role.canCreateDb)}
-      />
-      <AttributeRow
-        label="Inherit privileges"
-        value={formatBool(role.inherit)}
-      />
-      <AttributeRow label="Replication" value={formatBool(role.canReplicate)} />
-      <AttributeRow label="Bypass RLS" value={formatBool(role.canBypassRls)} />
-      <AttributeRow
-        label="Has password"
-        value={formatHasPassword(role.hasPassword)}
-      />
-      <AttributeRow label="Connection limit" value={connectionLimit} />
-      <AttributeRow
-        label="Valid until"
-        value={role.validUntil ?? "no expiry"}
-      />
-    </div>
+    <Panel>
+      <PanelHeader>
+        <Shield />
+        <PanelTitle>Attributes</PanelTitle>
+      </PanelHeader>
+      <dl className="grid sm:grid-cols-2">
+        <AttributeRow label="Login" value={formatBool(role.canLogin)} />
+        <AttributeRow label="Superuser" value={formatBool(role.isSuperuser)} />
+        <AttributeRow
+          label="Can create role"
+          value={formatBool(role.canCreateRole)}
+        />
+        <AttributeRow
+          label="Can create database"
+          value={formatBool(role.canCreateDb)}
+        />
+        <AttributeRow
+          label="Inherit privileges"
+          value={formatBool(role.inherit)}
+        />
+        <AttributeRow
+          label="Replication"
+          value={formatBool(role.canReplicate)}
+        />
+        <AttributeRow
+          label="Bypass RLS"
+          value={formatBool(role.canBypassRls)}
+        />
+        <AttributeRow
+          label="Has password"
+          value={formatHasPassword(role.hasPassword)}
+        />
+        <AttributeRow label="Connection limit" value={connectionLimit} />
+        <AttributeRow
+          label="Valid until"
+          value={role.validUntil ?? "no expiry"}
+        />
+      </dl>
+    </Panel>
   );
 }
 
@@ -200,11 +214,9 @@ function AttributeRow({
   value,
 }: Readonly<{ label: string; value: string }>) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="font-mono text-xs">{value}</span>
+    <div className="flex h-9 items-center justify-between gap-3 border-b border-border/70 px-4 text-[13px] sm:odd:border-r">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="truncate font-mono text-xs">{value}</dd>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
+import { Panel } from "@/components/ui/panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/hooks/use-settings";
 import type {
@@ -207,7 +207,7 @@ export function RoleDetail({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 rounded-lg border border-border">
+    <Panel className="h-full min-w-0 flex-1">
       <RoleDetailHeader
         role={role}
         isSelf={isSelf}
@@ -222,17 +222,16 @@ export function RoleDetail({
         onDrop={() => setOpenDialog("drop")}
       />
       {isAdmin && readOnlyMode && (
-        <div className="px-4">
+        <div className="border-b border-border px-4 py-2">
           <ReadOnlyNotice action="change roles" />
         </div>
       )}
-      <Separator />
       <Tabs
         defaultValue="attributes"
-        className="flex min-h-0 flex-1 flex-col gap-2"
+        className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <div className="px-4">
-          <TabsList variant="line" className="w-full justify-start">
+        <div className="shrink-0 border-b border-border px-4 py-2">
+          <TabsList>
             <TabsTrigger value="attributes">Attributes</TabsTrigger>
             <TabsTrigger value="memberships">Roles</TabsTrigger>
             <TabsTrigger value="databases">Database access</TabsTrigger>
@@ -240,7 +239,7 @@ export function RoleDetail({
           </TabsList>
         </div>
         <ScrollArea className="min-h-0 flex-1">
-          <div className="px-4 pb-6">
+          <div className="p-4">
             <TabsContent value="attributes" className="mt-0">
               <RoleAttributesTab
                 role={role}
@@ -339,6 +338,6 @@ export function RoleDetail({
           />
         </>
       )}
-    </div>
+    </Panel>
   );
 }

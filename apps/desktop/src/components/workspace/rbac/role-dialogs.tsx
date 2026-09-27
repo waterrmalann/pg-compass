@@ -97,7 +97,7 @@ function DialogActions({
         disabled={busy || submitDisabled}
         onClick={onSubmit}
       >
-        {busy && <Loader2 className="size-4 animate-spin" />}
+        {busy && <Loader2 className="animate-spin" />}
         {submitLabel}
       </Button>
     </DialogFooter>
@@ -110,14 +110,14 @@ function NameError({
 }: Readonly<{ name: string; conflict: boolean }>) {
   if (conflict) {
     return (
-      <p className="text-xs text-destructive">
+      <p className="text-xs text-destructive-foreground">
         A role with this name already exists.
       </p>
     );
   }
   if (name.length > 0 && !isValidPgName(name)) {
     return (
-      <p className="text-xs text-destructive">
+      <p className="text-xs text-destructive-foreground">
         Names can be at most 63 bytes and cannot contain NUL characters.
       </p>
     );
@@ -148,13 +148,8 @@ export function CreateRoleDialog({
       open={open}
       onOpenChange={onOpenChange}
       busy={busy}
-      title="Create"
-      description={
-        <>
-          Without <strong>Login</strong>, this creates a role. With it enabled,
-          this creates a user that can connect.
-        </>
-      }
+      title="New role"
+      description="With Login on, this creates a user that can connect. Without it, a group role that others can be granted."
     >
       <CreateRoleForm
         connectionId={connectionId}
@@ -238,12 +233,12 @@ function CreateRoleForm({
           />
         </Field>
       )}
-      <div className="flex flex-wrap gap-4">
-        <Label className="gap-2 text-sm">
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <Label className="gap-2">
           <Switch checked={login} onCheckedChange={setLogin} />
           Login
         </Label>
-        <Label className="gap-2 text-sm">
+        <Label className="gap-2">
           <Switch checked={inherit} onCheckedChange={setInherit} />
           Inherit
         </Label>
@@ -315,7 +310,7 @@ export function EditRoleDialog({
       onOpenChange={onOpenChange}
       busy={busy}
       title={<>Edit &quot;{role.name}&quot;</>}
-      description="Toggle role attributes. To change the password use the dedicated reset-password action."
+      description="Change what this role can do. Use Reset password to change its password."
     >
       <EditRoleForm
         role={role}
@@ -364,16 +359,16 @@ function EditRoleForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-4">
-        <Label className="gap-2 text-sm">
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <Label className="gap-2">
           <Switch checked={login} onCheckedChange={setLogin} />
           Login
         </Label>
-        <Label className="gap-2 text-sm">
+        <Label className="gap-2">
           <Switch checked={createRole} onCheckedChange={setCreateRole} />
           Create role
         </Label>
-        <Label className="gap-2 text-sm">
+        <Label className="gap-2">
           <Switch checked={createDb} onCheckedChange={setCreateDb} />
           Create database
         </Label>
@@ -483,7 +478,9 @@ function ResetPasswordForm({
             aria-invalid={mismatch}
           />
           {mismatch && (
-            <p className="text-xs text-destructive">Passwords do not match.</p>
+            <p className="text-xs text-destructive-foreground">
+              Passwords do not match.
+            </p>
           )}
         </Field>
       )}

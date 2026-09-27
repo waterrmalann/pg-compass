@@ -743,7 +743,7 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 | Component | Use |
 |---|---|
 | `Panel`, `PanelHeader`, `PanelTitle`, `PanelCount`, `PanelFooter` | Every workspace table, result set and grouped list (§9.15). Pagination is the panel footer. |
-| `SegmentedControl` | Any 2–4 option mode switch (view mode, export format, connection mode). Segments are `aria-pressed` buttons. |
+| `SegmentedControl` | Any 2–4 option mode switch (view mode, export format, connection mode, backup source, access level). Segments are `aria-pressed` buttons. |
 | `EmptyState`, `LoadingState` | Centered empty, error and loading placeholders. |
 | `Kbd` | Keyboard hints (sidebar search, run query). |
 | `fieldClassName` (from `input.tsx`) | Shared field recipe for native `select`, `textarea` and editor containers. |
@@ -752,7 +752,9 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Density.** Settings → Appearance → Density (`compact` default | `comfortable`). Compact switches every workspace table to the `h-8` dense row via `[data-density="compact"]` on the workspace root (unlayered CSS in `index.css`). The card viewer reads `useDensity()` directly.
 
-**Connection colours.** A user-picked connection colour is data, and it helps tell databases apart when several are open, so it's the one decorative hue allowed. It appears as a 6px dot beside the connection name (sidebar row, workspace tab). Workspace tabs from a coloured connection also carry a light tint: a 9% fill with a 22% border when inactive, and a 16% fill over `background` with a 45% border when active. The colour reaches CSS through the `--tab-tint` variable. It never tints text, and never appears outside the tab strip.
+**Connection colours.** A user-picked connection colour is data, and it helps tell databases apart when several are open, so it's the one decorative hue allowed. It appears as a 6px dot beside the connection name (sidebar row, workspace tab, the sidebar's Users section header). Workspace tabs from a coloured connection also carry a light tint: a 9% fill with a 22% border when inactive, and a 16% fill over `background` with a 45% border when active. The colour reaches CSS through the `--tab-tint` variable. It never tints text, and fills never appear outside the tab strip.
+
+**Tool screens.** Users and roles, and the Database manager, are built from panels: a role list panel beside a role detail panel (identity header, segmented sub-views, panel content), and form panels whose primary action sits in the panel footer. Role, database and table names are mono. A destructive confirmation (restore over a database) uses a `destructive/10` tint note with a warning icon, never a red border.
 
 **Intentional exceptions.** Theme-picker previews use fixed neutral values because they show a theme other than the active one.
 

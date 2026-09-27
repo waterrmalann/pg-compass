@@ -135,10 +135,7 @@ export function ExportDropdown({
             Export all
           </DropdownMenuItem>
           {canExportQuery && effectiveSql && (
-            <DropdownMenuItem
-              onClick={handleExportQuery}
-              disabled={exportBusy}
-            >
+            <DropdownMenuItem onClick={handleExportQuery} disabled={exportBusy}>
               <FileDown />
               Export selected query
             </DropdownMenuItem>

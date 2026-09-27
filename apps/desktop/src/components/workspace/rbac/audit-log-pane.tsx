@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Loader2, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  ScrollText,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Panel,
+  PanelCount,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -100,67 +113,74 @@ export function AuditLogPane({
     );
   } else if (sorted.length === 0) {
     content = (
-      <p className="text-sm text-muted-foreground">No audit entries yet.</p>
+      <EmptyState
+        icon={<ScrollText />}
+        title="No audit entries yet"
+        description="Role and permission changes made from PG Compass are recorded here."
+      />
     );
   } else {
     content = (
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="overflow-hidden rounded-lg border border-border">
-          <Table>
-            <TableHeader className="bg-card">
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Result</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
-                    {new Date(entry.timestamp).toLocaleString()}
-                  </TableCell>
-                  <TableCell className="font-medium">{entry.actor}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {entry.action}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs">{entry.target}</TableCell>
-                  <TableCell>
-                    <AuditResult entry={entry} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </ScrollArea>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Time</TableHead>
+            <TableHead>Actor</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead>Target</TableHead>
+            <TableHead>Result</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((entry) => (
+            <TableRow key={entry.id}>
+              <TableCell className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                {new Date(entry.timestamp).toLocaleString()}
+              </TableCell>
+              <TableCell className="font-mono text-[12.5px]">
+                {entry.actor}
+              </TableCell>
+              <TableCell>
+                <Badge className="font-mono">{entry.action}</Badge>
+              </TableCell>
+              <TableCell className="font-mono text-xs">
+                {entry.target}
+              </TableCell>
+              <TableCell>
+                <AuditResult entry={entry} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          Administrative actions recorded for this connection. The log is stored
-          locally and capped at 5,000 entries.
-        </p>
-        {isAdmin && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || entries.length === 0}
-            onClick={() => setClearOpen(true)}
-          >
-            <Trash2 className="size-3.5" />
-            Clear log
-          </Button>
-        )}
-      </div>
-      {content}
+    <div className="flex h-full min-h-0 flex-col">
+      <Panel className="min-h-0 flex-1">
+        <PanelHeader>
+          <ScrollText />
+          <PanelTitle>Audit log</PanelTitle>
+          <PanelCount>{entries.length}</PanelCount>
+          <span className="ml-auto hidden truncate text-xs text-muted-foreground md:inline">
+            Stored on this machine, up to 5,000 entries
+          </span>
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="ml-auto md:ml-0"
+              disabled={busy || entries.length === 0}
+              onClick={() => setClearOpen(true)}
+            >
+              <Trash2 />
+              Clear log
+            </Button>
+          )}
+        </PanelHeader>
+        <ScrollArea className="min-h-0 flex-1">{content}</ScrollArea>
+      </Panel>
 
       <Dialog
         open={clearOpen}
@@ -189,7 +209,7 @@ export function AuditLogPane({
                 void handleClear();
               }}
             >
-              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy && <Loader2 className="animate-spin" />}
               Clear log
             </Button>
           </DialogFooter>
@@ -209,13 +229,13 @@ function AuditResult({ entry }: Readonly<{ entry: AuditLogEntry }>) {
     );
   }
   return (
-    <span className="flex flex-col gap-0.5 text-xs text-destructive">
-      <span className="flex items-center gap-1">
-        <XCircle className="size-3.5" />
+    <span className="flex flex-col items-start gap-1">
+      <Badge variant="destructive">
+        <XCircle />
         Failed
-      </span>
+      </Badge>
       {entry.error && (
-        <span className="max-w-xs whitespace-normal text-muted-foreground">
+        <span className="max-w-xs text-xs whitespace-normal text-muted-foreground">
           {entry.error}
         </span>
       )}

@@ -182,59 +182,64 @@ function TableAccessForm({
   return (
     <>
       <SheetHeader>
-        <SheetTitle>Table access — {db.name}</SheetTitle>
+        <SheetTitle>
+          Table access on <span className="font-mono">{db.name}</span>
+        </SheetTitle>
         <SheetDescription>
-          Grant <span className="font-medium text-foreground">{roleName}</span>{" "}
-          read or read/write access to specific tables, grouped by schema.
-          Tables left at &quot;No access&quot; are revoked; future tables are
-          not granted automatically.
+          Give <span className="font-mono text-foreground">{roleName}</span>{" "}
+          read or read + write access to specific tables. Tables left at No
+          access are revoked, and future tables are not granted automatically.
         </SheetDescription>
       </SheetHeader>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-4">
-        <div className="flex items-center justify-between gap-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4">
+        <div className="flex items-center justify-between gap-3">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter schemas or tables"
               aria-label="Filter schemas or tables"
-              className="h-8 pl-7 text-xs"
+              className="pl-8 text-xs"
             />
           </div>
-          <Badge variant="secondary" className="shrink-0 text-[10px]">
+          <Badge className="shrink-0 tabular-nums">
             {totalGranted}/{db.tables.length} granted
           </Badge>
         </div>
-        <ScrollArea className="min-h-0 flex-1 rounded-md border border-border">
+        <ScrollArea className="min-h-0 flex-1 rounded-xl border border-border bg-card shadow-xs/5">
           {filteredSchemas.length === 0 ? (
-            <p className="p-4 text-center text-xs text-muted-foreground">
+            <p className="px-4 py-6 text-center text-xs text-muted-foreground">
               No tables match &quot;{search}&quot;.
             </p>
           ) : (
-            <Accordion type="multiple" className="px-2">
+            <Accordion type="multiple">
               {filteredSchemas.map((group) => {
                 const grantedInSchema = group.tables.filter(
                   (t) => levelOf(group.schema, t.tableName) !== "none",
                 ).length;
                 return (
-                  <AccordionItem key={group.schema} value={group.schema}>
+                  <AccordionItem
+                    key={group.schema}
+                    value={group.schema}
+                    className="border-border/70"
+                  >
                     <AccordionPrimitive.Header className="flex">
-                      <AccordionPrimitive.Trigger className="flex flex-1 items-center gap-2 rounded-md py-2 text-left text-xs font-medium outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&[data-state=open]>svg]:rotate-0">
+                      <AccordionPrimitive.Trigger className="flex h-10 flex-1 items-center gap-2 px-4 text-left outline-none transition-colors duration-150 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset [&[data-state=open]>svg:last-child]:rotate-180">
                         <Layers className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="font-mono font-semibold">
+                        <span className="font-mono text-[12.5px] font-medium">
                           {group.schema}
                         </span>
-                        <Badge variant="outline" className="text-[10px]">
+                        <span className="font-mono text-[11px] text-subtle-foreground tabular-nums">
                           {grantedInSchema}/{group.tables.length}
-                        </Badge>
-                        <ChevronDownIcon className="ml-auto size-3.5 shrink-0 rotate-180 text-muted-foreground transition-transform duration-200" />
+                        </span>
+                        <ChevronDownIcon className="ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform duration-150" />
                       </AccordionPrimitive.Trigger>
                     </AccordionPrimitive.Header>
-                    <AccordionContent className="pb-2">
-                      <div className="mb-2 flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5">
-                        <span className="text-[11px] text-muted-foreground">
-                          Set all:
+                    <AccordionContent className="pb-0">
+                      <div className="flex items-center gap-1 border-y border-border/70 bg-muted/40 px-4 py-1.5">
+                        <span className="mr-1 text-xs text-muted-foreground">
+                          Set all
                         </span>
                         {ACCESS_LEVELS.map((level) => (
                           <Button
@@ -249,13 +254,13 @@ function TableAccessForm({
                           </Button>
                         ))}
                       </div>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col divide-y divide-border/70">
                         {group.tables.map((table) => (
                           <div
                             key={table.tableName}
-                            className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 hover:bg-accent/40"
+                            className="flex h-10 items-center justify-between gap-2 pr-2 pl-9.5 transition-colors duration-150 hover:bg-muted/40"
                           >
-                            <span className="truncate font-mono text-xs">
+                            <span className="truncate font-mono text-[12.5px]">
                               {table.tableName}
                             </span>
                             <AccessLevelControl
@@ -265,7 +270,6 @@ function TableAccessForm({
                               onChange={(level) =>
                                 setLevel(group.schema, table.tableName, level)
                               }
-                              size="xs"
                             />
                           </div>
                         ))}
@@ -294,7 +298,7 @@ function TableAccessForm({
             handleSave().catch(() => undefined);
           }}
         >
-          {saving && <Loader2 className="size-4 animate-spin" />}
+          {saving && <Loader2 className="animate-spin" />}
           Save table access
         </Button>
       </SheetFooter>

@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { fieldClassName } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { cn } from "@/lib/utils";
@@ -156,34 +157,38 @@ export function RunLog({
   endRef: React.RefObject<HTMLDivElement | null>;
 }>) {
   return (
-    <ScrollArea className="h-40 rounded-md border border-border bg-muted/30">
-      <div
-        role="log"
-        aria-live="polite"
-        aria-label="Run log"
-        className="flex flex-col gap-0.5 p-2 font-mono text-[11px]"
-      >
-        {log.map((entry, index) => (
-          <div
-            key={index}
-            className={cn(
-              entry.level === "info" && "text-muted-foreground",
-              entry.level === "warn" && "font-medium text-foreground",
-              entry.level === "error" && "text-destructive",
-            )}
-          >
-            {entry.line}
-          </div>
-        ))}
-        {running && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" />
-            Running…
-          </div>
-        )}
-        <div ref={endRef} />
-      </div>
-    </ScrollArea>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-muted-foreground">Log</span>
+      <ScrollArea className="h-40 rounded-lg border border-border bg-code">
+        <div
+          role="log"
+          aria-live="polite"
+          aria-label="Run log"
+          className="flex flex-col p-2.5 font-mono text-xs leading-5"
+        >
+          {log.map((entry, index) => (
+            <div
+              key={index}
+              className={cn(
+                "break-all",
+                entry.level === "info" && "text-muted-foreground",
+                entry.level === "warn" && "text-warning-foreground",
+                entry.level === "error" && "text-destructive-foreground",
+              )}
+            >
+              {entry.line}
+            </div>
+          ))}
+          {running && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Running…
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
 
@@ -212,54 +217,57 @@ export function EndpointFields({
   connections,
   disabled,
 }: Readonly<EndpointFieldsProps>) {
+  const selectClassName = cn(fieldClassName, "h-8 px-2 text-[13px]");
   return (
     <div
       role="group"
       aria-labelledby={`${idPrefix}-label`}
-      className="flex flex-col gap-1.5"
+      className="flex flex-col gap-2"
     >
       <span
         id={`${idPrefix}-label`}
-        className="text-xs font-medium text-muted-foreground"
+        className="text-[13px] leading-none font-medium"
       >
         {label}
       </span>
-      <select
-        aria-label={`${label} connection`}
-        value={connectionId}
-        onChange={(e) => onConnectionChange(e.target.value)}
-        disabled={disabled}
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-      >
-        <option value="">Select connection…</option>
-        {connections.map((connection) => (
-          <option key={connection.id} value={connection.id}>
-            {connection.label}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label={`${label} database`}
-        value={database}
-        onChange={(e) => onDatabaseChange(e.target.value)}
-        disabled={disabled || !connectionId || loadingDatabases}
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-      >
-        {loadingDatabases ? (
-          <option value="">Loading…</option>
-        ) : (
-          <>
-            <option value="">
-              {databases.length === 0 ? "No databases" : "Select database…"}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <select
+          aria-label={`${label} connection`}
+          value={connectionId}
+          onChange={(e) => onConnectionChange(e.target.value)}
+          disabled={disabled}
+          className={selectClassName}
+        >
+          <option value="">Select connection…</option>
+          {connections.map((connection) => (
+            <option key={connection.id} value={connection.id}>
+              {connection.label}
             </option>
-            {databases.map((name) => (
-              <option key={name} value={name}>
-                {name}
+          ))}
+        </select>
+        <select
+          aria-label={`${label} database`}
+          value={database}
+          onChange={(e) => onDatabaseChange(e.target.value)}
+          disabled={disabled || !connectionId || loadingDatabases}
+          className={selectClassName}
+        >
+          {loadingDatabases ? (
+            <option value="">Loading…</option>
+          ) : (
+            <>
+              <option value="">
+                {databases.length === 0 ? "No databases" : "Select database…"}
               </option>
-            ))}
-          </>
-        )}
-      </select>
+              {databases.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </>
+          )}
+        </select>
+      </div>
     </div>
   );
 }
@@ -282,8 +290,8 @@ export function ProdConfirmDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
-            <ShieldAlert className="size-4" />
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldAlert className="size-4 text-destructive-foreground" />
             Production database selected
           </DialogTitle>
           <DialogDescription>
@@ -293,10 +301,10 @@ export function ProdConfirmDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="destructive" size="sm" onClick={onConfirm}>
+          <Button variant="destructive" onClick={onConfirm}>
             Yes, use it as target
           </Button>
         </DialogFooter>

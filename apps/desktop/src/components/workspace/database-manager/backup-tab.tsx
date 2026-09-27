@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   Ban,
-  ChevronDown,
   ChevronRight,
   HardDriveDownload,
   Loader2,
@@ -9,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,11 +20,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Panel,
+  PanelCount,
+  PanelFooter,
+  PanelHeader,
+  PanelTitle,
+} from "@/components/ui/panel";
+import { MissingValue } from "@/components/workspace/relation-list-table";
 import { cn } from "@/lib/utils";
 import { useConnections } from "@/hooks/use-connections";
 import type { BackupFileInfo, BackupInspection } from "@/shared/types/backup";
@@ -183,83 +189,81 @@ export function BackupTab({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <EndpointFields
-          label="Database to back up"
-          idPrefix="backup-source"
-          connectionId={connectionId}
-          onConnectionChange={setConnectionId}
-          database={database}
-          onDatabaseChange={setDatabase}
-          databases={databases}
-          loadingDatabases={loadingDatabases}
-          connections={connections}
-          disabled={running}
-        />
-      </div>
-
-      {(runLog.log.length > 0 || running) && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Log</span>
-          <RunLog log={runLog.log} running={running} endRef={runLog.endRef} />
-        </div>
-      )}
-
-      <div className="flex justify-end gap-2">
-        {running ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={handleCancel}
-          >
-            <Ban className="size-3.5" />
-            Cancel run
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            className="gap-1.5"
-            disabled={!canRun}
-            onClick={() => {
-              handleRun().catch(() => undefined);
-            }}
-          >
-            <HardDriveDownload className="size-3.5" />
-            Run backup
-          </Button>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
-            Recent backups
+    <div className="flex max-w-3xl flex-col gap-4">
+      <Panel>
+        <PanelHeader>
+          <HardDriveDownload />
+          <PanelTitle>New backup</PanelTitle>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Custom-format dump with pg_dump
           </span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => {
-                  void refreshBackups();
-                }}
-                disabled={loadingBackups}
-                aria-label="Refresh backups"
-              >
-                <RotateCcw
-                  className={cn("size-3.5", loadingBackups && "animate-spin")}
-                />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh backups</TooltipContent>
-          </Tooltip>
+        </PanelHeader>
+        <div className="flex flex-col gap-4 p-4">
+          <EndpointFields
+            label="Database to back up"
+            idPrefix="backup-source"
+            connectionId={connectionId}
+            onConnectionChange={setConnectionId}
+            database={database}
+            onDatabaseChange={setDatabase}
+            databases={databases}
+            loadingDatabases={loadingDatabases}
+            connections={connections}
+            disabled={running}
+          />
+          {(runLog.log.length > 0 || running) && (
+            <RunLog log={runLog.log} running={running} endRef={runLog.endRef} />
+          )}
         </div>
+        <PanelFooter className="justify-end">
+          {running ? (
+            <Button variant="outline" size="sm" onClick={handleCancel}>
+              <Ban />
+              Cancel run
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={!canRun}
+              onClick={() => {
+                handleRun().catch(() => undefined);
+              }}
+            >
+              <HardDriveDownload />
+              Run backup
+            </Button>
+          )}
+        </PanelFooter>
+      </Panel>
+
+      <Panel>
+        <PanelHeader>
+          <Archive />
+          <PanelTitle>Backups</PanelTitle>
+          <PanelCount>{backups.length}</PanelCount>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="ml-auto"
+            onClick={() => {
+              void refreshBackups();
+            }}
+            disabled={loadingBackups}
+            aria-label="Refresh backups"
+            title="Refresh backups"
+          >
+            <RotateCcw className={cn(loadingBackups && "animate-spin")} />
+          </Button>
+        </PanelHeader>
         {backups.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No backups yet.</p>
+          <EmptyState
+            icon={<Archive />}
+            title="No backups yet"
+            description="Backups you run are saved on this machine and listed here."
+            className="py-10"
+          />
         ) : (
-          <div className="flex flex-col gap-1">
+          <ul className="divide-y divide-border/70">
             {backups.map((backup) => (
               <BackupRow
                 key={backup.path}
@@ -274,9 +278,9 @@ export function BackupTab({
                 onDelete={() => setDeleteTarget(backup)}
               />
             ))}
-          </div>
+          </ul>
         )}
-      </div>
+      </Panel>
 
       <Dialog
         open={deleteTarget !== null}
@@ -335,60 +339,61 @@ function BackupRow({
 }>) {
   const detailsId = useId();
   return (
-    <div className="rounded-md border border-border bg-card text-xs">
-      <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+    <li className="text-xs">
+      <div className="flex min-h-12 items-center gap-2 py-1.5 pr-2 pl-4 transition-colors duration-150 hover:bg-muted/40">
         <button
           type="button"
-          className="flex min-w-0 items-center gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-expanded={expanded}
           aria-controls={detailsId}
           onClick={onToggleDetails}
         >
-          {expanded ? (
-            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-          )}
+          <ChevronRight
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+              expanded && "rotate-90",
+            )}
+          />
           <span className="min-w-0">
-            <span className="block truncate font-mono">{backup.fileName}</span>
-            <span className="block text-[10px] text-muted-foreground">
+            <span className="block truncate font-mono text-[12.5px] text-foreground">
+              {backup.fileName}
+            </span>
+            <span className="block text-muted-foreground tabular-nums">
               {formatBytes(backup.sizeBytes)} ·{" "}
               {formatRelativeTime(backup.mtimeMs)}
             </span>
           </span>
         </button>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="xs"
             disabled={running}
             onClick={onUseForRestore}
           >
+            <ArchiveRestore />
             Restore from this
           </Button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove backup ${backup.fileName}`}
-                onClick={onDelete}
-              >
-                <Trash2 className="size-3.5 text-destructive" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Remove backup</TooltipContent>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="hover:text-destructive-foreground"
+            aria-label={`Remove backup ${backup.fileName}`}
+            title="Remove backup"
+            onClick={onDelete}
+          >
+            <Trash2 />
+          </Button>
         </div>
       </div>
       <div
         id={detailsId}
         hidden={!expanded}
-        className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border px-2.5 py-1.5 text-muted-foreground"
+        className="border-t border-border/70 bg-muted/40 py-3 pr-4 pl-9.5"
       >
         {expanded && <BackupDetails backup={backup} inspection={inspection} />}
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -401,34 +406,38 @@ function BackupDetails({
 }>) {
   const inspectionPending = !inspection || inspection.status === "loading";
   return (
-    <>
-      <span>
-        <span className="font-medium text-foreground">Time:</span>{" "}
-        {new Date(backup.createdAt ?? backup.mtimeMs).toLocaleString()}
-      </span>
-      <span>
-        <span className="font-medium text-foreground">Source:</span>{" "}
-        {backup.target ?? "—"}
-      </span>
+    <div className="flex flex-col gap-2.5">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+        <dt className="text-muted-foreground">Created</dt>
+        <dd className="tabular-nums">
+          {new Date(backup.createdAt ?? backup.mtimeMs).toLocaleString()}
+        </dd>
+        <dt className="text-muted-foreground">Source</dt>
+        <dd className="min-w-0 truncate font-mono">
+          {backup.target ?? <MissingValue />}
+        </dd>
+      </dl>
       {inspectionPending && (
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
           <Loader2 className="size-3 animate-spin" />
           Reading backup contents…
         </span>
       )}
       {inspection?.status === "error" && (
-        <span className="text-destructive">{inspection.message}</span>
+        <span className="text-destructive-foreground">
+          {inspection.message}
+        </span>
       )}
       {inspection?.status === "ok" && (
-        <>
+        <div className="flex flex-wrap gap-1.5">
           <ObjectCount count={inspection.data.schemas} noun="schema" />
           <ObjectCount count={inspection.data.tables} noun="table" />
           <ObjectCount count={inspection.data.views} noun="view" />
           <ObjectCount count={inspection.data.sequences} noun="sequence" />
           <ObjectCount count={inspection.data.functions} noun="function" />
-        </>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -437,9 +446,9 @@ function ObjectCount({
   noun,
 }: Readonly<{ count: number; noun: string }>) {
   return (
-    <span>
-      <span className="font-medium text-foreground">{count}</span> {noun}
+    <Badge className="tabular-nums">
+      {count} {noun}
       {count === 1 ? "" : "s"}
-    </span>
+    </Badge>
   );
 }

@@ -3,8 +3,8 @@ import { Search, Shield, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type { PgRole } from "@/shared/types/roles";
@@ -53,12 +53,11 @@ export function RoleList({
 
   if (!isAdmin) {
     return (
-      <div className="flex h-full min-h-0 w-64 shrink-0 flex-col gap-2 rounded-lg border border-border">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <Users className="size-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">My account</span>
-        </div>
-        <Separator />
+      <Panel className="h-full w-64 shrink-0">
+        <PanelHeader>
+          <Users />
+          <PanelTitle>My account</PanelTitle>
+        </PanelHeader>
         <ScrollArea className="min-h-0 flex-1">
           <RoleRows
             roles={roles}
@@ -68,67 +67,62 @@ export function RoleList({
             emptyText="No account information available."
           />
         </ScrollArea>
-      </div>
+      </Panel>
     );
   }
 
   const filterLabel = category === "users" ? "Filter users" : "Filter roles";
 
   return (
-    <div className="flex h-full min-h-0 w-64 shrink-0 flex-col rounded-lg border border-border">
+    <Panel className="h-full w-64 shrink-0">
       <Tabs
         value={category}
         onValueChange={(value) => setCategory(value as RoleCategory)}
-        className="flex min-h-0 flex-1 flex-col gap-2"
+        className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <div className="px-2 pt-2">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border p-2">
           <TabsList className="w-full">
-            <TabsTrigger value="users" className="flex-1 gap-1.5">
-              <Users className="size-3.5" />
+            <TabsTrigger value="users" className="flex-1">
+              <Users />
               Users
-              <Badge variant="secondary" className="text-[10px]">
-                {loginRoles.length}
-              </Badge>
+              <CountHint>{loginRoles.length}</CountHint>
             </TabsTrigger>
-            <TabsTrigger value="roles" className="flex-1 gap-1.5">
-              <Shield className="size-3.5" />
+            <TabsTrigger value="roles" className="flex-1">
+              <Shield />
               Roles
-              <Badge variant="secondary" className="text-[10px]">
-                {groupRoles.length}
-              </Badge>
+              <CountHint>{groupRoles.length}</CountHint>
             </TabsTrigger>
           </TabsList>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder={filterLabel}
+              aria-label={filterLabel}
+              className="h-7 pr-7 pl-8 text-xs"
+            />
+            {search && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="absolute top-1/2 right-0.5 size-6 -translate-y-1/2"
+                aria-label="Clear filter"
+                onClick={() => onSearchChange("")}
+              >
+                <X />
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="relative px-3">
-          <Search className="pointer-events-none absolute left-5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={filterLabel}
-            aria-label={filterLabel}
-            className="h-8 pl-8 pr-8 text-xs"
-          />
-          {search && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute right-4 top-1/2 size-6 -translate-y-1/2"
-              aria-label="Clear filter"
-              onClick={() => onSearchChange("")}
-            >
-              <X className="size-3" />
-            </Button>
-          )}
-        </div>
-        <Separator />
         <TabsContent value="users" className="mt-0 min-h-0 flex-1">
           <ScrollArea className="h-full min-h-0">
             <RoleRows
               roles={loginRoles}
               selectedRoleName={selectedRoleName}
               onSelectRole={onSelectRole}
-              emptyText="No users match the current filter."
+              emptyText="No users match the filter."
             />
           </ScrollArea>
         </TabsContent>
@@ -138,12 +132,20 @@ export function RoleList({
               roles={groupRoles}
               selectedRoleName={selectedRoleName}
               onSelectRole={onSelectRole}
-              emptyText="No roles match the current filter."
+              emptyText="No roles match the filter."
             />
           </ScrollArea>
         </TabsContent>
       </Tabs>
-    </div>
+    </Panel>
+  );
+}
+
+function CountHint({ children }: Readonly<{ children: number }>) {
+  return (
+    <span className="font-mono text-[11px] text-subtle-foreground tabular-nums">
+      {children}
+    </span>
   );
 }
 
@@ -162,13 +164,13 @@ function RoleRows({
 }>) {
   if (roles.length === 0) {
     return (
-      <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+      <p className="px-4 py-6 text-center text-xs text-muted-foreground">
         {emptyText}
       </p>
     );
   }
   return (
-    <div className="flex flex-col gap-0.5 p-1">
+    <div className="flex flex-col gap-px p-1.5">
       {roles.map((role) => (
         <RoleRow
           key={role.name}
@@ -197,35 +199,19 @@ function RoleRow({
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors disabled:cursor-default",
+        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
         selected
-          ? "bg-accent font-medium text-accent-foreground"
+          ? "bg-accent text-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground disabled:hover:bg-transparent",
       )}
       onClick={onSelect}
       disabled={disabled}
       aria-current={selected ? "true" : undefined}
     >
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate">{role.name}</span>
-        <span className="flex flex-wrap gap-1">
-          {role.isSuperuser && (
-            <Badge variant="secondary" className="text-[10px]">
-              Superuser
-            </Badge>
-          )}
-          {role.canLogin && !role.isSuperuser && (
-            <Badge variant="outline" className="text-[10px]">
-              Login
-            </Badge>
-          )}
-          {!role.canLogin && (
-            <Badge variant="outline" className="text-[10px]">
-              Role
-            </Badge>
-          )}
-        </span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">
+        {role.name}
       </span>
+      {role.isSuperuser && <Badge>Superuser</Badge>}
     </button>
   );
 }

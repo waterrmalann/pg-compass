@@ -1,22 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ChevronDown,
   DatabaseZap,
   Loader2,
   Plus,
   Shield,
-  Users,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useConnections } from "@/hooks/use-connections";
 import { useLatestRequest } from "@/hooks/use-latest-request";
@@ -118,131 +119,127 @@ export function SidebarFooter({
   const accentColor = activeConnection?.color;
 
   return (
-    <div className="mt-auto flex flex-col gap-2 p-3">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground"
-          onClick={() => setExpanded((value) => !value)}
-          disabled={!activeConnection}
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse roles list" : "Expand roles list"}
-        >
-          <ChevronDown
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform",
-              expanded && activeConnection ? "" : "-rotate-90",
-            )}
-          />
-          <Users className="size-3.5 shrink-0" />
-          <span className="flex-1 truncate">
-            {isAdmin ? "Users" : "My account"}
-          </span>
-          {accentColor && (
-            <span
-              className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: accentColor }}
-              aria-hidden
-            />
-          )}
-          {loading && (
-            <Loader2
-              className="size-3 shrink-0 animate-spin text-muted-foreground"
-              aria-label="Loading roles"
-            />
-          )}
-          {!loading && activeConnection && (
-            <Badge variant="outline" className="text-[10px]">
-              {roles.length}
-            </Badge>
-          )}
-        </button>
-      </div>
-      {!loading && summary && expanded && (
-        <>
-          <ScrollArea className="min-h-0 [&>[data-slot=scroll-area-viewport]]:max-h-40">
-            <div className="flex flex-col gap-0.5">
-              {usersShown.length === 0 ? (
-                <p className="px-1 py-2 text-[11px] text-muted-foreground">
-                  No roles visible.
-                </p>
-              ) : (
-                usersShown.map((role) => (
-                  <RolePill
-                    key={role.name}
-                    role={role}
-                    onClick={() => handleOpenUsers(role.name)}
-                  />
-                ))
-              )}
-              {hiddenCount > 0 && (
-                <p className="px-1 pt-1 text-[11px] text-muted-foreground">
-                  + {hiddenCount} more in the Users view
-                </p>
-              )}
-            </div>
-          </ScrollArea>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-xs"
-            onClick={() => handleOpenUsers(undefined)}
+    <div className="mt-auto flex shrink-0 flex-col gap-px border-t border-sidebar-border p-2">
+      {activeConnection && (
+        <div className="flex flex-col gap-px pb-1.5">
+          <button
+            type="button"
+            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground outline-none transition-colors duration-150 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse roles list" : "Expand roles list"}
           >
-            <Shield className="size-3.5" />
-            {isAdmin ? "Manage users & RBAC" : "View my access"}
-          </Button>
-        </>
+            <ChevronDown
+              className={cn(
+                "size-3 shrink-0 transition-transform duration-150",
+                !expanded && "-rotate-90",
+              )}
+            />
+            <span className="min-w-0 flex-1 truncate">
+              {isAdmin ? "Users" : "My account"}
+            </span>
+            {accentColor && (
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: accentColor }}
+                aria-hidden
+              />
+            )}
+            {loading ? (
+              <Loader2
+                className="size-3 shrink-0 animate-spin"
+                aria-label="Loading roles"
+              />
+            ) : (
+              <span className="font-mono text-[11px] text-subtle-foreground tabular-nums">
+                {roles.length}
+              </span>
+            )}
+          </button>
+          {!loading && summary && expanded && (
+            <>
+              <ScrollArea className="min-h-0 [&>[data-slot=scroll-area-viewport]]:max-h-40">
+                <div className="flex flex-col gap-px">
+                  {usersShown.length === 0 ? (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">
+                      No login roles visible.
+                    </p>
+                  ) : (
+                    usersShown.map((role) => (
+                      <RoleRow
+                        key={role.name}
+                        role={role}
+                        onClick={() => handleOpenUsers(role.name)}
+                      />
+                    ))
+                  )}
+                  {hiddenCount > 0 && (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">
+                      {hiddenCount} more in Users
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+              <SidebarRowButton onClick={() => handleOpenUsers(undefined)}>
+                <Shield />
+                {isAdmin ? "Manage users and roles" : "View my access"}
+              </SidebarRowButton>
+            </>
+          )}
+        </div>
       )}
-      <Separator className="bg-sidebar-border" />
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start gap-2 text-xs text-muted-foreground hover:text-foreground"
+      <SidebarRowButton
         onClick={() => {
           openTab({ type: "database-manager" }).catch(() => undefined);
         }}
       >
-        <DatabaseZap className="size-3.5" />
+        <DatabaseZap />
         Database manager
-      </Button>
+      </SidebarRowButton>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2"
-            onClick={onNewConnection}
-          >
-            <Plus className="size-4" />
-            <span>New Connection</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          <p>Add a new PostgreSQL connection</p>
-        </TooltipContent>
-      </Tooltip>
+      <Button
+        variant="outline"
+        size="sm"
+        className="mt-1.5 w-full"
+        onClick={onNewConnection}
+        title="Add a new PostgreSQL connection"
+      >
+        <Plus />
+        New connection
+      </Button>
     </div>
   );
 }
 
-function RolePill({
+function SidebarRowButton({
+  onClick,
+  children,
+}: Readonly<{ onClick: () => void; children: ReactNode }>) {
+  return (
+    <button
+      type="button"
+      className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs text-sidebar-foreground outline-none transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RoleRow({
   role,
   onClick,
 }: Readonly<{ role: PgRole; onClick: () => void }>) {
   return (
     <button
       type="button"
-      className="flex items-center gap-2 rounded-md px-1 py-1 text-left text-xs transition-colors hover:bg-sidebar-accent/60"
+      className="flex h-7 items-center gap-2 rounded-md pr-1 pl-2 text-left text-xs text-sidebar-foreground outline-none transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       onClick={onClick}
     >
-      <span className="flex-1 truncate">{role.name}</span>
-      {role.isSuperuser && (
-        <Badge variant="secondary" className="text-[10px]">
-          Superuser
-        </Badge>
-      )}
+      <User className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate font-mono">{role.name}</span>
+      {role.isSuperuser && <Badge>Superuser</Badge>}
     </button>
   );
 }
