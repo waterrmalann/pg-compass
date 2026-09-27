@@ -757,3 +757,15 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 **Intentional exceptions.** Theme-picker previews use fixed neutral values because they show a theme other than the active one.
 
 **CodeMirror.** The SQL editor uses the §9.19 syntax palette through `pg-theme.ts`. CodeMirror injects its styles unlayered at runtime, so editor sizing lives in CodeMirror themes (`Prec.high` for overrides), not in Tailwind classes.
+
+---
+
+## 16. PG Compass landing notes
+
+How the marketing site (`apps/landing`) applies this system. Tokens live in `src/styles/global.css`.
+
+**Brand blue.** The landing page keeps PG Compass's logo blue as its one brand accent, an intentional exception to "Don't introduce a brand accent colour" (§13). It is `--brand` (`#1d6fd6` light, `#4aa8ff` dark, with `--brand-foreground` for text on it). It appears only on the logo, the version dot, the hero and closing download CTAs (`.btn-brand`), the theme slider handle, the text selection, and a 9–10% tint in the single hero glow. Nav buttons, links, previews and status colours stay neutral. The desktop app does not use it.
+
+**Layout.** The page follows §10: a sticky glass header, a left-aligned hero with the brand CTA above an outline GitHub button, and the hero app window (a real screenshot in a window frame) with underline scene tabs and a play/pause control. After that come three feature rows with interactive previews, a dark/light comparison slider, a secondary grid, the download link list with a release panel, the FAQ, open-source stats and commits, a closing CTA, and a footer on the sidebar tone.
+
+**Previews.** The feature previews (connection tree with tinted tabs, table/card switch, query runner) are hand-built HTML using the §9 recipes and demo data, not images. Screenshots come from the real app (`scripts/screenshots`), in both themes, and the page swaps them with the active theme.

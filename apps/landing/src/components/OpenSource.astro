@@ -1,0 +1,80 @@
+---
+import { ArrowUpRight, CircleDot, GitCommitHorizontal, GitFork, Star } from "@lucide/astro";
+import GitHubIcon from "./GitHubIcon.astro";
+import { links } from "../lib/site";
+
+const stats = [
+  { key: "stars", label: "Stars", icon: Star },
+  { key: "forks", label: "Forks", icon: GitFork },
+  // GitHub counts open pull requests as issues, hence "open items".
+  { key: "issues", label: "Open items", icon: CircleDot },
+];
+---
+
+<section id="open-source" class="border-t border-border py-20 md:py-28">
+  <div class="grid gap-10 md:grid-cols-[0.85fr_1.3fr] lg:gap-20">
+    <div class="flex min-w-0 flex-col">
+      <p class="eyebrow">Open source</p>
+      <h2 class="feature-title">Built in the open. Read every line.</h2>
+      <p class="body-copy mt-4 max-w-[30rem]">
+        PG Compass is MIT licensed and developed in public. The code you download is the code on
+        GitHub. Read it, file an issue, or send a pull request.
+      </p>
+      <div class="mt-6 flex flex-wrap gap-2">
+        <a class="btn btn-outline btn-md" href={links.repo} target="_blank" rel="noopener">
+          <GitHubIcon />
+          Star on GitHub
+        </a>
+        <a class="btn btn-outline btn-md" href={links.newIssue} target="_blank" rel="noopener">
+          Open an issue
+        </a>
+      </div>
+
+      <div class="mt-10 grid grid-cols-3 gap-3">
+        {
+          stats.map((stat) => (
+            <div class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-xs/5">
+              <div class="flex items-center justify-between text-xs whitespace-nowrap text-muted-foreground">
+                {stat.label}
+                <stat.icon class="hidden size-3.5 sm:block" aria-hidden="true" />
+              </div>
+              <div class="text-[28px] leading-[1.1] font-medium tracking-[-0.02em] tabular-nums" data-repo-stat={stat.key}>
+                —
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="flex min-w-0 flex-col gap-6">
+      <div class="panel">
+        <div class="flex min-h-11 items-center gap-2 border-b border-border px-4">
+          <GitCommitHorizontal class="size-3.5 text-muted-foreground" aria-hidden="true" />
+          <h3 class="text-sm font-medium">Recent commits</h3>
+          <span class="ml-auto font-mono text-xs text-muted-foreground">main</span>
+        </div>
+        <ul class="-mb-px" data-commits aria-live="polite">
+          <li class="flex h-10 items-center px-4 text-[13px] text-muted-foreground">Loading recent commits…</li>
+        </ul>
+        <div class="border-t border-border px-4 py-2.5">
+          <a class="text-link text-xs" href={links.commits} target="_blank" rel="noopener">
+            View the full history
+            <ArrowUpRight class="size-3" aria-hidden="true" />
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-medium">Contributors</h3>
+        <p class="mt-1 text-sm text-muted-foreground">Thank you to everyone who has sent a fix, a feature or a bug report.</p>
+        <div class="mt-4 flex flex-wrap gap-2" data-contributors>
+          <a class="text-link" href={links.contributors} target="_blank" rel="noopener">
+            See contributors on GitHub
+            <ArrowUpRight class="size-3.5" aria-hidden="true" />
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

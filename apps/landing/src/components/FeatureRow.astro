@@ -1,0 +1,28 @@
+---
+// §4 feature row: copy and an interactive preview, alternating sides.
+interface Props {
+  eyebrow: string;
+  title: string;
+  reverse?: boolean;
+}
+
+const { eyebrow, title, reverse = false } = Astro.props;
+---
+
+<div
+  class:list={[
+    "grid items-center gap-8 border-t border-border py-16 md:gap-10 md:py-20 lg:gap-20",
+    reverse ? "md:grid-cols-[1.3fr_0.85fr]" : "md:grid-cols-[0.85fr_1.3fr]",
+  ]}
+>
+  <div class:list={["max-w-[30rem]", reverse && "md:order-2"]}>
+    <p class="eyebrow">{eyebrow}</p>
+    <h2 class="feature-title">{title}</h2>
+    <div class="body-copy mt-4 flex flex-col gap-4">
+      <slot />
+    </div>
+  </div>
+  <div class:list={["min-w-0", reverse && "md:order-1"]}>
+    <slot name="preview" />
+  </div>
+</div>

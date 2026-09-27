@@ -1,0 +1,67 @@
+---
+import { Image } from "astro:assets";
+import { ChevronsLeftRight } from "@lucide/astro";
+import dataDark from "../assets/screenshots/data-dark.png";
+import dataLight from "../assets/screenshots/data-light.png";
+
+const imageProps = {
+  widths: [1200, 1800, 2400],
+  sizes: "(min-width: 72rem) 70rem, 100vw",
+  format: "webp" as const,
+  quality: 88,
+  loading: "lazy" as const,
+  draggable: false,
+};
+---
+
+<div class="border-t border-border py-16 md:py-20">
+  <div class="grid gap-6 md:grid-cols-[0.85fr_1.3fr] md:items-end md:gap-10 lg:gap-20">
+    <div class="max-w-[30rem]">
+      <p class="eyebrow">Appearance</p>
+      <h2 class="feature-title">Dark by default. Light when the sun is out.</h2>
+    </div>
+    <p class="body-copy max-w-[34rem]">
+      Both themes are built from the same translucent layers, so panels, tables and dialogs read the
+      same in either. Follow your system if you'd rather not choose, and pick compact or comfortable
+      rows to suit your screen.
+    </p>
+  </div>
+
+  <div class="preview mt-10">
+    <div
+      class="relative aspect-[16/10] cursor-ew-resize touch-none select-none"
+      style="--split: 50%"
+      role="slider"
+      tabindex="0"
+      aria-label="Compare the dark and light themes"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="50"
+      aria-valuetext="50% dark"
+      data-compare
+    >
+      <Image src={dataDark} alt="PG Compass in the dark theme." class="absolute inset-0 size-full" {...imageProps} />
+      <Image
+        src={dataLight}
+        alt="PG Compass in the light theme."
+        class="absolute inset-0 size-full [clip-path:inset(0_0_0_var(--split))]"
+        {...imageProps}
+      />
+      <span class="chip absolute bottom-3 left-3 border-white/10 bg-black/70 text-white/80 backdrop-blur" aria-hidden="true">Dark</span>
+      <span class="chip absolute right-3 bottom-3 border-black/10 bg-white/85 text-black/70 backdrop-blur" aria-hidden="true">Light</span>
+      <div class="pointer-events-none absolute inset-y-0 left-(--split) w-0.5 -translate-x-1/2 bg-brand" aria-hidden="true">
+        <span
+          class="absolute top-1/2 left-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-lg ring-4 ring-brand/20"
+        >
+          <ChevronsLeftRight class="size-4" />
+        </span>
+      </div>
+    </div>
+  </div>
+  <p class="mt-3 px-1 text-xs text-muted-foreground">Drag the handle, or focus it and use the arrow keys.</p>
+</div>
+
+<script>
+  import { setupThemeCompare } from "../scripts/theme-compare";
+  setupThemeCompare();
+</script>

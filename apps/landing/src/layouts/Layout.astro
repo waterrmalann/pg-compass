@@ -1,5 +1,6 @@
 ---
-import '../styles/global.css';
+import "../styles/global.css";
+import { withBase } from "../lib/site";
 
 interface Props {
   title?: string;
@@ -7,31 +8,38 @@ interface Props {
 }
 
 const {
-  title = 'PG Compass - a fast, minimal PostgreSQL viewer',
-  description = 'A fast, minimal desktop database viewer for PostgreSQL.',
+  title = "PG Compass: a fast, focused PostgreSQL viewer",
+  description = "A small desktop app for looking inside PostgreSQL. Browse schemas, read rows, check indexes and run a quick query. Free and open source for Windows and Linux.",
 } = Astro.props;
 
-const base = import.meta.env.BASE_URL;
-const basePath = base.endsWith('/') ? base : `${base}/`;
+const ogImage = new URL(withBase("og.png"), Astro.site).href;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
-    <link rel="icon" type="image/png" href={`${basePath}favicon.png`} />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/png" href={withBase("favicon.png")} />
+    <link rel="apple-touch-icon" href={withBase("apple-touch-icon.png")} />
+    <!-- Dark is the default; a saved choice from the theme toggle wins. Runs
+         before paint so the page never flashes the wrong theme. -->
+    <script is:inline>
+      try {
+        if (localStorage.getItem("pgc-theme") === "light") {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <slot />

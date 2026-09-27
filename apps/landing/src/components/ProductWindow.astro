@@ -1,0 +1,112 @@
+---
+import { Image } from "astro:assets";
+import { Minus, Pause, Play, Square, X } from "@lucide/astro";
+import { scenes } from "../lib/scenes";
+
+const first = scenes[0]!;
+const imageProps = {
+  widths: [1200, 1800, 2400],
+  sizes: "(min-width: 72rem) 70rem, 100vw",
+  format: "webp" as const,
+  quality: 88,
+};
+---
+
+<section aria-label="Product tour" class="mx-auto max-w-6xl px-4 sm:px-6" data-tour>
+  <!-- §9.11 hero app window, with the page's single glow in the brand tint. -->
+  <div class="rounded-xl shadow-[0_0_80px_8px_var(--brand-glow)]">
+    <div
+      class="overflow-hidden rounded-xl border border-border/70 bg-background shadow-2xl ring-1 ring-black/5"
+      data-tour-frame
+    >
+      <div
+        class="flex h-8 items-center gap-2 border-b border-border/80 bg-sidebar px-3 text-subtle-foreground"
+        aria-hidden="true"
+      >
+        <span class="text-[11px]">PG Compass</span>
+        <span class="text-[11px] text-subtle-foreground/60">·</span>
+        <span class="truncate font-mono text-[11px]" data-tour-title>{first.title}</span>
+        <span class="ml-auto flex items-center gap-3 [&_svg]:size-3">
+          <Minus />
+          <Square />
+          <X />
+        </span>
+      </div>
+      <div class="grid aspect-[16/10] bg-background">
+        {
+          scenes.map((scene, index) => (
+            <div
+              id={`scene-${scene.id}`}
+              role="tabpanel"
+              aria-labelledby={`tab-${scene.id}`}
+              data-scene={scene.id}
+              data-active={index === 0 ? "" : undefined}
+              class="invisible opacity-0 transition-[opacity,visibility] duration-300 [grid-area:1/1] data-[active]:visible data-[active]:opacity-100"
+            >
+              <Image
+                src={scene.dark}
+                alt={scene.alt}
+                class="hidden size-full dark:block"
+                loading={index === 0 ? "eager" : "lazy"}
+                fetchpriority={index === 0 ? "high" : "auto"}
+                {...imageProps}
+              />
+              <Image
+                src={scene.light}
+                alt={scene.alt}
+                class="block size-full dark:hidden"
+                loading={index === 0 ? "eager" : "lazy"}
+                {...imageProps}
+              />
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- §9.2 underline scene tabs with a play/pause control (§12). -->
+  <div class="mt-4 flex items-center gap-2">
+    <div
+      role="tablist"
+      aria-label="Product tour"
+      class="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none]"
+    >
+      {
+        scenes.map((scene, index) => (
+          <button
+            type="button"
+            role="tab"
+            id={`tab-${scene.id}`}
+            aria-controls={`scene-${scene.id}`}
+            aria-selected={index === 0 ? "true" : "false"}
+            tabindex={index === 0 ? 0 : -1}
+            data-tour-tab={scene.id}
+            data-caption={scene.caption}
+            data-title={scene.title}
+            class="relative min-h-10 shrink-0 cursor-pointer rounded-md px-3 text-xs text-muted-foreground transition-colors duration-150 after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-foreground after:opacity-0 after:transition-opacity hover:bg-muted hover:text-foreground aria-selected:text-foreground aria-selected:after:opacity-100"
+          >
+            {scene.label}
+          </button>
+        ))
+      }
+    </div>
+    <button
+      type="button"
+      class="btn btn-ghost btn-icon shrink-0"
+      data-tour-toggle
+      aria-label="Pause the tour"
+    >
+      <Pause data-icon-pause aria-hidden="true" />
+      <Play data-icon-play class="hidden" aria-hidden="true" />
+    </button>
+  </div>
+  <p class="px-3 text-xs leading-5 text-muted-foreground" data-tour-caption aria-live="polite">
+    {first.caption}
+  </p>
+</section>
+
+<script>
+  import { setupTour } from "../scripts/tour";
+  setupTour();
+</script>

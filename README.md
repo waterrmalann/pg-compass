@@ -6,7 +6,7 @@ A fast, minimal desktop database viewer for **PostgreSQL**, inspired by the usab
 
 > Most PostgreSQL tools are either bloated IDE-style apps (pgAdmin, DataGrip) with features you never use, or primitive CLI wrappers. PG Compass sits in the sweet spot — a focused, fast tool for the thing developers actually do most: _inspecting data_.
 
-![PG Compass Demo](./docs/demo.gif)
+![PG Compass showing a table of orders](./docs/screenshot.png)
 
 ---
 

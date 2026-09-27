@@ -1,0 +1,52 @@
+---
+import { ArrowDownUp, Keyboard, Network, Shapes, ShieldCheck, TableProperties } from "@lucide/astro";
+
+const items = [
+  {
+    icon: TableProperties,
+    title: "Six views per table.",
+    body: "Data, Structure, Indexes, Constraints, Triggers and Types sit side by side in one tab.",
+  },
+  {
+    icon: ArrowDownUp,
+    title: "Export and import.",
+    body: "Export a table or a query's results as CSV or JSON, or dump it as SQL. Import rows from CSV or JSON.",
+  },
+  {
+    icon: Shapes,
+    title: "Extension-aware.",
+    body: "pgvector embeddings and PostGIS geometry render as values you can read, not binary blobs.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Read-only when it counts.",
+    body: "Turn on read-only mode and edits disappear from the UI. Write requests are refused outright.",
+  },
+  {
+    icon: Network,
+    title: "SSL and SSH tunnels.",
+    body: "Connect through a bastion host, or verify the server with your own CA certificate.",
+  },
+  {
+    icon: Keyboard,
+    title: "Keyboard friendly.",
+    body: "Switch tabs, refresh a view, search the sidebar and run a query without reaching for the mouse.",
+  },
+];
+---
+
+<div class="border-t border-border py-16 md:py-20">
+  <p class="eyebrow">Also in the box</p>
+  <h2 class="section-title max-w-[26ch]">The small things you reach for every day.</h2>
+  <div class="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+    {
+      items.map((item) => (
+        <div class="flex flex-col gap-2">
+          <item.icon class="size-4 text-muted-foreground" aria-hidden="true" />
+          <h3 class="mt-1 text-base font-medium tracking-[-0.025em]">{item.title}</h3>
+          <p class="max-w-[36ch] text-sm leading-6 text-muted-foreground">{item.body}</p>
+        </div>
+      ))
+    }
+  </div>
+</div>

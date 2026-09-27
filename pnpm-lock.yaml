@@ -206,6 +206,15 @@ importers:
 
   apps/landing:
     dependencies:
+      '@fontsource-variable/geist':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/geist-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@lucide/astro':
+        specifier: ^1.48.0
+        version: 1.48.0(astro@5.18.0(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(rollup@4.59.0)(terser@5.46.0)(typescript@5.9.2)(yaml@2.8.2))
       astro:
         specifier: ^5.5.3
         version: 5.18.0(@types/node@24.12.0)(jiti@2.6.1)(lightningcss@1.31.1)(rollup@4.59.0)(terser@5.46.0)(typescript@5.9.2)(yaml@2.8.2)
@@ -1291,6 +1300,11 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@inquirer/prompts': '>= 3 < 8'
+
+  '@lucide/astro@1.48.0':
+    resolution: {integrity: sha512-BL+7lLGjjSTfdYEBd9pAB0ixhJ7M84OVzxHoY3oG3M92kX/q1UG2+znp+pqH3waxpIHF1l8Hd1QZxytqv5WH8A==}
+    peerDependencies:
+      astro: ^4 || ^5 || ^6 || ^7
 
   '@malept/cross-spawn-promise@1.1.1':
     resolution: {integrity: sha512-RTBGWL5FWQcg9orDOCcp4LvItNzUPcyEU9bwaeJX0rJ1IQxzucC48Y0/sQLp/g6t99IQgAlGIaesJS+gTn7tVQ==}
@@ -7737,6 +7751,10 @@ snapshots:
     dependencies:
       '@inquirer/prompts': 6.0.1
       '@inquirer/type': 1.5.5
+
+  '@lucide/astro@1.48.0(astro@5.18.0(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(rollup@4.59.0)(terser@5.46.0)(typescript@5.9.2)(yaml@2.8.2))':
+    dependencies:
+      astro: 5.18.0(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.31.1)(rollup@4.59.0)(terser@5.46.0)(typescript@5.9.2)(yaml@2.8.2)
 
   '@malept/cross-spawn-promise@1.1.1':
     dependencies:
