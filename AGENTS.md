@@ -4,7 +4,7 @@ This is a **Turborepo** powered monorepo for **PG Compass**, a **MongoDB Compass
 - `apps/desktop`: The desktop application built with Electron.
 
 > [!IMPORTANT]
-> Before performing any task, implementation or code change, you **MUST** internalize: `docs/PROJECT_CONTEXT.md` to understand the project context (needs). Any frontend UI work should also be aligned with `docs/DESIGN_SYSTEM.md`. **No implementation may violate these documents.**
+> Before performing any task, implementation or code change, you **MUST** internalize: `docs/PROJECT_CONTEXT.md` to understand the project context (needs). Any frontend UI work should also be aligned with `docs/DESIGN.md` (the Quiet Utility design system). **No implementation may violate these documents.**
 
 >[!IMPORTANT]
 > You **must** read the `AGENTS.md` if-present inside the relevant codebase mono-repositories (`/apps/*`) you're working with to understand the architectural and design decisions.
