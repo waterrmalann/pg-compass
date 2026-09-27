@@ -74,6 +74,10 @@ A Users view lets superusers manage roles for the active connection: create, alt
 
 The Database Manager can back up a database to a local dump and restore a dump into a database, using `pg_dump`/`pg_restore` from the user's `PATH`. It is optional; the rest of the app needs no client tools. See `docs/decisions/BACKUP_RESTORE_ADR.md`.
 
+### Updates
+
+The app checks GitHub for a new release at launch and every few hours. Windows installs download updates in the background and install them on restart. Linux shows a banner that links to the release. Settings → Privacy turns automatic checks off, and Help → Check for Updates still works when they're off. See `docs/decisions/AUTO_UPDATE_ADR.md`.
+
 ## Design Principles
 
 1. Minimal UI

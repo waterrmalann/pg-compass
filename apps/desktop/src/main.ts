@@ -18,6 +18,7 @@ import {
   configureWindowSecurity,
 } from "./main/window-security";
 import { configureIpcSecurity } from "./main/ipc-security";
+import { applyUpdateSettings, registerUpdateHandlers } from "./main/updater";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -64,8 +65,10 @@ registerTableDataHandlers();
 registerClipboardHandlers();
 registerRolesHandlers();
 registerBackupHandlers();
+registerUpdateHandlers();
 registerSettingsHandlers((settings) => {
   cachedSettings = settings;
+  applyUpdateSettings(settings.privacy.automaticUpdates);
   if (!settings.general.enableDevTools) {
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.webContents.isDevToolsOpened()) {
@@ -171,6 +174,7 @@ app.on("ready", () => {
   );
   Menu.setApplicationMenu(buildAppMenu());
   createWindow();
+  applyUpdateSettings(cachedSettings.privacy.automaticUpdates);
 });
 
 app.on("will-quit", () => {

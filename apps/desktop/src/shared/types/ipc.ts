@@ -21,6 +21,7 @@ import type {
   TableRestrictionInput,
 } from "./roles";
 import type { AppSettings, AppSettingsPatch } from "./settings";
+import type { UpdateStatus } from "./updates";
 import type {
   BackupCancelInput,
   BackupCreateInput,
@@ -123,6 +124,12 @@ export interface HelpApi {
   onShowLicense(callback: () => void): () => void;
   onShowAbout(callback: () => void): () => void;
   onShowShortcuts(callback: () => void): () => void;
+}
+
+export interface UpdateApi {
+  getStatus(): Promise<IpcResult<UpdateStatus>>;
+  install(): Promise<IpcResult<void>>;
+  onStatusChanged(callback: (status: UpdateStatus) => void): () => void;
 }
 
 export interface WorkspaceApi {

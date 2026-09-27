@@ -10,6 +10,7 @@ import {
   RolesChannels,
   SettingsChannels,
   TableDataChannels,
+  UpdateChannels,
   WorkspaceChannels,
 } from "./shared/constants/ipc-channels";
 import type {
@@ -77,6 +78,7 @@ import type {
   SearchForeignKeyParams,
   SearchForeignKeyResult,
 } from "./shared/types/table-data";
+import type { UpdateStatus } from "./shared/types/updates";
 import type {
   BackupApi,
   ClipboardApi,
@@ -86,6 +88,7 @@ import type {
   RolesApi,
   SettingsApi,
   TableDataApi,
+  UpdateApi,
   WorkspaceApi,
 } from "./shared/types/ipc";
 
@@ -259,6 +262,25 @@ const helpApi = {
   },
 } satisfies HelpApi;
 
+const updateApi = {
+  getStatus: (): Promise<IpcResult<UpdateStatus>> =>
+    ipcRenderer.invoke(UpdateChannels.GET_STATUS),
+
+  install: (): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(UpdateChannels.INSTALL),
+
+  onStatusChanged: (callback: (status: UpdateStatus) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      status: UpdateStatus,
+    ) => callback(status);
+    ipcRenderer.on(UpdateChannels.STATUS_CHANGED, listener);
+    return () => {
+      ipcRenderer.removeListener(UpdateChannels.STATUS_CHANGED, listener);
+    };
+  },
+} satisfies UpdateApi;
+
 const workspaceApi = {
   onCloseTab: (callback: () => void) => {
     const listener = () => callback();
@@ -430,6 +452,7 @@ contextBridge.exposeInMainWorld("settingsApi", settingsApi);
 contextBridge.exposeInMainWorld("tableDataApi", tableDataApi);
 contextBridge.exposeInMainWorld("helpApi", helpApi);
 contextBridge.exposeInMainWorld("workspaceApi", workspaceApi);
+contextBridge.exposeInMainWorld("updateApi", updateApi);
 contextBridge.exposeInMainWorld("clipboardApi", clipboardApi);
 contextBridge.exposeInMainWorld("rolesApi", rolesApi);
 contextBridge.exposeInMainWorld("backupApi", backupApi);

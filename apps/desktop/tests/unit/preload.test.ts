@@ -196,6 +196,33 @@ describe("preload API contract", () => {
     expect(invoke).toHaveBeenCalledWith("table-data:search-fk", fkParams);
   });
 
+  it("forwards updateApi calls to the update channels", async () => {
+    await import("@/preload");
+    const updateApi = exposeInMainWorld.mock.calls.find(
+      ([key]) => key === "updateApi",
+    )?.[1] as {
+      getStatus: () => Promise<unknown>;
+      install: () => Promise<unknown>;
+      onStatusChanged: (callback: () => void) => () => void;
+    };
+
+    await updateApi.getStatus();
+    expect(invoke).toHaveBeenCalledWith("updates:get-status");
+    await updateApi.install();
+    expect(invoke).toHaveBeenCalledWith("updates:install");
+
+    const cleanup = updateApi.onStatusChanged(vi.fn());
+    expect(on).toHaveBeenCalledWith(
+      "updates:status-changed",
+      expect.any(Function),
+    );
+    cleanup();
+    expect(removeListener).toHaveBeenCalledWith(
+      "updates:status-changed",
+      expect.any(Function),
+    );
+  });
+
   it("forwards rolesApi calls to the roles channels", async () => {
     await import("@/preload");
     const rolesApi = exposeInMainWorld.mock.calls.find(

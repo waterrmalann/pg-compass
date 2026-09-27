@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { LicenseDialog } from "@/components/help/license-dialog";
 import { AboutDialog } from "@/components/help/about-dialog";
 import { KeyboardShortcutsDialog } from "@/components/help/keyboard-shortcuts-dialog";
+import { UpdateBanner } from "@/components/updates/update-banner";
 
 export function App() {
   const [licenseOpen, setLicenseOpen] = useState(false);
@@ -36,9 +37,12 @@ export function App() {
     <SettingsProvider>
       <ConnectionProvider>
         <WorkspaceProvider>
-          <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
-            <Sidebar />
-            <Workspace />
+          <div className="flex h-full w-full flex-col overflow-hidden bg-background text-foreground">
+            <UpdateBanner />
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              <Sidebar />
+              <Workspace />
+            </div>
           </div>
         </WorkspaceProvider>
         <Toaster position="bottom-right" />

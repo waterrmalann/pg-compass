@@ -9,6 +9,7 @@ import {
   WorkspaceChannels,
 } from "../shared/constants/ipc-channels";
 import { getShortcut } from "../shared/constants/shortcuts";
+import { checkForUpdatesNow } from "./updater";
 import { openAllowedExternalUrl } from "./window-security";
 
 function sendToFocusedWindow(channel: string) {
@@ -117,8 +118,8 @@ export function buildAppMenu(): Menu {
           click: () => sendToFocusedWindow(HelpChannels.SHOW_ABOUT),
         },
         {
-          label: "Check for Updates",
-          enabled: false,
+          label: "Check for Updates…",
+          click: () => void checkForUpdatesNow(),
         },
       ],
     },

@@ -45,6 +45,12 @@ export const HelpChannels = {
   SHOW_SHORTCUTS: "help:show-shortcuts",
 } as const;
 
+export const UpdateChannels = {
+  GET_STATUS: "updates:get-status",
+  INSTALL: "updates:install",
+  STATUS_CHANGED: "updates:status-changed",
+} as const;
+
 export const WorkspaceChannels = {
   CLOSE_TAB: "workspace:close-tab",
   NEXT_TAB: "workspace:next-tab",

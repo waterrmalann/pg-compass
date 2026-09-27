@@ -296,8 +296,8 @@ function PrivacySettingsPanel() {
   return (
     <div className="divide-y divide-border">
       <SettingToggleRow
-        label="Automatic updates"
-        description="Allow PG Compass to automatically check for and install updates (coming soon)."
+        label="Check for updates automatically"
+        description="Checks GitHub for a new release at launch and every few hours. On Windows, updates download in the background and install when you restart. When this is off, PG Compass only checks when you choose Help → Check for Updates."
         checked={settings.privacy.automaticUpdates}
         onCheckedChange={(checked) =>
           updateSettings({ privacy: { automaticUpdates: checked } })

@@ -126,7 +126,11 @@ jobs:
         with:
           draft: false
           generate_release_notes: true
+          # RELEASES and the .nupkg are what Squirrel downloads for in-place
+          # updates (update.electronjs.org serves them from this release).
           files: |
             artifacts/windows/squirrel.windows/x64/*.exe
+            artifacts/windows/squirrel.windows/x64/*.nupkg
+            artifacts/windows/squirrel.windows/x64/RELEASES
             artifacts/linux/deb/x64/*.deb
             artifacts/linux/AppImage/x64/*.AppImage

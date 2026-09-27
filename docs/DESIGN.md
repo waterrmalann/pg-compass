@@ -756,6 +756,8 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Tool screens.** Users and roles, and the Database manager, are built from panels: a role list panel beside a role detail panel (identity header, segmented sub-views, panel content), and form panels whose primary action sits in the panel footer. Role, database and table names are mono. A destructive confirmation (restore over a database) uses a `destructive/10` tint note with a warning icon, never a red border.
 
+**Update banner.** A 32px strip above the whole shell announces a new release or a downloaded update. It has an `info/10` fill, a hairline bottom border and an `info-foreground` icon, with 12.5px foreground text, one `xs` outline action (Download ↗ or Restart to update) and an `icon-xs` ghost close. It is the only full-width notice in the app. Everything else uses toasts.
+
 **Intentional exceptions.** Theme-picker previews use fixed neutral values because they show a theme other than the active one.
 
 **CodeMirror.** The SQL editor uses the §9.19 syntax palette through `pg-theme.ts`. CodeMirror injects its styles unlayered at runtime, so editor sizing lives in CodeMirror themes (`Prec.high` for overrides), not in Tailwind classes.

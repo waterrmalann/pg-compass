@@ -15,7 +15,7 @@ A GitHub Actions workflow (`.github/workflows/release-desktop.yml`) automates bu
 1. **Triggers**: Version tags (`v*`) and manual `workflow_dispatch`.
 2. **Parallel builds**: `build-windows` (Squirrel `.exe`) and `build-linux` (`.deb` + `.AppImage`) run concurrently.
 3. **Artifacts**: Every build uploads artifacts to the workflow run for download/testing.
-4. **Releases**: A separate `release` job runs only on tagged pushes (`v*`), collects artifacts from both builds, and creates a single GitHub Release with all platform installers.
+4. **Releases**: A separate `release` job runs only on tagged pushes (`v*`), collects artifacts from both builds, and creates a single GitHub Release with all platform installers. Windows releases also carry Squirrel's `RELEASES` file and `.nupkg`, which in-place updates download (see `AUTO_UPDATE_ADR.md`).
 
 ## Rationale
 
@@ -29,4 +29,5 @@ A GitHub Actions workflow (`.github/workflows/release-desktop.yml`) automates bu
 - Desktop release builds run only for version tags and manual dispatches, avoiding duplicate builds when a release commit and its tag are pushed together.
 - Linux smoke tests disable Chromium's sandbox for the test process only because hosted runners cannot launch the packaged SUID helper reliably; production builds retain Electron's sandbox defaults.
 - Releases are only created for `v*` tags. To release, first run `pnpm version:bump <patch|minor|major|x.y.z>` to keep app version files in sync, then run `git tag v0.x.0 && git push origin v0.x.0`.
-- macOS can be added as another parallel job later.
+- Removing `RELEASES` or the `.nupkg` from a release breaks Windows auto-updates for users on older versions. The landing page's download matcher only picks `Setup.exe`, so the extra assets don't show up there.
+- macOS can be added as another parallel job later. It would need code signing and notarization for auto-updates.

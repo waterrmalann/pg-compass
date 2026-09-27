@@ -90,6 +90,7 @@
     "react-leaflet": "^5.0.0",
     "sonner": "^2.0.7",
     "stream-json": "2.1.0",
-    "tailwind-merge": "^3.3.0"
+    "tailwind-merge": "^3.3.0",
+    "update-electron-app": "^3.3.0"
   }
 }

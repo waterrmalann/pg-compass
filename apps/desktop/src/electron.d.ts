@@ -6,6 +6,7 @@ import type {
   RolesApi,
   SettingsApi,
   TableDataApi,
+  UpdateApi,
   WorkspaceApi,
 } from "./shared/types/ipc";
 
@@ -19,5 +20,6 @@ declare global {
     clipboardApi: ClipboardApi;
     rolesApi: RolesApi;
     backupApi: BackupApi;
+    updateApi: UpdateApi;
   }
 }
