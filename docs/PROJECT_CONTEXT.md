@@ -74,6 +74,10 @@ A Users view lets superusers manage roles for the active connection: create, alt
 
 The Database Manager can back up a database to a local dump and restore a dump into a database, using `pg_dump`/`pg_restore` from the user's `PATH`. It is optional; the rest of the app needs no client tools. See `docs/decisions/BACKUP_RESTORE_ADR.md`.
 
+### Database Shell
+
+An Open shell button beside Refresh opens a new tab running `psql` for the current connection in an embedded terminal. Each tab is its own session. It needs `psql` on the user's `PATH` and the Shell access setting, which is off by default. In Read-only mode, transactions start read-only. See `docs/decisions/DB_SHELL_ADR.md`.
+
 ### Updates
 
 The app checks GitHub for a new release at launch and every few hours. Windows installs download updates in the background and install them on restart. Linux shows a banner that links to the release. Settings → Privacy turns automatic checks off, and Help → Check for Updates still works when they're off. See `docs/decisions/AUTO_UPDATE_ADR.md`.

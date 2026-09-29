@@ -30,6 +30,7 @@ export function deriveActiveSelection(
 
   switch (view.type) {
     case "schema-list":
+    case "shell":
       return { connectionId, kind: "connection" };
     case "schema":
       return { connectionId, schemaName: view.path.schemaName, kind: "schema" };

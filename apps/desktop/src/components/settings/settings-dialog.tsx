@@ -155,7 +155,7 @@ function GeneralSettingsPanel() {
 
       <SettingToggleRow
         label="Shell access"
-        description="Allow opening a terminal connected to your PostgreSQL database (coming soon)."
+        description="Allow Open shell to run psql, the PostgreSQL command-line client, in a terminal tab. psql can also run local commands with \!."
         checked={settings.general.shellAccess}
         onCheckedChange={(checked) =>
           updateSettings({ general: { shellAccess: checked } })

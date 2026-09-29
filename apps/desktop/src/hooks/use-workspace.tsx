@@ -70,6 +70,8 @@ function buildTabId(view: WorkspaceTabView): string {
   // selection updated in place (see `openTab`) rather than a new tab per
   // clicked role.
   if (view.type === "users") return base;
+  // Shell tabs are opened with `forceOpenTab`, which appends a unique suffix.
+  if (view.type === "shell") return base;
 
   // view-list or view-details
   return `${base}:${view.path.schemaName}:${view.path.viewName}`;
@@ -82,6 +84,7 @@ function buildTabTitle(view: WorkspaceTabView): string {
   if (view.type === "table-list" || view.type === "table-details")
     return view.path.tableName;
   if (view.type === "users") return `${view.path.connectionLabel} · Users`;
+  if (view.type === "shell") return `${view.path.connectionLabel} · Shell`;
 
   // view-list or view-details
   return view.path.viewName;

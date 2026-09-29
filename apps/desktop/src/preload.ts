@@ -9,6 +9,7 @@ import {
   HelpChannels,
   RolesChannels,
   SettingsChannels,
+  ShellChannels,
   TableDataChannels,
   UpdateChannels,
   WorkspaceChannels,
@@ -46,6 +47,15 @@ import type {
   TableRestrictionInput,
 } from "./shared/types/roles";
 import type { AppSettings, AppSettingsPatch } from "./shared/types/settings";
+import type {
+  ShellDataEvent,
+  ShellExitEvent,
+  ShellResizeInput,
+  ShellSessionInput,
+  ShellStartInput,
+  ShellStartResult,
+  ShellWriteInput,
+} from "./shared/types/shell";
 import type {
   ColumnStructure,
   CancelQueryParams,
@@ -87,6 +97,7 @@ import type {
   IpcResult,
   RolesApi,
   SettingsApi,
+  ShellApi,
   TableDataApi,
   UpdateApi,
   WorkspaceApi,
@@ -447,6 +458,38 @@ const backupApi = {
     ipcRenderer.invoke(BackupChannels.INSPECT_BACKUP, { path }),
 } satisfies BackupApi;
 
+const shellApi = {
+  start: (input: ShellStartInput): Promise<IpcResult<ShellStartResult>> =>
+    ipcRenderer.invoke(ShellChannels.START, input),
+
+  write: (input: ShellWriteInput): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(ShellChannels.WRITE, input),
+
+  resize: (input: ShellResizeInput): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(ShellChannels.RESIZE, input),
+
+  kill: (input: ShellSessionInput): Promise<IpcResult<void>> =>
+    ipcRenderer.invoke(ShellChannels.KILL, input),
+
+  onData: (callback: (event: ShellDataEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: ShellDataEvent) =>
+      callback(data);
+    ipcRenderer.on(ShellChannels.DATA, handler);
+    return () => {
+      ipcRenderer.removeListener(ShellChannels.DATA, handler);
+    };
+  },
+
+  onExit: (callback: (event: ShellExitEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, exit: ShellExitEvent) =>
+      callback(exit);
+    ipcRenderer.on(ShellChannels.EXIT, handler);
+    return () => {
+      ipcRenderer.removeListener(ShellChannels.EXIT, handler);
+    };
+  },
+} satisfies ShellApi;
+
 contextBridge.exposeInMainWorld("connectionApi", connectionApi);
 contextBridge.exposeInMainWorld("settingsApi", settingsApi);
 contextBridge.exposeInMainWorld("tableDataApi", tableDataApi);
@@ -456,3 +499,4 @@ contextBridge.exposeInMainWorld("updateApi", updateApi);
 contextBridge.exposeInMainWorld("clipboardApi", clipboardApi);
 contextBridge.exposeInMainWorld("rolesApi", rolesApi);
 contextBridge.exposeInMainWorld("backupApi", backupApi);
+contextBridge.exposeInMainWorld("shellApi", shellApi);

@@ -33,6 +33,15 @@ import type {
   BackupRunResult,
 } from "./backup";
 import type {
+  ShellDataEvent,
+  ShellExitEvent,
+  ShellResizeInput,
+  ShellSessionInput,
+  ShellStartInput,
+  ShellStartResult,
+  ShellWriteInput,
+} from "./shell";
+import type {
   CancelQueryParams,
   CancelQueryResult,
   ColumnStructure,
@@ -193,4 +202,14 @@ export interface BackupApi {
   showRestoreFileDialog(): Promise<IpcResult<string | null>>;
   deleteBackup(path: string): Promise<IpcResult<void>>;
   inspectBackup(path: string): Promise<IpcResult<BackupInspection>>;
+}
+
+export interface ShellApi {
+  /** Spawns psql in a pseudo-terminal for the connection's database. */
+  start(input: ShellStartInput): Promise<IpcResult<ShellStartResult>>;
+  write(input: ShellWriteInput): Promise<IpcResult<void>>;
+  resize(input: ShellResizeInput): Promise<IpcResult<void>>;
+  kill(input: ShellSessionInput): Promise<IpcResult<void>>;
+  onData(callback: (event: ShellDataEvent) => void): () => void;
+  onExit(callback: (event: ShellExitEvent) => void): () => void;
 }

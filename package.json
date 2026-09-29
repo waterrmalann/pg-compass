@@ -34,7 +34,8 @@
     },
     "onlyBuiltDependencies": [
       "electron",
-      "electron-winstaller"
+      "electron-winstaller",
+      "node-pty"
     ]
   },
   "engines": {

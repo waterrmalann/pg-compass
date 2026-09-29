@@ -24,6 +24,12 @@ import type {
   BackupRestoreInput,
 } from "../shared/types/backup";
 import type {
+  ShellResizeInput,
+  ShellSessionInput,
+  ShellStartInput,
+  ShellWriteInput,
+} from "../shared/types/shell";
+import type {
   CancelQueryParams,
   DeleteRowsParams,
   ExecuteQueryParams,
@@ -1191,4 +1197,57 @@ export function validateBackupRestoreInput(value: unknown): BackupRestoreInput {
     "backupRestoreInput.confirmProduction",
   );
   return value as BackupRestoreInput;
+}
+
+// ---------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------
+
+const MAX_SHELL_WRITE_LENGTH = 1_000_000;
+const MAX_TERMINAL_DIMENSION = 1_000;
+
+export function validateShellStartInput(value: unknown): ShellStartInput {
+  assertSerializedSize(value, "shellStartInput");
+  const record = asRecord(value, "shellStartInput");
+  assertAllowedKeys(record, "shellStartInput", [
+    "sessionId",
+    "connectionId",
+    "cols",
+    "rows",
+  ]);
+  asRunId(record.sessionId, "shellStartInput.sessionId");
+  asString(record.connectionId, "shellStartInput.connectionId");
+  asInteger(record.cols, "shellStartInput.cols", 1, MAX_TERMINAL_DIMENSION);
+  asInteger(record.rows, "shellStartInput.rows", 1, MAX_TERMINAL_DIMENSION);
+  return value as ShellStartInput;
+}
+
+export function validateShellWriteInput(value: unknown): ShellWriteInput {
+  assertSerializedSize(value, "shellWriteInput");
+  const record = asRecord(value, "shellWriteInput");
+  assertAllowedKeys(record, "shellWriteInput", ["sessionId", "data"]);
+  asRunId(record.sessionId, "shellWriteInput.sessionId");
+  asString(record.data, "shellWriteInput.data", {
+    maxLength: MAX_SHELL_WRITE_LENGTH,
+    allowEmpty: true,
+  });
+  return value as ShellWriteInput;
+}
+
+export function validateShellResizeInput(value: unknown): ShellResizeInput {
+  assertSerializedSize(value, "shellResizeInput");
+  const record = asRecord(value, "shellResizeInput");
+  assertAllowedKeys(record, "shellResizeInput", ["sessionId", "cols", "rows"]);
+  asRunId(record.sessionId, "shellResizeInput.sessionId");
+  asInteger(record.cols, "shellResizeInput.cols", 1, MAX_TERMINAL_DIMENSION);
+  asInteger(record.rows, "shellResizeInput.rows", 1, MAX_TERMINAL_DIMENSION);
+  return value as ShellResizeInput;
+}
+
+export function validateShellSessionInput(value: unknown): ShellSessionInput {
+  assertSerializedSize(value, "shellSessionInput");
+  const record = asRecord(value, "shellSessionInput");
+  assertAllowedKeys(record, "shellSessionInput", ["sessionId"]);
+  asRunId(record.sessionId, "shellSessionInput.sessionId");
+  return value as ShellSessionInput;
 }

@@ -90,6 +90,10 @@ export function SchemaViewer({ path }: Readonly<SchemaViewerProps>) {
 
   return (
     <ViewerShell
+      shellPath={{
+        connectionId: path.connectionId,
+        connectionLabel: path.connectionLabel,
+      }}
       breadcrumb={[
         {
           label: path.connectionLabel,

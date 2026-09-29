@@ -220,6 +220,10 @@ export function UsersViewer({ path }: Readonly<UsersViewerProps>) {
 
   return (
     <ViewerShell
+      shellPath={{
+        connectionId: path.connectionId,
+        connectionLabel: path.connectionLabel,
+      }}
       breadcrumb={[
         {
           label: path.connectionLabel,

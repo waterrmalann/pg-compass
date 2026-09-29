@@ -24,6 +24,7 @@ import { ViewListViewer } from "@/components/workspace/view-list-viewer";
 import { ViewDetailsViewer } from "@/components/workspace/view-details-viewer";
 import { UsersViewer } from "@/components/workspace/users-viewer";
 import { DatabaseManagerViewer } from "@/components/workspace/database-manager-viewer";
+import { ShellViewer } from "@/components/workspace/shell-viewer";
 import type { WorkspaceTab, WorkspaceTabView } from "@/shared/types/workspace";
 import { WelcomeScreen } from "./welcome-screen";
 import { ApplicationTitle } from "../topbar/application-title";
@@ -42,6 +43,8 @@ export function Workspace() {
     function handleKeyDown(event: KeyboardEvent) {
       if (!matchesShortcut("editor-find", event)) return;
       if (document.activeElement?.closest(".cm-editor")) return;
+      // The shell has its own find bar.
+      if (document.activeElement?.closest("[data-terminal]")) return;
 
       const editor = document.querySelector("[data-query-editor] .cm-content");
       if (editor instanceof HTMLElement) {
@@ -58,6 +61,8 @@ export function Workspace() {
     function handleKeyDown(event: KeyboardEvent) {
       if (!matchesShortcut("refresh", event)) return;
       if (document.activeElement?.closest(".cm-editor")) return;
+      // Ctrl+R is psql's reverse history search.
+      if (document.activeElement?.closest("[data-terminal]")) return;
       const button = document.querySelector(
         '[aria-hidden="false"] [data-view-refresh]',
       );
@@ -284,6 +289,9 @@ function TabViewRenderer({ tab }: Readonly<{ tab: WorkspaceTab }>) {
   }
   if (view.type === "users") {
     return <UsersViewer path={view.path} />;
+  }
+  if (view.type === "shell") {
+    return <ShellViewer path={view.path} />;
   }
   if (view.type === "database-manager") {
     return <DatabaseManagerViewer />;

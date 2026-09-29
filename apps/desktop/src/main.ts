@@ -8,6 +8,7 @@ import { registerTableDataHandlers } from "./main/table-data-ipc";
 import { registerClipboardHandlers } from "./main/clipboard-ipc";
 import { registerRolesHandlers } from "./main/roles-ipc";
 import { registerBackupHandlers } from "./main/backup-ipc";
+import { killAllShellSessions, registerShellHandlers } from "./main/shell-ipc";
 import { destroyAllPools } from "./main/pg-utils";
 import { getSettings } from "./main/settings-store";
 import { buildAppMenu } from "./main/app-menu";
@@ -65,6 +66,7 @@ registerTableDataHandlers();
 registerClipboardHandlers();
 registerRolesHandlers();
 registerBackupHandlers();
+registerShellHandlers();
 registerUpdateHandlers();
 registerSettingsHandlers((settings) => {
   cachedSettings = settings;
@@ -178,6 +180,7 @@ app.on("ready", () => {
 });
 
 app.on("will-quit", () => {
+  killAllShellSessions();
   destroyAllPools();
 });
 

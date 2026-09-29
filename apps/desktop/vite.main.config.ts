@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   build: {
     rollupOptions: {
-      external: ["pg", "pg-native", "electron-store"],
+      external: ["pg", "pg-native", "electron-store", "node-pty"],
     },
   },
 });

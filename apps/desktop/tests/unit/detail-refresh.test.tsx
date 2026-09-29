@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_APP_SETTINGS } from "@/shared/types/settings";
 import { TableDetailsViewer } from "@/components/workspace/table-details-viewer";
 import { DEFAULT_RELATION_SESSION } from "@/shared/types/workspace";
 
@@ -10,6 +11,13 @@ const refreshSchemaTreeWithStatus = vi
   .fn()
   .mockResolvedValue({ ok: true, data: [] });
 const detailLoader = vi.fn();
+
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: () => ({
+    settings: DEFAULT_APP_SETTINGS,
+    updateSettings: vi.fn(),
+  }),
+}));
 
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({

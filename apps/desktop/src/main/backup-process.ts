@@ -120,14 +120,14 @@ function buildUriDbname(
   return url.toString();
 }
 
-/** Resolve how pg_dump / pg_restore reach `database` on `connection`'s server. */
+/** Resolve how pg_dump / pg_restore / psql reach `database` on `connection`'s server. */
 export async function resolvePgToolTarget(
   connection: ConnectionConfig,
   database: string,
 ): Promise<PgToolTarget> {
   if (connection.ssh?.enabled) {
     throw new Error(
-      `"${connection.label}" uses an SSH tunnel, which backup and restore do not support.`,
+      `"${connection.label}" uses an SSH tunnel, which the PostgreSQL client tools (backup, restore and the shell) do not support.`,
     );
   }
 
