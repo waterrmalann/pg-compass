@@ -42,6 +42,10 @@ export function SchemaListViewer({ path }: Readonly<SchemaListViewerProps>) {
 
   return (
     <ViewerShell
+      shellPath={{
+        connectionId: path.connectionId,
+        connectionLabel: path.connectionLabel,
+      }}
       breadcrumb={[
         {
           label: path.connectionLabel,

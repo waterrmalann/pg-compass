@@ -5,6 +5,7 @@ import type {
   HelpApi,
   RolesApi,
   SettingsApi,
+  ShellApi,
   TableDataApi,
   UpdateApi,
   WorkspaceApi,
@@ -20,6 +21,7 @@ declare global {
     clipboardApi: ClipboardApi;
     rolesApi: RolesApi;
     backupApi: BackupApi;
+    shellApi: ShellApi;
     updateApi: UpdateApi;
   }
 }

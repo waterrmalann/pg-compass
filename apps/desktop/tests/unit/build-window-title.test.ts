@@ -43,6 +43,14 @@ describe("buildWindowTitle", () => {
     expect(buildWindowTitle(usersView)).toBe("PG Compass - Local · Users");
   });
 
+  it("builds a title for a shell tab", () => {
+    const shellView: WorkspaceTabView = {
+      type: "shell",
+      path: { connectionId: "c1", connectionLabel: "Local" },
+    };
+    expect(buildWindowTitle(shellView)).toBe("PG Compass - Local · Shell");
+  });
+
   it("builds a sentence-case title for the database manager", () => {
     expect(buildWindowTitle({ type: "database-manager" })).toBe(
       "PG Compass - Database manager",

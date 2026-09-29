@@ -93,3 +93,12 @@ export const BackupChannels = {
   DELETE_BACKUP: "backup:delete",
   INSPECT_BACKUP: "backup:inspect",
 } as const;
+
+export const ShellChannels = {
+  START: "shell:start",
+  WRITE: "shell:write",
+  RESIZE: "shell:resize",
+  KILL: "shell:kill",
+  DATA: "shell:data",
+  EXIT: "shell:exit",
+} as const;

@@ -9,6 +9,7 @@ export function buildWindowTitle(view: WorkspaceTabView | undefined): string {
 
   if (view.type === "schema-list") return `${base} - ${label}`;
   if (view.type === "users") return `${base} - ${label} · Users`;
+  if (view.type === "shell") return `${base} - ${label} · Shell`;
 
   const schema = view.path.schemaName;
 

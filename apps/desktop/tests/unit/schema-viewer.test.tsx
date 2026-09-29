@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_APP_SETTINGS } from "@/shared/types/settings";
 import { SchemaViewer } from "@/components/workspace/schema-viewer";
 
 const openTab = vi.fn().mockResolvedValue(undefined);
@@ -8,6 +9,13 @@ const navigateToView = vi.fn().mockResolvedValue(undefined);
 const refreshSchemaTreeWithStatus = vi
   .fn()
   .mockResolvedValue({ ok: true, data: [] });
+
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: () => ({
+    settings: DEFAULT_APP_SETTINGS,
+    updateSettings: vi.fn(),
+  }),
+}));
 
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({

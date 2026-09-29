@@ -9,7 +9,9 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    // node-pty's native addon (and macOS spawn-helper) cannot load from
+    // inside the archive; node-pty resolves the unpacked copy itself.
+    asar: { unpack: "**/node_modules/node-pty/**" },
     icon: "./resources/icon",
     executableName: "pg-compass",
   },
@@ -39,11 +41,12 @@ const config: ForgeConfig = {
       pkg.dependencies = {
         pg: pkg.dependencies?.pg,
         "electron-store": pkg.dependencies?.["electron-store"],
+        "node-pty": pkg.dependencies?.["node-pty"],
       };
 
       await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2));
 
-      // Install only pg into the packaged node_modules
+      // Install only the runtime deps into the packaged node_modules
       execSync("npm install --omit=dev --no-package-lock", {
         cwd: buildPath,
         stdio: "inherit",

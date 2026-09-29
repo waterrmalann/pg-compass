@@ -68,7 +68,7 @@ We do not need to implement the update mechanism for now. We will tackle this at
 - [x] Added settings IPC API (`get`, `update`) and preload bridge (`window.settingsApi`).
 - [x] Implemented all scoped toggles with persistence:
     - [x] `General.readOnlyMode` (default `false`, UI-only for now)
-    - [x] `General.shellAccess` (default `false`, UI-only for now)
+    - [x] `General.shellAccess` (default `false`, gates the database shell; see `DB_SHELL_TASK.md`)
     - [x] `General.enableDevTools` (default `true`, behavior wired)
     - [x] `General.hideInternalSchemas` (default `true`, behavior wired)
     - [x] `Privacy.automaticUpdates` (default `true`, UI-only for now)
@@ -85,5 +85,4 @@ We do not need to implement the update mechanism for now. We will tackle this at
 ## Deferred (Intentionally Out of Scope)
 
 - Read-only enforcement logic across write/delete surfaces.
-- Shell access implementation and terminal integration.
 - Auto-update mechanism (checking/downloading/installing updates).

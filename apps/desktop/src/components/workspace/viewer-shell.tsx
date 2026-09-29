@@ -1,8 +1,14 @@
 import { Fragment, type ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, SquareTerminal } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useSettings } from "@/hooks/use-settings";
+import { useWorkspace } from "@/hooks/use-workspace";
 import { cn } from "@/lib/utils";
-import type { WorkspaceTabView } from "@/shared/types/workspace";
+import type {
+  DatabaseViewerPath,
+  WorkspaceTabView,
+} from "@/shared/types/workspace";
 
 interface BreadcrumbItem {
   label: string;
@@ -12,11 +18,16 @@ interface BreadcrumbItem {
 interface ViewerShellProps {
   breadcrumb: BreadcrumbItem[];
   onNavigateToView?: (view: WorkspaceTabView) => void;
-  onRefresh: () => void;
+  /** Omit on screens with nothing to refresh (the shell). */
+  onRefresh?: () => void;
   refreshDisabled?: boolean;
   refreshing?: boolean;
   lastRefreshedAt?: Date | null;
   refreshLabel?: string;
+  /** The open connection; shows an Open shell button beside Refresh. */
+  shellPath?: DatabaseViewerPath;
+  /** Extra top-bar content, placed before the buttons. */
+  actions?: ReactNode;
   children: ReactNode;
 }
 
@@ -29,6 +40,8 @@ export function ViewerShell({
   refreshing = false,
   lastRefreshedAt,
   refreshLabel = "Refresh visible content",
+  shellPath,
+  actions,
   children,
 }: Readonly<ViewerShellProps>) {
   const lastIndex = breadcrumb.length - 1;
@@ -89,23 +102,74 @@ export function ViewerShell({
               })}
             </span>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onRefresh}
-            disabled={refreshDisabled || refreshing}
-            data-view-refresh
-            title={refreshLabel}
-            aria-label={refreshLabel}
-          >
-            <RefreshCw className={refreshing ? "animate-spin" : undefined} />
-            {refreshing ? "Refreshing" : "Refresh"}
-          </Button>
+          {actions}
+          {shellPath ? <OpenShellButton path={shellPath} /> : null}
+          {onRefresh ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={refreshDisabled || refreshing}
+              data-view-refresh
+              title={refreshLabel}
+              aria-label={refreshLabel}
+            >
+              <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+              {refreshing ? "Refreshing" : "Refresh"}
+            </Button>
+          ) : null}
         </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 p-4">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Opens a new psql tab for the connection. Shell access is opt-in (Settings →
+ * General), so while it is off the button offers to turn it on instead.
+ */
+function OpenShellButton({ path }: Readonly<{ path: DatabaseViewerPath }>) {
+  const { settings, updateSettings } = useSettings();
+  const { forceOpenTab } = useWorkspace();
+
+  function openShell() {
+    void forceOpenTab({ type: "shell", path });
+  }
+
+  function handleClick() {
+    if (settings.general.shellAccess) {
+      openShell();
+      return;
+    }
+    toast("Shell access is off", {
+      description:
+        "The shell runs psql on this computer. Turn on shell access to open one.",
+      action: {
+        label: "Turn on",
+        onClick: () => {
+          void updateSettings({ general: { shellAccess: true } }).then(
+            (updated) => {
+              if (updated?.general.shellAccess) openShell();
+            },
+          );
+        },
+      },
+    });
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleClick}
+      title="Open a psql shell for this connection"
+    >
+      <SquareTerminal />
+      Open shell
+    </Button>
   );
 }

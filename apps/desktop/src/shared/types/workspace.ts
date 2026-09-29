@@ -52,6 +52,11 @@ export type WorkspaceTabView =
       path: UsersViewerPath;
     }
   | {
+      /** A psql session; every Open shell click gets its own tab. */
+      type: "shell";
+      path: DatabaseViewerPath;
+    }
+  | {
       /** Global tool — not scoped to a single connection, so no `path`. */
       type: "database-manager";
     };

@@ -756,6 +756,8 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Tool screens.** Users and roles, and the Database manager, are built from panels: a role list panel beside a role detail panel (identity header, segmented sub-views, panel content), and form panels whose primary action sits in the panel footer. Role, database and table names are mono. A destructive confirmation (restore over a database) uses a `destructive/10` tint note with a warning icon, never a red border.
 
+**Shell.** The top bar carries an `sm` outline Open shell button beside Refresh on every connection-scoped screen. A shell tab is one panel: a header with the `psql` title, the database in 12px mono muted text, a neutral "Read-only by default" chip when relevant, a find toggle and an `xs` outline Restart. Below it, the xterm.js terminal sits on the `card` surface in 12.5px Geist Mono. Its colours are resolved from the tokens: foreground text, a `foreground/22%` selection, and the status `*-foreground` hues for ANSI red, green, yellow and blue.
+
 **Update banner.** A 32px strip above the whole shell announces a new release or a downloaded update. It has an `info/10` fill, a hairline bottom border and an `info-foreground` icon, with 12.5px foreground text, one `xs` outline action (Download ↗ or Restart to update) and an `icon-xs` ghost close. It is the only full-width notice in the app. Everything else uses toasts.
 
 **Intentional exceptions.** Theme-picker previews use fixed neutral values because they show a theme other than the active one.
