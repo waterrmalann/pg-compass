@@ -7,14 +7,14 @@
 
 The inline cell editor we shipped in Phase 1 is great for "I want to fix this one value" — double-click, type, Enter, done. But many edits aren't single-cell:
 
-- Coordinated changes (e.g. set `status = 'active'` *and* `activated_at = now()` on the same row).
+- Coordinated changes (e.g. set `status = 'active'` _and_ `activated_at = now()` on the same row).
 - Updating several fields where each one alone would leave the row in an awkward intermediate state.
 - Reviewing the whole row's current values while choosing what to change.
 
 We need a row-level edit affordance:
 
 - A small **edit (pencil) icon** appears on hover over a row — both in Table View and Card View.
-- Clicking it opens a **row editor** that lets the user edit *any subset* of the row's columns in place.
+- Clicking it opens a **row editor** that lets the user edit _any subset_ of the row's columns in place.
 - Hitting **Save** sends every edited field as a **single atomic `UPDATE`** (one statement, one transaction, all-or-nothing).
 - Hitting **Cancel** / closing the editor discards all pending changes.
 
@@ -34,7 +34,7 @@ We continue the "tests-first" discipline from Phase 1. Unit tests for the row-ed
 ### Guiding principles
 
 1. **Atomicity is the headline feature.** A row edit is one `UPDATE table SET col1=$1, col2=$2, … WHERE pk…` — never a sequence of per-cell updates. If two columns are edited and one fails type validation server-side, neither change lands.
-2. **Reuse, don't fork.** The editor for each column is the same `TypeEditor` from the Phase 1 edit registry. Row edit is a *composition* over that registry, not a parallel system. Validation, NULL handling, and pgCast allow-listing all flow through the same code paths.
+2. **Reuse, don't fork.** The editor for each column is the same `TypeEditor` from the Phase 1 edit registry. Row edit is a _composition_ over that registry, not a parallel system. Validation, NULL handling, and pgCast allow-listing all flow through the same code paths.
 3. **Discoverable but quiet.** The pencil icon is only visible on row hover (or row focus, for keyboard users). It does not occupy persistent visual real estate.
 4. **No half-saved rows.** The dialog tracks `original` vs `draft` per field. Save sends only the diff. Cancel discards the draft. There is no "auto-save on close."
 5. **Two-layer read-only enforcement** (same contract as Phase 1). Renderer hides the affordance entirely; main-process `updateRow` handler re-checks the setting and rejects writes independently.
@@ -58,15 +58,18 @@ We continue the "tests-first" discipline from Phase 1. Unit tests for the row-ed
 #### 1. Hover affordance — pencil icon
 
 **Files:**
+
 - [apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx](apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx)
 - [apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx](apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx)
 - `apps/desktop/src/components/workspace/table-viewer/row-edit-button.tsx` (new) — the small icon button, used by both views
 
 **Table View:**
+
 - Reserve a fixed-width "actions" column on the right (or pin to the row's leading gutter — decision below). On row hover or row focus, the pencil icon fades in inside that gutter cell. Off-hover, the gutter cell is empty (cell still occupies space to avoid layout shift).
 - Decision: **leading gutter** (left edge), to mirror the typical "row actions" pattern and to keep the data columns aligned with the column headers.
 
 **Card View:**
+
 - The card already has a header strip. The pencil icon goes top-right of the card, visible on card hover/focus.
 
 **Gating logic** (shared, lives in `row-edit-button.tsx`):
@@ -115,11 +118,14 @@ A Radix `Dialog` opened by the pencil button. Shape:
 ```ts
 interface RowEditDraft {
   // Keyed by column name. Absent ⇒ unchanged.
-  changes: Record<string, {
-    newValue: unknown;
-    pgCast: string;
-    setNull: boolean;
-  }>;
+  changes: Record<
+    string,
+    {
+      newValue: unknown;
+      pgCast: string;
+      setNull: boolean;
+    }
+  >;
   // Per-field validation errors from the editor's validate().
   errors: Record<string, string | null>;
 }
@@ -128,6 +134,7 @@ interface RowEditDraft {
 Save assembles `UpdateRowParams` from `changes` and dispatches IPC.
 
 **Keyboard:**
+
 - `Tab` cycles fields.
 - `Esc` cancels (with confirm-discard if `changes` is non-empty).
 - `Cmd/Ctrl+Enter` saves.
@@ -171,16 +178,18 @@ export const TableDataChannels = {
 Handler logic:
 
 ```ts
-export async function updateRow(params: UpdateRowParams): Promise<UpdateRowResult> {
+export async function updateRow(
+  params: UpdateRowParams,
+): Promise<UpdateRowResult> {
   // Layer 2 read-only enforcement — never trust the renderer.
   if (getSettings().general.readOnlyMode) {
-    throw new Error('Read-only mode is enabled.');
+    throw new Error("Read-only mode is enabled.");
   }
   if (params.pkColumns.length === 0) {
-    throw new Error('Cannot update a row without a primary key.');
+    throw new Error("Cannot update a row without a primary key.");
   }
   if (params.changes.length === 0) {
-    throw new Error('No changes to apply.');
+    throw new Error("No changes to apply.");
   }
 
   // Validate every cast against the same allow-list as updateCell.
@@ -225,23 +234,25 @@ export async function updateRow(params: UpdateRowParams): Promise<UpdateRowResul
 
     const sql = `
       UPDATE ${qualifiedTable}
-      SET ${setParts.join(', ')}
-      WHERE ${whereParts.join(' AND ')}
+      SET ${setParts.join(", ")}
+      WHERE ${whereParts.join(" AND ")}
       RETURNING *`;
 
-    await client.query('BEGIN');
+    await client.query("BEGIN");
     try {
       const result = await client.query(sql, values);
       if (result.rowCount === 0) {
-        throw new Error('Row not found — it may have been modified or deleted.');
+        throw new Error(
+          "Row not found — it may have been modified or deleted.",
+        );
       }
       if (result.rowCount! > 1) {
         throw new Error(`Unsafe: ${result.rowCount} rows matched — aborting.`);
       }
-      await client.query('COMMIT');
+      await client.query("COMMIT");
       return { row: result.rows[0]! };
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => undefined);
+      await client.query("ROLLBACK").catch(() => undefined);
       throw err;
     }
   });
@@ -249,6 +260,7 @@ export async function updateRow(params: UpdateRowParams): Promise<UpdateRowResul
 ```
 
 Key points:
+
 - **One SQL statement, one transaction.** All changes apply atomically. Postgres validates every value against its column type before any of them land — partial-success is impossible.
 - **Same `safePgCast` allow-list** as Phase 1 — no new attack surface.
 - **`RETURNING *`** so the renderer gets the post-trigger / post-default canonical row back.
@@ -274,17 +286,17 @@ The dialog itself trusts these gates; if the dialog ever opened in a read-only c
 
 ### File-by-file change map
 
-| File | Change |
-| --- | --- |
-| `apps/desktop/src/shared/types/table-data.ts` | Add `UpdateRowFieldChange`, `UpdateRowParams`, `UpdateRowResult`, `UPDATE_ROW` channel |
-| `apps/desktop/src/main/table-data-write.ts` | Add `updateRow` handler; share `safePgCast` and the `withPoolClient` BEGIN/COMMIT pattern with `updateCell` |
-| `apps/desktop/src/main/table-data-ipc.ts` | Wire `UPDATE_ROW` channel |
-| `apps/desktop/src/preload.ts` | Expose `tableDataApi.updateRow` |
-| `apps/desktop/src/components/workspace/table-viewer/row-edit-button.tsx` | **New.** The hover pencil icon. Gating logic + `onClick` opens the dialog |
-| `apps/desktop/src/components/workspace/table-viewer/row-edit-dialog.tsx` | **New.** The multi-field row editor (composition over the Phase 1 edit registry) |
-| `apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx` | Add leading gutter cell with `RowEditButton` per row (visible on hover/focus) |
-| `apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx` | Add `RowEditButton` to card header (visible on hover/focus) |
-| `apps/desktop/src/components/workspace/table-viewer/data-tab.tsx` | Pass `primaryKey` and the splice helper down; thread `updateRow` IPC |
+| File                                                                     | Change                                                                                                      |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/shared/types/table-data.ts`                            | Add `UpdateRowFieldChange`, `UpdateRowParams`, `UpdateRowResult`, `UPDATE_ROW` channel                      |
+| `apps/desktop/src/main/table-data-write.ts`                              | Add `updateRow` handler; share `safePgCast` and the `withPoolClient` BEGIN/COMMIT pattern with `updateCell` |
+| `apps/desktop/src/main/table-data-ipc.ts`                                | Wire `UPDATE_ROW` channel                                                                                   |
+| `apps/desktop/src/preload.ts`                                            | Expose `tableDataApi.updateRow`                                                                             |
+| `apps/desktop/src/components/workspace/table-viewer/row-edit-button.tsx` | **New.** The hover pencil icon. Gating logic + `onClick` opens the dialog                                   |
+| `apps/desktop/src/components/workspace/table-viewer/row-edit-dialog.tsx` | **New.** The multi-field row editor (composition over the Phase 1 edit registry)                            |
+| `apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx` | Add leading gutter cell with `RowEditButton` per row (visible on hover/focus)                               |
+| `apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx`  | Add `RowEditButton` to card header (visible on hover/focus)                                                 |
+| `apps/desktop/src/components/workspace/table-viewer/data-tab.tsx`        | Pass `primaryKey` and the splice helper down; thread `updateRow` IPC                                        |
 
 No changes required to `edit-registry.ts`, `editable-cell.tsx`, or any per-type editor component — Phase 2 reuses them.
 

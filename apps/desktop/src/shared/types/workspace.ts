@@ -1,3 +1,5 @@
+import type { DataQueryInput } from "../query-dsl/types";
+
 export interface DatabaseViewerPath {
   connectionId: string;
   connectionLabel: string;
@@ -81,12 +83,13 @@ export interface RelationSessionState {
   activeSubTab: RelationSubTab;
   dataViewMode: "table" | "card";
   dataPageSize: number;
-  dataWhereClause: string;
+  /** Last successfully applied Data-tab query (not unapplied drafts). */
+  dataQuery: DataQueryInput;
 }
 
 export const DEFAULT_RELATION_SESSION: RelationSessionState = {
   activeSubTab: "data",
   dataViewMode: "table",
   dataPageSize: 50,
-  dataWhereClause: "",
+  dataQuery: { filter: "", projection: "", sort: "" },
 };

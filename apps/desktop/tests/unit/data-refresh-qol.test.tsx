@@ -32,6 +32,7 @@ describe("DataTab background refresh", () => {
   beforeEach(() => {
     Object.assign(window, {
       tableDataApi: {
+        getQueryColumns: vi.fn().mockResolvedValue({ success: true, data: [] }),
         getRows: vi
           .fn()
           .mockResolvedValueOnce({
@@ -88,6 +89,7 @@ describe("DataTab background refresh", () => {
     let resolveSecond: (value: unknown) => void;
     Object.assign(window, {
       tableDataApi: {
+        getQueryColumns: vi.fn().mockResolvedValue({ success: true, data: [] }),
         getRows: vi
           .fn()
           .mockImplementationOnce(

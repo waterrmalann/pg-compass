@@ -90,6 +90,7 @@ import type {
   SearchForeignKeyResult,
 } from "./shared/types/table-data";
 import type { UpdateStatus } from "./shared/types/updates";
+import type { QueryColumnMetadata } from "./shared/query-dsl/types";
 import type {
   BackupApi,
   ClipboardApi,
@@ -157,6 +158,11 @@ const tableDataApi = {
     params: TableMetaParams,
   ): Promise<IpcResult<ColumnStructure[]>> =>
     ipcRenderer.invoke(TableDataChannels.GET_STRUCTURE, params),
+
+  getQueryColumns: (
+    params: TableMetaParams,
+  ): Promise<IpcResult<QueryColumnMetadata[]>> =>
+    ipcRenderer.invoke(TableDataChannels.GET_QUERY_COLUMNS, params),
 
   getIndexes: (params: TableMetaParams): Promise<IpcResult<IndexInfo[]>> =>
     ipcRenderer.invoke(TableDataChannels.GET_INDEXES, params),

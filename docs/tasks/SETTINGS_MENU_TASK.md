@@ -1,15 +1,15 @@
 # Settings Menu
 
-We need a settings menu for the app to allow users to configure app-wide preferences, which are persisted using `electron-store`. 
+We need a settings menu for the app to allow users to configure app-wide preferences, which are persisted using `electron-store`.
 
 Add a "cog" icon in the sidebar header (besides the title "PG Compass") that opens a settings modal when clicked. Ensure that the modal follows the design system (and supports dark/light modes) and is implemented using idiomatic shadcn/ui.
 
 The settings modal will have a 2-part layout:
 
 - Sidebar on the left with different settings categories
-    1. General
-    2. Appearance
-    3. Privacy
+  1. General
+  2. Appearance
+  3. Privacy
 - Main content area on the right that shows the settings for the selected category.
 
 > [!NOTE]
@@ -17,19 +17,19 @@ The settings modal will have a 2-part layout:
 
 ## General Settings
 
-**Set Read-Only Mode:** 
+**Set Read-Only Mode:**
 
 Limit PG-Compass strictly to read operations, with all write and delete capabilities disabled.
 
 We do not need to implement the actual read-only mode for now. We will tackle this at a later stage, we just expose the toggle for the user to enable or disable read-only mode. By default, this will be turned off.
 
-**Enable shell access:** 
+**Enable shell access:**
 
 Allow users to open a terminal directly connected to their PostgreSQL database for advanced operations.
 
 We do not need to implement the actual shell access for now. We will tackle this at a later stage, we just expose the toggle for the user to enable or disable shell access. By default, this will be turned off.
 
-**Enable DevTools:** 
+**Enable DevTools:**
 
 Allow users to toggle the Electron DevTools for debugging purposes.
 
@@ -41,10 +41,9 @@ Toggle the visibility of internal PostgreSQL schemas (like `pg_catalog`, `inform
 
 Currently, when we connect to a database and load schemas, we also load the internal schemas like `pg_temp`, `pg_toast`, `pg_catalog`, and `information_schema`. These are not relevant for most users and add noise to the sidebar. We should filter these out and only show user-created schemas by default. But we should also provide an option in the settings menu to toggle the visibility of these internal schemas for power users who might want to see them. By default, we'll keep it turned off.
 
-
 ## Appearance Settings
 
-**Theme Selection:** 
+**Theme Selection:**
 
 Show a tabbed (big boxes with skeleton previews) interface to select between Light, Dark, and System themes.
 
@@ -62,25 +61,25 @@ We do not need to implement the update mechanism for now. We will tackle this at
 
 - [x] Added a settings entrypoint in the sidebar header using a cog icon button next to "PG Compass".
 - [x] Implemented a shadcn-style settings modal with a 2-part layout:
-    - [x] Left category navigation: General, Appearance, Privacy.
-    - [x] Right content panel for category-specific settings.
+  - [x] Left category navigation: General, Appearance, Privacy.
+  - [x] Right content panel for category-specific settings.
 - [x] Added persisted app settings storage using `electron-store` (separate settings store file).
 - [x] Added settings IPC API (`get`, `update`) and preload bridge (`window.settingsApi`).
 - [x] Implemented all scoped toggles with persistence:
-    - [x] `General.readOnlyMode` (default `false`, UI-only for now)
-    - [x] `General.shellAccess` (default `false`, gates the database shell; see `DB_SHELL_TASK.md`)
-    - [x] `General.enableDevTools` (default `true`, behavior wired)
-    - [x] `General.hideInternalSchemas` (default `true`, behavior wired)
-    - [x] `Privacy.automaticUpdates` (default `true`, UI-only for now)
+  - [x] `General.readOnlyMode` (default `false`, UI-only for now)
+  - [x] `General.shellAccess` (default `false`, gates the database shell; see `DB_SHELL_TASK.md`)
+  - [x] `General.enableDevTools` (default `true`, behavior wired)
+  - [x] `General.hideInternalSchemas` (default `true`, behavior wired)
+  - [x] `Privacy.automaticUpdates` (default `true`, UI-only for now)
 - [x] Implemented Appearance theme selection cards for `Light`, `Dark`, and `System`, persisted via settings.
 - [x] Replaced hardcoded dark mode with settings-driven theme application at document root.
 - [x] Wired `Enable DevTools` behavior:
-    - [x] `Ctrl+Shift+I` (Windows/Linux) and `Cmd+Option+I` (macOS) are now gated by settings.
-    - [x] DevTools closes automatically when the setting is turned off.
+  - [x] `Ctrl+Shift+I` (Windows/Linux) and `Cmd+Option+I` (macOS) are now gated by settings.
+  - [x] DevTools closes automatically when the setting is turned off.
 - [x] Wired `Hide Internal Schemas` behavior:
-    - [x] Internal schemas are hidden by default.
-    - [x] Schema tree query supports including internal schemas when toggle is disabled.
-    - [x] Expanded/connected sidebar tree refreshes after this setting changes.
+  - [x] Internal schemas are hidden by default.
+  - [x] Schema tree query supports including internal schemas when toggle is disabled.
+  - [x] Expanded/connected sidebar tree refreshes after this setting changes.
 
 ## Deferred (Intentionally Out of Scope)
 

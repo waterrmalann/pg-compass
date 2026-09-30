@@ -58,7 +58,7 @@ Clicking on a schema opens a new tab in the main area with the table listing. Cl
 
 The table viewer consists of multiple tabs: Data, Structure, Indexes, Constraints, and Query. 
 
-1. **Data:** Shows all the rows in the table with pagination (upto 100 rows per page, can be selected from 25, 50, 75, 100). There is an alternate view where the documents are shown in a card view (which better represents JSONB columns as its natural).
+1. **Data:** Shows all the rows in the table with pagination (upto 100 rows per page, can be selected from 25, 50, 75, 100). There is an alternate view where the documents are shown in a card view (which better represents JSONB columns as its natural). Rows can be narrowed with three small inputs: **Filter** (`status = 'active' AND score > 10`), **Project** (`id, name AS label`) and **Sort** (`created_at DESC` or `created_at -1`). They use a restricted query language, not raw SQL, that the main process checks against the table's columns and runs with parameters. Projected rows are read-only. Export and delete use the same active query; delete uses only its filter.
 2. **Structure:** Shows the table structure with column names, data types, and other metadata.
 3. **Indexes:** Shows the indexes on the table with their definitions. It's type and size is also shown. Usage statistics is also shown if available.
 4. **Constraints:** Shows the constraints on the table with their definitions.

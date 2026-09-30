@@ -42,6 +42,7 @@ import type {
   ShellStartResult,
   ShellWriteInput,
 } from "./shell";
+import type { QueryColumnMetadata } from "../query-dsl/types";
 import type {
   CancelQueryParams,
   CancelQueryResult,
@@ -64,6 +65,7 @@ import type {
   SearchForeignKeyParams,
   SearchForeignKeyResult,
   SqlDumpParams,
+  TableDataFailure,
   TableMetaParams,
   TableRowsResult,
   TableTypeInfo,
@@ -76,8 +78,14 @@ import type {
 } from "./table-data";
 
 export type IpcResult<T> =
-  | { success: true; data: T; error?: never }
-  | { success: false; data?: never; error: string };
+  | { success: true; data: T; error?: never; failure?: never }
+  | {
+      success: false;
+      data?: never;
+      error: string;
+      /** Structured detail for Data-tab operations; absent elsewhere. */
+      failure?: TableDataFailure;
+    };
 
 export interface ConnectionApi {
   getAll(): Promise<IpcResult<ConnectionConfig[]>>;
@@ -107,6 +115,9 @@ export interface SettingsApi {
 export interface TableDataApi {
   getRows(params: GetRowsParams): Promise<IpcResult<TableRowsResult>>;
   getStructure(params: TableMetaParams): Promise<IpcResult<ColumnStructure[]>>;
+  getQueryColumns(
+    params: TableMetaParams,
+  ): Promise<IpcResult<QueryColumnMetadata[]>>;
   getIndexes(params: TableMetaParams): Promise<IpcResult<IndexInfo[]>>;
   getConstraints(params: TableMetaParams): Promise<IpcResult<ConstraintInfo[]>>;
   getTriggers(params: TableMetaParams): Promise<IpcResult<TriggerInfo[]>>;

@@ -67,7 +67,11 @@ function renderDialog(
       connectionId="c1"
       schema="app"
       table="users"
-      whereClause="status = 'inactive'"
+      query={{
+        filter: "status = 'inactive'",
+        projection: "id, name AS label",
+        sort: "name DESC",
+      }}
       totalCount={2}
       initialPreviewMode="table"
       onDeleted={onDeleted}
@@ -82,7 +86,7 @@ beforeEach(() => {
 });
 
 describe("DeleteDataDialog", () => {
-  it("loads a five-row preview for the current filter and deletes with that filter", async () => {
+  it("previews full rows with the active filter and sort, then deletes by filter only", async () => {
     const { getRows, deleteRows } = installTableDataApiMock();
     const { onOpenChange, onDeleted } = renderDialog();
 
@@ -98,7 +102,11 @@ describe("DeleteDataDialog", () => {
       table: "users",
       page: 1,
       pageSize: 5,
-      whereClause: "status = 'inactive'",
+      query: {
+        filter: "status = 'inactive'",
+        projection: "",
+        sort: "name DESC",
+      },
     });
     expect(await screen.findByText("Alice")).toBeInTheDocument();
 
@@ -109,22 +117,27 @@ describe("DeleteDataDialog", () => {
       connectionId: "c1",
       schema: "app",
       table: "users",
-      whereClause: "status = 'inactive'",
+      filter: "status = 'inactive'",
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onDeleted).toHaveBeenCalledTimes(1);
   });
 
-  it("shows no-filter copy and sends no whereClause when deleting all documents", async () => {
+  it("shows no-filter copy and sends an empty filter when deleting all documents", async () => {
     const { getRows, deleteRows } = installTableDataApiMock();
-    renderDialog({ whereClause: "", totalCount: 2 });
+    renderDialog({
+      query: { filter: "", projection: "", sort: "" },
+      totalCount: 2,
+    });
 
     expect(screen.getByLabelText("Current delete filter")).toHaveValue(
       "No filter (all documents)",
     );
     await waitFor(() =>
       expect(getRows).toHaveBeenCalledWith(
-        expect.objectContaining({ whereClause: undefined }),
+        expect.objectContaining({
+          query: { filter: "", projection: "", sort: "" },
+        }),
       ),
     );
 
@@ -134,7 +147,7 @@ describe("DeleteDataDialog", () => {
 
     await waitFor(() =>
       expect(deleteRows).toHaveBeenCalledWith(
-        expect.objectContaining({ whereClause: undefined }),
+        expect.objectContaining({ filter: "" }),
       ),
     );
   });

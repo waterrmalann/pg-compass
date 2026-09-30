@@ -36,6 +36,8 @@ describe("preload API contract", () => {
       tableDataApi: {
         onExportProgress: (callback: () => void) => () => void;
         onImportProgress: (callback: () => void) => () => void;
+        getRows: (params: unknown) => Promise<unknown>;
+        getQueryColumns: (params: unknown) => Promise<unknown>;
         getTriggers: (params: unknown) => Promise<unknown>;
         getTypes: (params: unknown) => Promise<unknown>;
         toggleTrigger: (params: unknown) => Promise<unknown>;
@@ -67,6 +69,21 @@ describe("preload API contract", () => {
       "table-data:get-triggers",
       triggerMetaParams,
     );
+
+    await exposed.tableDataApi.getQueryColumns(triggerMetaParams);
+    expect(invoke).toHaveBeenCalledWith(
+      "table-data:get-query-columns",
+      triggerMetaParams,
+    );
+
+    const getRowsParams = {
+      ...triggerMetaParams,
+      page: 1,
+      pageSize: 25,
+      query: { filter: "id > 1", projection: "id", sort: "id DESC" },
+    };
+    await exposed.tableDataApi.getRows(getRowsParams);
+    expect(invoke).toHaveBeenCalledWith("table-data:get-rows", getRowsParams);
 
     await exposed.tableDataApi.getTypes(triggerMetaParams);
     expect(invoke).toHaveBeenCalledWith(
@@ -136,7 +153,7 @@ describe("preload API contract", () => {
       connectionId: "c1",
       schema: "app",
       table: "users",
-      whereClause: "id <= 5",
+      filter: "id <= 5",
     };
     await exposed.tableDataApi.deleteRows(deleteParams);
     expect(invoke).toHaveBeenCalledWith("table-data:delete-rows", deleteParams);

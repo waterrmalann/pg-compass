@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDialog } from "@/components/workspace/export-dialog";
+import type { DataQueryInput } from "@/shared/query-dsl/types";
 
 interface ExportDropdownProps {
   connectionId: string;
@@ -17,8 +18,8 @@ interface ExportDropdownProps {
   table: string;
   /** Current SQL from the query tab (if applicable). */
   sql?: string;
-  /** Active WHERE clause filter from the data tab. */
-  whereClause?: string;
+  /** Active Data-tab query, when any of its fields is non-empty. */
+  dataQuery?: DataQueryInput;
   /** Whether query-based export is available (query tab has results). */
   hasQueryResults?: boolean;
 }
@@ -28,7 +29,7 @@ export function ExportDropdown({
   schema,
   table,
   sql,
-  whereClause,
+  dataQuery,
   hasQueryResults,
 }: Readonly<ExportDropdownProps>) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -40,13 +41,9 @@ export function ExportDropdown({
   // either the dialog-based export or a SQL dump is already running.
   const exportBusy = dialogOpen || sqlDumping;
 
-  // Build the effective SQL for a query/filter export
-  const effectiveSql =
-    sql ??
-    (whereClause
-      ? `SELECT * FROM "${schema}"."${table}" WHERE ${whereClause}`
-      : undefined);
-  const canExportQuery = hasQueryResults ?? !!whereClause;
+  // Query tab: its own read-only SQL. Data tab: the active DSL, compiled
+  // in the main process; the renderer never builds SQL for it.
+  const canExportQuery = sql ? hasQueryResults === true : !!dataQuery;
 
   function handleExportAll() {
     if (exportBusy) return;
@@ -134,7 +131,7 @@ export function ExportDropdown({
             <FileSpreadsheet />
             Export all
           </DropdownMenuItem>
-          {canExportQuery && effectiveSql && (
+          {canExportQuery && (
             <DropdownMenuItem onClick={handleExportQuery} disabled={exportBusy}>
               <FileDown />
               Export selected query
@@ -152,9 +149,10 @@ export function ExportDropdown({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         connectionId={connectionId}
-        schema={exportMode === "all" ? schema : undefined}
-        table={exportMode === "all" ? table : undefined}
-        sql={exportMode === "query" ? effectiveSql : undefined}
+        schema={schema}
+        table={table}
+        sql={exportMode === "query" ? sql : undefined}
+        dataQuery={exportMode === "query" ? dataQuery : undefined}
       />
     </>
   );

@@ -51,6 +51,9 @@ import { serialize } from "node:v8";
 const MAX_IDENTIFIER_LENGTH = 256;
 const MAX_PATH_LENGTH = 4_096;
 const MAX_SQL_LENGTH = 1_000_000;
+// Above the DSL's own 10,000-character limit so that limit reports a
+// field-specific error instead of a generic validation failure.
+const MAX_QUERY_DSL_LENGTH = 100_000;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -448,18 +451,30 @@ export function validateTableMetaParams(value: unknown): TableMetaParams {
   return value as TableMetaParams;
 }
 
+/**
+ * Shape check only: each field is a bounded string. The DSL itself is parsed
+ * and bound later so its errors come back with field-specific ranges.
+ */
+function validateDataQueryInput(value: unknown, name: string): void {
+  const query = asRecord(value, name);
+  assertAllowedKeys(query, name, ["filter", "projection", "sort"]);
+  for (const field of ["filter", "projection", "sort"] as const) {
+    asString(query[field], `${name}.${field}`, {
+      maxLength: MAX_QUERY_DSL_LENGTH,
+      allowEmpty: true,
+    });
+  }
+}
+
 export function validateGetRowsParams(value: unknown): GetRowsParams {
   const params = validateTableIdentity(value, "getRows", [
     "page",
     "pageSize",
-    "whereClause",
+    "query",
   ]);
   asInteger(params.page, "getRows.page", 1, 1_000_000);
   asInteger(params.pageSize, "getRows.pageSize", 1, 100);
-  asOptionalString(params.whereClause, "getRows.whereClause", {
-    maxLength: 100_000,
-    allowEmpty: true,
-  });
+  validateDataQueryInput(params.query, "getRows.query");
   return value as GetRowsParams;
 }
 
@@ -529,6 +544,7 @@ export function validateExportDataParams(value: unknown): ExportDataParams {
     "schema",
     "table",
     "sql",
+    "query",
   ]);
   asString(params.connectionId, "exportData.connectionId");
   asString(params.filePath, "exportData.filePath", {
@@ -553,6 +569,12 @@ export function validateExportDataParams(value: unknown): ExportDataParams {
     throw new TypeError(
       "exportData must provide either sql or both schema and table.",
     );
+  }
+  if (params.query !== undefined) {
+    if (hasSql) {
+      throw new TypeError("exportData.query cannot be combined with sql.");
+    }
+    validateDataQueryInput(params.query, "exportData.query");
   }
 
   return value as ExportDataParams;
@@ -722,9 +744,9 @@ export function validateUpdateRowParams(value: unknown): UpdateRowParams {
 }
 
 export function validateDeleteRowsParams(value: unknown): DeleteRowsParams {
-  const params = validateTableIdentity(value, "deleteRows", ["whereClause"]);
-  asOptionalString(params.whereClause, "deleteRows.whereClause", {
-    maxLength: 100_000,
+  const params = validateTableIdentity(value, "deleteRows", ["filter"]);
+  asString(params.filter, "deleteRows.filter", {
+    maxLength: MAX_QUERY_DSL_LENGTH,
     allowEmpty: true,
   });
   return value as DeleteRowsParams;

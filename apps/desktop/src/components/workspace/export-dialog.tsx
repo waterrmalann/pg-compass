@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { DataQueryInput } from "@/shared/query-dsl/types";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,28 @@ interface ExportDialogProps {
   /** For "Export all": schema + table. */
   schema?: string;
   table?: string;
-  /** For "Export selected query": the SQL query text. */
+  /** Query-tab "Export selected query": the SQL query text. */
   sql?: string;
+  /** Data-tab "Export selected query": the active DSL for schema + table. */
+  dataQuery?: DataQueryInput;
+}
+
+function describeExport({
+  sql,
+  dataQuery,
+  schema,
+  table,
+}: Readonly<{
+  sql?: string;
+  dataQuery?: DataQueryInput;
+  schema?: string;
+  table?: string;
+}>): string {
+  if (sql) return "Export the results of your query.";
+  if (dataQuery) {
+    return `Export every row of ${schema}.${table} that matches the active query.`;
+  }
+  return `Export all rows from ${schema}.${table}.`;
 }
 
 export function ExportDialog({
@@ -32,20 +53,19 @@ export function ExportDialog({
   schema,
   table,
   sql,
+  dataQuery,
 }: Readonly<ExportDialogProps>) {
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [exporting, setExporting] = useState(false);
 
-  const isQueryExport = !!sql;
+  const isQueryExport = !!sql || !!dataQuery;
 
   async function handleExport() {
     setExporting(true);
     try {
       // 1. Pick save location first (no toast yet)
       const filterName = format === "csv" ? "CSV Files" : "JSON Files";
-      const defaultName = isQueryExport
-        ? `query-export.${format}`
-        : `${table}.${format}`;
+      const defaultName = sql ? `query-export.${format}` : `${table}.${format}`;
       const dialogResult = await globalThis.window.tableDataApi.showSaveDialog({
         purpose: "export",
         title: "Export Data",
@@ -76,7 +96,8 @@ export function ExportDialog({
           connectionId,
           format,
           filePath,
-          ...(isQueryExport ? { sql } : { schema, table }),
+          ...(sql ? { sql } : { schema, table }),
+          ...(dataQuery && !sql ? { query: dataQuery } : {}),
         });
 
         if (!result.success || !result.data) {
@@ -114,9 +135,7 @@ export function ExportDialog({
         <DialogHeader>
           <DialogTitle>Export data</DialogTitle>
           <DialogDescription>
-            {isQueryExport
-              ? "Export the results of your query."
-              : `Export all rows from ${schema}.${table}.`}
+            {describeExport({ sql, dataQuery, schema, table })}
           </DialogDescription>
         </DialogHeader>
 
@@ -141,6 +160,28 @@ export function ExportDialog({
               {sql}
             </pre>
           </div>
+        )}
+
+        {dataQuery && !sql && (
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-lg border border-border bg-code p-3 text-xs">
+            {(
+              [
+                ["Filter", dataQuery.filter],
+                ["Project", dataQuery.projection],
+                ["Sort", dataQuery.sort],
+              ] as const
+            ).map(([label, text]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd
+                  className="truncate font-mono"
+                  title={text.trim() || undefined}
+                >
+                  {text.trim() || "—"}
+                </dd>
+              </div>
+            ))}
+          </dl>
         )}
 
         <DialogFooter>

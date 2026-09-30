@@ -1,9 +1,9 @@
-
 ## Type Specific Inputs for Inline Edit
 
 Inline edit for rows already show appropriate inputs for things like enums (dropdowns) instead of plain text inputs.
 
 There are a few more cases we can show more appropriate inputs for better user experience:
+
 - Date columns: instead of a plain text input, we can show a date picker, time picker (if needed) and a timezone picker (if needed). This column however should be accessible to power users who might just want to type in the ISO value directly, so we either show a toggle to switch between the input types or we can show the date picker by default and allow users to type in the ISO value directly in the same input if they prefer that.
 - Foreign keys: See docs/tasks/ROW_EDIT_FK_TASK.md for details, but we can reuse the same code to show searchable dropdowns for foreign key columns in the inline edit, gracefully failing to plain text if the FK metadata is not available for some reason.
 - Array and JSONB columns may be able to use our codemirror editor for syntax highlighting and better editing experience.
@@ -49,7 +49,7 @@ Define and implement an explicit refresh contract for every scope:
 
 - **Connection refresh** re-fetches the sidebar schema tree and its derived relation counts.
 - **Schema and relation-list refresh** re-fetches the schema tree and updates the currently visible list.
-- **Table/view detail refresh** re-fetches metadata *and* re-runs the active detail sub-tab's own loader. Data must retain its page, page size, view mode, and applied filter; Query must re-run the last successfully submitted SQL with its current pagination settings. Structure, indexes, constraints, triggers, and types must each reload their own metadata.
+- **Table/view detail refresh** re-fetches metadata _and_ re-runs the active detail sub-tab's own loader. Data must retain its page, page size, view mode, and applied filter; Query must re-run the last successfully submitted SQL with its current pagination settings. Structure, indexes, constraints, triggers, and types must each reload their own metadata.
 - Use an explicit refresh signal/callback owned by the active viewer rather than relying on incidental React remounts or cache changes. A background refresh must not reset unsaved editor text, filters, or tab selection.
 - Disable and show progress only for the refresh action in progress, retain the previous successful content until replacement succeeds, and surface failures with an actionable toast/error state.
 - Display a compact “last refreshed” timestamp or equivalent success feedback near the relevant result/list count. Label and tooltip metadata refresh separately where both actions are available so users know what will be reloaded.

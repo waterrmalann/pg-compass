@@ -23,7 +23,7 @@ Yes — fully feasible, and the building blocks are already in place. Quick read
 ### Scope
 
 - **In:** Single-column FKs on Data-tab edits (both `EditableCell` and `RowEditDialog`). Searchable, paginated, with a label heuristic and a clearly-shown PK.
-- **Out (v1):** Composite FKs, query-tab edits, write-back of the *referenced* row, "create new referenced row" inline, custom per-column label override (defer to settings later).
+- **Out (v1):** Composite FKs, query-tab edits, write-back of the _referenced_ row, "create new referenced row" inline, custom per-column label override (defer to settings later).
 
 ### Architecture
 
@@ -79,13 +79,13 @@ export interface SearchForeignKeyParams {
   table: string;
   valueColumn: string;
   labelColumn: string | null;
-  query: string;     // user's search text; '' = first page
-  limit: number;     // default 50, max 200
+  query: string; // user's search text; '' = first page
+  limit: number; // default 50, max 200
 }
 
 export interface ForeignKeyOption {
-  value: unknown;        // the PK value (typed via buildTypeMap)
-  label: string | null;  // null when there is no label column
+  value: unknown; // the PK value (typed via buildTypeMap)
+  label: string | null; // null when there is no label column
 }
 
 export interface SearchForeignKeyResult {
@@ -116,12 +116,15 @@ LIMIT $2
 `components/workspace/renderers/edit-registry.ts` gains a factory:
 
 ```ts
-function makeForeignKeyEditor(fk: ForeignKeyRef, valueEditor: TypeEditor): TypeEditor {
+function makeForeignKeyEditor(
+  fk: ForeignKeyRef,
+  valueEditor: TypeEditor,
+): TypeEditor {
   return {
-    kind: 'modal',  // dropdown is large enough; reuse modal slot
+    kind: "modal", // dropdown is large enough; reuse modal slot
     toInput: valueEditor.toInput,
-    validate: valueEditor.validate,  // value still validated as the underlying type
-    Component: ForeignKeyComboboxEditor,  // new
+    validate: valueEditor.validate, // value still validated as the underlying type
+    Component: ForeignKeyComboboxEditor, // new
   };
 }
 ```
@@ -131,6 +134,7 @@ Resolution flow at the call site: when `col.foreignKey` is present and single-co
 #### 4. `ForeignKeyComboboxEditor`
 
 New file `components/workspace/renderers/foreign-key-editor.tsx`. Uses `cmdk` (already shipped via shadcn) — a popover anchored to the cell with:
+
 - Search input at top.
 - Result list: `<label> · <value>` per row, monospace value, dimmed when label is missing.
 - An always-present "(NULL)" entry at the top when the column is nullable.
@@ -147,17 +151,17 @@ Selecting an option commits via the existing `EditResult` shape — no special p
 
 ### File-by-file change map
 
-| File | Change |
-| --- | --- |
-| `shared/types/table-data.ts` | Add `ForeignKeyRef`, `SearchForeignKeyParams`, `ForeignKeyOption`, `SearchForeignKeyResult`, `SEARCH_FK` channel; extend `ColumnInfo.foreignKey?` |
-| `main/table-data-rows.ts` | Resolve single-column FK metadata and label column alongside PK / enums |
-| `main/table-data-fk.ts` | **New.** `searchForeignKey` handler |
-| `main/table-data-ipc.ts` | Wire `SEARCH_FK` |
-| `preload.ts`, `electron.d.ts` | Expose `tableDataApi.searchForeignKey` |
-| `components/workspace/renderers/edit-registry.ts` | `makeForeignKeyEditor` factory; resolution helper |
-| `components/workspace/renderers/foreign-key-editor.tsx` | **New.** cmdk-based combobox |
-| `components/workspace/table-viewer/editable-cell.tsx` | Route to FK editor when `col.foreignKey` is set |
-| `components/workspace/table-viewer/row-edit-dialog.tsx` | Same — render combobox inline for FK fields |
+| File                                                    | Change                                                                                                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/types/table-data.ts`                            | Add `ForeignKeyRef`, `SearchForeignKeyParams`, `ForeignKeyOption`, `SearchForeignKeyResult`, `SEARCH_FK` channel; extend `ColumnInfo.foreignKey?` |
+| `main/table-data-rows.ts`                               | Resolve single-column FK metadata and label column alongside PK / enums                                                                           |
+| `main/table-data-fk.ts`                                 | **New.** `searchForeignKey` handler                                                                                                               |
+| `main/table-data-ipc.ts`                                | Wire `SEARCH_FK`                                                                                                                                  |
+| `preload.ts`, `electron.d.ts`                           | Expose `tableDataApi.searchForeignKey`                                                                                                            |
+| `components/workspace/renderers/edit-registry.ts`       | `makeForeignKeyEditor` factory; resolution helper                                                                                                 |
+| `components/workspace/renderers/foreign-key-editor.tsx` | **New.** cmdk-based combobox                                                                                                                      |
+| `components/workspace/table-viewer/editable-cell.tsx`   | Route to FK editor when `col.foreignKey` is set                                                                                                   |
+| `components/workspace/table-viewer/row-edit-dialog.tsx` | Same — render combobox inline for FK fields                                                                                                       |
 
 ### Tests (tests-first, same bar as Phase 1/2)
 

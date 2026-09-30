@@ -6,20 +6,23 @@
 
 Both plain inputs have been replaced with CodeMirror 6-powered `SqlEditor` components:
 
-| Location | Component | Before | After |
-|----------|-----------|--------|-------|
+| Location      | Component  | Before       | After                                              |
+| ------------- | ---------- | ------------ | -------------------------------------------------- |
 | query-tab.tsx | `QueryTab` | `<textarea>` | `<SqlEditor>` with line numbers, Ctrl+Enter submit |
-| data-tab.tsx | `DataTab` | `<Input>` | `<SqlEditor singleLine>` with search icon overlay |
+| data-tab.tsx  | `DataTab`  | `<Input>`    | `<SqlEditor singleLine>` with search icon overlay  |
 
 ### New Files Created
+
 - `src/components/sql-editor/pg-theme.ts` — Theme using CSS custom properties (auto dark/light)
 - `src/components/sql-editor/use-codemirror.ts` — Hook managing CM lifecycle, value sync, schema compartment, linter
 - `src/components/sql-editor/SqlEditor.tsx` — Reusable React wrapper
 
 ### Packages Added
+
 - `@codemirror/view`, `@codemirror/state`, `@codemirror/lang-sql`, `@codemirror/autocomplete`, `@codemirror/commands`, `@codemirror/language`, `@codemirror/search`, `@codemirror/lint`
 
 ### Features Delivered
+
 - SQL syntax highlighting (PostgreSQL dialect)
 - Schema-aware autocomplete using nested `SQLNamespace` format (schemas → tables → columns)
 - `defaultSchema` / `defaultTable` support — tables and columns complete at top level in context
@@ -44,10 +47,10 @@ Both plain inputs have been replaced with CodeMirror 6-powered `SqlEditor` compo
 
 There were **two plain inputs** that needed upgrading:
 
-| Location | Component | Current Element | Purpose |
-|----------|-----------|----------------|---------|
-| query-tab.tsx | `QueryTab` | `<textarea>` | Full SQL queries (SELECT only) |
-| data-tab.tsx | `DataTab` | `<Input>` | WHERE clause filter |
+| Location      | Component  | Current Element | Purpose                        |
+| ------------- | ---------- | --------------- | ------------------------------ |
+| query-tab.tsx | `QueryTab` | `<textarea>`    | Full SQL queries (SELECT only) |
+| data-tab.tsx  | `DataTab`  | `<Input>`       | WHERE clause filter            |
 
 No editor library exists in the project today. Schema/table names are available via `schemaCache` in the workspace hook; column names are fetched reactively from query results but not pre-cached.
 
@@ -57,14 +60,14 @@ No editor library exists in the project today. Schema/table names are available 
 
 **CodeMirror 6** is the right fit over Monaco. Rationale:
 
-| Criteria | CodeMirror 6 | Monaco |
-|----------|-------------|--------|
-| Bundle size | ~150 KB (modular) | ~5 MB |
-| Embeddability | Excellent — designed for embedding | Heavy, full IDE frame |
-| SQL support | `@codemirror/lang-sql` with dialect configs | Needs custom language |
-| Theming | CSS-in-JS theme objects, easy to match design tokens | Complex theme API |
-| React integration | Lightweight via `useRef` + effects | Needs `@monaco-editor/react` wrapper |
-| Project philosophy | Aligns with "fast, minimal, lightweight" | Overkill |
+| Criteria           | CodeMirror 6                                         | Monaco                               |
+| ------------------ | ---------------------------------------------------- | ------------------------------------ |
+| Bundle size        | ~150 KB (modular)                                    | ~5 MB                                |
+| Embeddability      | Excellent — designed for embedding                   | Heavy, full IDE frame                |
+| SQL support        | `@codemirror/lang-sql` with dialect configs          | Needs custom language                |
+| Theming            | CSS-in-JS theme objects, easy to match design tokens | Complex theme API                    |
+| React integration  | Lightweight via `useRef` + effects                   | Needs `@monaco-editor/react` wrapper |
+| Project philosophy | Aligns with "fast, minimal, lightweight"             | Overkill                             |
 
 ---
 
@@ -101,19 +104,19 @@ src/components/
 interface SqlEditorProps {
   value: string;
   onChange: (value: string) => void;
-  onSubmit?: () => void;            // Ctrl+Enter handler
+  onSubmit?: () => void; // Ctrl+Enter handler
   placeholder?: string;
-  schema?: CompletionSchema;        // Schema metadata for autocomplete
-  minHeight?: string;               // e.g. "96px" for query tab, "32px" for inline
-  singleLine?: boolean;             // true for WHERE clause input (no line numbers)
+  schema?: CompletionSchema; // Schema metadata for autocomplete
+  minHeight?: string; // e.g. "96px" for query tab, "32px" for inline
+  singleLine?: boolean; // true for WHERE clause input (no line numbers)
   className?: string;
   readOnly?: boolean;
 }
 
 interface CompletionSchema {
   schemas: string[];
-  tables: Record<string, string[]>;          // schema → table names
-  columns: Record<string, ColumnInfo[]>;     // "schema.table" → columns
+  tables: Record<string, string[]>; // schema → table names
+  columns: Record<string, ColumnInfo[]>; // "schema.table" → columns
 }
 ```
 
@@ -133,6 +136,7 @@ pnpm --filter desktop add @codemirror/view @codemirror/state @codemirror/lang-sq
 Create a CodeMirror `EditorView.theme()` + `HighlightStyle` that reads from the app's CSS custom properties (`--background`, `--foreground`, `--muted`, `--ring`, etc.) so it automatically respects dark/light mode without duplication.
 
 Key mappings:
+
 - Editor background → `var(--background)` / `bg-background`
 - Gutter → `var(--muted)` / slightly dimmed
 - Selection → `var(--accent)` with opacity
@@ -146,13 +150,14 @@ Key mappings:
 #### Step 3 — Build custom completion source (pg-completions.ts)
 
 Use `@codemirror/lang-sql`'s built-in `PostgreSQL` dialect which already provides:
+
 - SQL keyword completions (SELECT, FROM, WHERE, JOIN, etc.)
 - Syntax-aware completions based on cursor context
 
 Layer on top of that a **custom schema completion source** via the `schema` option of `sql()`:
 
 ```ts
-import { sql, PostgreSQL } from '@codemirror/lang-sql';
+import { sql, PostgreSQL } from "@codemirror/lang-sql";
 
 // The lang-sql package accepts a `schema` config:
 sql({
@@ -170,6 +175,7 @@ This is the simplest path — `@codemirror/lang-sql` natively supports schema-aw
 #### Step 4 — Build the React wrapper (SqlEditor.tsx + use-codemirror.ts)
 
 The `use-codemirror` hook:
+
 1. Creates an `EditorState` with extensions (theme, SQL language, keybindings, completions)
 2. Mounts `EditorView` into a container ref on mount
 3. Uses `EditorView.dispatch` to sync external `value` prop → CM state (avoiding loops)
@@ -178,6 +184,7 @@ The `use-codemirror` hook:
 6. Cleans up on unmount
 
 The `SqlEditor` component:
+
 - Renders a `<div ref={containerRef}>` that CM mounts into
 - Styled with Tailwind classes for border, rounding, focus ring (matching shadcn `<Input>` / `<textarea>` look)
 - `singleLine` mode: hides line numbers/gutters, sets `min-height: 32px`, disables Enter (newline)
@@ -242,13 +249,13 @@ The search icon can be placed as a sibling positioned element, same as today.
 
 ### Completion Behavior
 
-| Context | Completions offered |
-|---------|-------------------|
-| After `SELECT` | Column names of current table, `*`, SQL functions |
-| After `FROM` / `JOIN` | Schema-qualified table names (`public.users`) |
-| After `WHERE` / `AND` / `OR` | Column names of current table |
-| After `.` (dot) | Columns of the preceding table, or tables of the preceding schema |
-| General typing | SQL keywords (uppercase), table names, schema names |
+| Context                      | Completions offered                                               |
+| ---------------------------- | ----------------------------------------------------------------- |
+| After `SELECT`               | Column names of current table, `*`, SQL functions                 |
+| After `FROM` / `JOIN`        | Schema-qualified table names (`public.users`)                     |
+| After `WHERE` / `AND` / `OR` | Column names of current table                                     |
+| After `.` (dot)              | Columns of the preceding table, or tables of the preceding schema |
+| General typing               | SQL keywords (uppercase), table names, schema names               |
 
 All of this is handled natively by `@codemirror/lang-sql` when configured with the `PostgreSQL` dialect and a `schema` map — no custom completion logic needed for v1.
 
@@ -256,13 +263,13 @@ All of this is handled natively by `@codemirror/lang-sql` when configured with t
 
 ### Risks & Mitigations
 
-| Risk | Mitigation |
-|------|-----------|
-| CodeMirror adds bundle weight | Modular imports keep it to ~150KB gzipped; acceptable for a desktop app |
-| CM's controlled-value pattern causes cursor jumps | Use the standard CM React pattern: only dispatch external updates when the source-of-truth differs from CM's internal state |
-| Theme drift from design system | Theme reads CSS variables at runtime, so it auto-updates with light/dark toggle |
-| Electron CSP blocks CM's style injection | CM uses `document.createElement('style')` — this works fine with Electron's default CSP; no `unsafe-inline` issues since it's a local app |
-| Performance with large schema maps | `@codemirror/lang-sql`'s completion is efficient; for very large DBs (1000+ tables), consider debouncing or limiting the schema map to the active schema only |
+| Risk                                              | Mitigation                                                                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CodeMirror adds bundle weight                     | Modular imports keep it to ~150KB gzipped; acceptable for a desktop app                                                                                       |
+| CM's controlled-value pattern causes cursor jumps | Use the standard CM React pattern: only dispatch external updates when the source-of-truth differs from CM's internal state                                   |
+| Theme drift from design system                    | Theme reads CSS variables at runtime, so it auto-updates with light/dark toggle                                                                               |
+| Electron CSP blocks CM's style injection          | CM uses `document.createElement('style')` — this works fine with Electron's default CSP; no `unsafe-inline` issues since it's a local app                     |
+| Performance with large schema maps                | `@codemirror/lang-sql`'s completion is efficient; for very large DBs (1000+ tables), consider debouncing or limiting the schema map to the active schema only |
 
 ---
 
@@ -288,13 +295,13 @@ All of this is handled natively by `@codemirror/lang-sql` when configured with t
 
 ### Estimated File Changes Summary
 
-| File | Change |
-|------|--------|
-| package.json | Add 7 `@codemirror/*` dependencies |
-| `apps/desktop/src/components/sql-editor/SqlEditor.tsx` | **New** — React component |
-| `apps/desktop/src/components/sql-editor/use-codemirror.ts` | **New** — CM lifecycle hook |
-| `apps/desktop/src/components/sql-editor/pg-theme.ts` | **New** — Theme definition |
-| query-tab.tsx | Replace `<textarea>` with `<SqlEditor>`, build `CompletionSchema` from props + cached columns |
-| data-tab.tsx | Replace `<Input>` with `<SqlEditor singleLine>`, build `CompletionSchema` |
+| File                                                       | Change                                                                                        |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| package.json                                               | Add 7 `@codemirror/*` dependencies                                                            |
+| `apps/desktop/src/components/sql-editor/SqlEditor.tsx`     | **New** — React component                                                                     |
+| `apps/desktop/src/components/sql-editor/use-codemirror.ts` | **New** — CM lifecycle hook                                                                   |
+| `apps/desktop/src/components/sql-editor/pg-theme.ts`       | **New** — Theme definition                                                                    |
+| query-tab.tsx                                              | Replace `<textarea>` with `<SqlEditor>`, build `CompletionSchema` from props + cached columns |
+| data-tab.tsx                                               | Replace `<Input>` with `<SqlEditor singleLine>`, build `CompletionSchema`                     |
 
 No IPC or backend changes required for v1 — all needed data (`schemaCache`, `columns` from `getStructure`) is already available.

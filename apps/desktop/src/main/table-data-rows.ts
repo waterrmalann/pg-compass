@@ -1,8 +1,10 @@
 import type { PoolClient } from "pg";
+import type { QueryColumnMetadata } from "../shared/query-dsl/types";
 import type {
   ColumnInfo,
   ExecuteQueryParams,
   GetRowsParams,
+  TableMetaParams,
   TableRowsResult,
 } from "../shared/types/table-data";
 import {
@@ -13,6 +15,8 @@ import {
 } from "./pg-utils";
 import { buildEnumTypeMap, buildTypeMap } from "./table-data-utils";
 import { resolveForeignKeys } from "./table-data-fk";
+import { bindAndCompile, parseDataQueryOrThrow } from "./query-dsl/prepare";
+import { loadRelationMetadata } from "./query-dsl/relation-metadata";
 
 interface ActiveQuery {
   connectionId: string;
@@ -47,44 +51,6 @@ function parseCountRow(raw: string | undefined): number {
   return n;
 }
 
-// ---------------------------------------------------------------------------
-// Primary-key resolution
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the primary-key columns for a real table, in declaration order.
- * Returns `null` for relations that have no primary key — views, foreign
- * tables, and tables declared without PRIMARY KEY. Cells are only editable
- * when this is non-null.
- */
-export async function resolvePrimaryKey(
-  client: PoolClient,
-  schema: string,
-  table: string,
-): Promise<string[] | null> {
-  // pg_index.indkey is an int2vector in column-order; unnest WITH ORDINALITY
-  // preserves that order and lets us join to pg_attribute for the names.
-  const result = await client.query<{ attname: string }>(
-    `
-    SELECT a.attname
-    FROM pg_index i
-    JOIN pg_class c ON c.oid = i.indrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    JOIN unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON true
-    JOIN pg_attribute a
-      ON a.attrelid = c.oid AND a.attnum = k.attnum
-    WHERE i.indisprimary
-      AND n.nspname = $1
-      AND c.relname = $2
-    ORDER BY k.ord
-    `,
-    [schema, table],
-  );
-
-  if (result.rows.length === 0) return null;
-  return result.rows.map((r) => r.attname);
-}
-
 async function resolveColumnNullability(
   client: PoolClient,
   schema: string,
@@ -112,57 +78,75 @@ async function resolveColumnNullability(
 // ---------------------------------------------------------------------------
 
 export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
+  // Syntax errors are reported before any database work.
+  const ast = parseDataQueryOrThrow(params.query);
+
   return withPoolClient(params.connectionId, async (client) => {
     const qualifiedTable = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
-    const whereFragment = params.whereClause?.trim()
-      ? `WHERE ${params.whereClause}`
-      : "";
-
     const offset = (params.page - 1) * params.pageSize;
 
-    const countSql = `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`;
-    // Use a read-only transaction so count and data are consistent.
+    // One read-only transaction: catalog binding, count and data all see
+    // the same snapshot, so a concurrent schema change can't slip between
+    // validation and execution.
     await client.query("BEGIN READ ONLY");
     try {
+      const { metadata, compiled } = await bindAndCompile(
+        client,
+        params.schema,
+        params.table,
+        ast,
+      );
+      const whereFragment = compiled.whereSql
+        ? `WHERE ${compiled.whereSql}`
+        : "";
+      // Without an ORDER BY, Postgres doesn't guarantee row order is stable
+      // across separate executions of the same query, so a row can be
+      // skipped or shown twice while paging. The compiler appends missing
+      // primary-key columns to any user sort (or uses them alone when there
+      // is no sort). Relations without a PK keep the user's sort only.
+      const orderByFragment = compiled.orderBySql
+        ? `ORDER BY ${compiled.orderBySql}`
+        : "";
+
       const countResult = await client.query<{ count: string }>(
-        extendedQuery(countSql),
+        `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`,
+        compiled.values,
       );
       const totalCount = parseCountRow(countResult.rows[0]?.count);
 
-      const primaryKey = await resolvePrimaryKey(
-        client,
-        params.schema,
-        params.table,
-      );
-      // Without an ORDER BY, Postgres doesn't guarantee row order is stable
-      // across separate executions of the same query — concurrent writes,
-      // HOT updates, or even a different plan choice can reorder results
-      // between page fetches, so a row can silently be skipped or shown
-      // twice while paging. Primary-key columns are always btree-orderable
-      // (required to build the index), so this can't newly break a query
-      // that worked before. Relations without a PK (views, PK-less tables)
-      // keep the prior unordered behavior rather than risk ordering by an
-      // exotic column type with no default ordering operator.
-      const orderByFragment =
-        primaryKey && primaryKey.length > 0
-          ? `ORDER BY ${primaryKey.map(quoteIdent).join(", ")}`
-          : "";
-
+      const limitPlaceholder = `$${compiled.values.length + 1}`;
+      const offsetPlaceholder = `$${compiled.values.length + 2}`;
       const dataResult = await client.query(
-        `SELECT * FROM ${qualifiedTable} ${whereFragment} ${orderByFragment} LIMIT $1 OFFSET $2`,
-        [params.pageSize, offset],
+        `SELECT ${compiled.selectListSql} FROM ${qualifiedTable} ${whereFragment} ${orderByFragment} LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+        [...compiled.values, params.pageSize, offset],
       );
 
-      const nullability = await resolveColumnNullability(
-        client,
-        params.schema,
-        params.table,
-      );
+      const nullability = compiled.hasProjection
+        ? null
+        : await resolveColumnNullability(client, params.schema, params.table);
 
       await client.query("COMMIT");
 
       const oids = dataResult.fields.map((f) => f.dataTypeID);
       const typeMap = await buildTypeMap(client, oids);
+
+      // A projection can omit or rename source columns, so its results are
+      // display-only: no primary key, nullability, enum-editing or FK
+      // metadata that could be mistaken for a source column's.
+      if (compiled.hasProjection) {
+        const columns: ColumnInfo[] = dataResult.fields.map((f) => ({
+          name: f.name,
+          dataTypeId: f.dataTypeID,
+          dataType: typeMap.get(f.dataTypeID) ?? "unknown",
+        }));
+        return {
+          columns,
+          rows: dataResult.rows,
+          totalCount,
+          primaryKey: null,
+        };
+      }
+
       const enumMap = await buildEnumTypeMap(client, oids);
 
       // Build a column-name -> pg type map for FK cast resolution.  We
@@ -187,7 +171,7 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
           name: f.name,
           dataTypeId: f.dataTypeID,
           dataType: typeMap.get(f.dataTypeID) ?? "unknown",
-          isNullable: nullability.get(f.name) ?? true,
+          isNullable: nullability?.get(f.name) ?? true,
           ...(enumInfo
             ? { enumLabels: enumInfo.labels, enumPgCast: enumInfo.pgCast }
             : {}),
@@ -195,11 +179,30 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
         };
       });
 
-      return { columns, rows: dataResult.rows, totalCount, primaryKey };
+      return {
+        columns,
+        rows: dataResult.rows,
+        totalCount,
+        primaryKey: metadata.primaryKey,
+      };
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
     }
+  });
+}
+
+/** Columns and DSL type families for the Data tab's completion and linting. */
+export async function getQueryColumns(
+  params: TableMetaParams,
+): Promise<QueryColumnMetadata[]> {
+  return withPoolClient(params.connectionId, async (client) => {
+    const metadata = await loadRelationMetadata(
+      client,
+      params.schema,
+      params.table,
+    );
+    return metadata.columns;
   });
 }
 

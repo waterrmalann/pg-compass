@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { DataQueryInput } from "@/shared/query-dsl/types";
 import type { ColumnInfo } from "@/shared/types/table-data";
 
 type PreviewMode = "table" | "json";
@@ -39,7 +40,8 @@ interface DeleteDataDialogProps {
   connectionId: string;
   schema: string;
   table: string;
-  whereClause: string;
+  /** The Data tab's active query. Only its filter selects rows to delete. */
+  query: DataQueryInput;
   totalCount: number;
   initialPreviewMode: PreviewMode;
   onDeleted: () => void;
@@ -51,7 +53,7 @@ export function DeleteDataDialog({
   connectionId,
   schema,
   table,
-  whereClause,
+  query,
   totalCount,
   initialPreviewMode,
   onDeleted,
@@ -63,6 +65,8 @@ export function DeleteDataDialog({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const filter = query.filter;
+  const sort = query.sort;
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +85,8 @@ export function DeleteDataDialog({
         table,
         page: 1,
         pageSize: 5,
-        whereClause: whereClause || undefined,
+        // Complete rows, in the active order: projection never applies here.
+        query: { filter, projection: "", sort },
       })
       .then((result) => {
         if (cancelled) return;
@@ -103,9 +108,9 @@ export function DeleteDataDialog({
     return () => {
       cancelled = true;
     };
-  }, [connectionId, schema, table, whereClause, open, initialPreviewMode]);
+  }, [connectionId, schema, table, filter, sort, open, initialPreviewMode]);
 
-  const filterText = whereClause.trim() || "No filter (all documents)";
+  const filterText = filter.trim() || "No filter (all documents)";
   const documentLabel = totalCount === 1 ? "document" : "documents";
   const canDelete =
     rows.length > 0 && !previewLoading && !previewError && !deleting;
@@ -121,7 +126,7 @@ export function DeleteDataDialog({
         connectionId,
         schema,
         table,
-        whereClause: whereClause || undefined,
+        filter,
       });
 
       if (!response.success || !response.data) {

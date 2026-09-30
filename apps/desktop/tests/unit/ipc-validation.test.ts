@@ -5,6 +5,7 @@ import {
   validateBackupRestoreInput,
   validateConnectionInput,
   validateCreateRoleInput,
+  validateDeleteRowsParams,
   validateDropRoleInput,
   validateExportDataParams,
   validateGetRowsParams,
@@ -84,8 +85,67 @@ describe("IPC runtime validation", () => {
         table: "users",
         page: 1,
         pageSize: 101,
+        query: { filter: "", projection: "", sort: "" },
       }),
     ).toThrow(/pageSize/);
+  });
+
+  it("requires a well-formed Data-tab query and rejects the old whereClause", () => {
+    const base = {
+      connectionId: "connection",
+      schema: "public",
+      table: "users",
+      page: 1,
+      pageSize: 25,
+    };
+    const query = { filter: "id > 1", projection: "", sort: "" };
+    expect(validateGetRowsParams({ ...base, query })).toMatchObject({ query });
+    expect(() => validateGetRowsParams(base)).toThrow(/getRows.query/);
+    expect(() =>
+      validateGetRowsParams({ ...base, query: { ...query, sort: 1 } }),
+    ).toThrow(/getRows.query.sort must be a string/);
+    expect(() =>
+      validateGetRowsParams({ ...base, query: { ...query, sql: "x" } }),
+    ).toThrow(/getRows.query.sql is not allowed/);
+    expect(() =>
+      validateGetRowsParams({ ...base, query, whereClause: "TRUE" }),
+    ).toThrow(/whereClause is not allowed/);
+  });
+
+  it("accepts a delete filter string and nothing else", () => {
+    const base = { connectionId: "connection", schema: "app", table: "t" };
+    expect(validateDeleteRowsParams({ ...base, filter: "" })).toMatchObject({
+      filter: "",
+    });
+    expect(() => validateDeleteRowsParams(base)).toThrow(
+      /deleteRows.filter must be a string/,
+    );
+    expect(() =>
+      validateDeleteRowsParams({ ...base, filter: "", whereClause: "TRUE" }),
+    ).toThrow(/whereClause is not allowed/);
+  });
+
+  it("only accepts an export query together with schema and table", () => {
+    const query = { filter: "", projection: "id", sort: "" };
+    expect(
+      validateExportDataParams({
+        connectionId: "connection",
+        format: "csv",
+        filePath: "export.csv",
+        schema: "public",
+        table: "users",
+        query,
+      }),
+    ).toMatchObject({ query });
+    expect(() =>
+      validateExportDataParams({
+        connectionId: "connection",
+        format: "csv",
+        filePath: "export.csv",
+        sql: "SELECT 1",
+        query,
+      }),
+    ).toThrow(/cannot be combined with sql/);
   });
 
   it("requires export source fields to be mutually exclusive", () => {

@@ -23,7 +23,7 @@ This item should open the PG Compass repository on GitHub in the user's default 
 
 This item should open the "New Issue" page of the PG Compass repository on GitHub in the user's default web browser. We will put a template in the issue body to guide users on how to suggest a feature. The URL to use is: `https://github.com/waterrmalann/pg-compass/issues/new?template=feature_request.md`. Put this in a constant string in the codebase and use it when the user clicks on this item.
 
-###  Report a Bug
+### Report a Bug
 
 This item should open the "New Issue" page of the PG Compass repository on GitHub in the user's default web browser. We will put a template in the issue body to guide users on how to report a bug. The URL to use is: `https://github.com/waterrmalann/pg-compass/issues/new?template=bug_report.md`. Put this in a constant string in the codebase and use it when the user clicks on this item.
 

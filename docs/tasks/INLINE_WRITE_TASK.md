@@ -91,7 +91,7 @@ export type EditValidation =
 
 export interface TypeEditor {
   /** Editor kind — drives which UI the cell mounts. */
-  kind: 'inline' | 'modal';
+  kind: "inline" | "modal";
   /** Serialize DB value to the string the editor starts with. */
   toInput(value: unknown): string;
   /** Parse + validate editor output. */
@@ -106,24 +106,25 @@ export interface TypeEditor {
 
 Built-in editors registered at startup (mirrors `registerDefaultRenderers()`):
 
-| PG type(s) | Editor | Validation |
-| --- | --- | --- |
-| `text`, `varchar`, `char`, `bpchar`, `name`, `citext`, `xml` | inline text | (none; empty string is stored as empty string — NULL is a separate affordance) |
-| `int2`, `int4`, `int8` | inline text | integer regex, range check per type |
-| `float4`, `float8`, `numeric`, `money` | inline text | finite number parse |
-| `bool` | inline select (true / false) | exact match |
-| `date`, `time`, `timetz`, `timestamp`, `timestamptz` | inline text | ISO-8601 parse; server casts the string (Postgres is the authoritative parser) |
-| `uuid` | inline text | UUID regex |
-| `json`, `jsonb` | modal (textarea with monospace, JSON pretty-print) | `JSON.parse` before submit |
-| `_int4`, `_text`, … (array types) | modal (textarea) | must parse as JSON array of matching primitive |
-| `geometry`, `geography` | **modal with map** | see §4 |
-| `vector` | modal (textarea) | must parse as `[n, n, …]` of finite numbers |
-| `interval` | inline text | pass through; server validates |
-| unknown / fallback | inline text | pass through as text |
+| PG type(s)                                                   | Editor                                             | Validation                                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `text`, `varchar`, `char`, `bpchar`, `name`, `citext`, `xml` | inline text                                        | (none; empty string is stored as empty string — NULL is a separate affordance) |
+| `int2`, `int4`, `int8`                                       | inline text                                        | integer regex, range check per type                                            |
+| `float4`, `float8`, `numeric`, `money`                       | inline text                                        | finite number parse                                                            |
+| `bool`                                                       | inline select (true / false)                       | exact match                                                                    |
+| `date`, `time`, `timetz`, `timestamp`, `timestamptz`         | inline text                                        | ISO-8601 parse; server casts the string (Postgres is the authoritative parser) |
+| `uuid`                                                       | inline text                                        | UUID regex                                                                     |
+| `json`, `jsonb`                                              | modal (textarea with monospace, JSON pretty-print) | `JSON.parse` before submit                                                     |
+| `_int4`, `_text`, … (array types)                            | modal (textarea)                                   | must parse as JSON array of matching primitive                                 |
+| `geometry`, `geography`                                      | **modal with map**                                 | see §4                                                                         |
+| `vector`                                                     | modal (textarea)                                   | must parse as `[n, n, …]` of finite numbers                                    |
+| `interval`                                                   | inline text                                        | pass through; server validates                                                 |
+| unknown / fallback                                           | inline text                                        | pass through as text                                                           |
 
 **Null handling.** Cell editor has an always-available "Set NULL" affordance (small button inside the popover / a keyboard shortcut — `Ctrl+Del` on the editor). Empty string ≠ NULL — we do not coerce. NOT NULL columns surface a post-submit error from the DB, not a pre-flight block (simpler, and honest).
 
 **The registry is also where read-only gating lives for rendering.** The cell wrapper checks:
+
 - `readOnlyMode === false`
 - `primaryKey !== null`
 - `editRegistry.has(col.dataType)` (unknown types fall back to text editor; still editable)
@@ -174,13 +175,15 @@ export const TableDataChannels = {
 Handler logic (main/table-data-write.ts):
 
 ```ts
-export async function updateCell(params: UpdateCellParams): Promise<UpdateCellResult> {
+export async function updateCell(
+  params: UpdateCellParams,
+): Promise<UpdateCellResult> {
   // Layer 2 read-only enforcement — never trust the renderer.
   if (getSettings().general.readOnlyMode) {
-    throw new Error('Read-only mode is enabled.');
+    throw new Error("Read-only mode is enabled.");
   }
   if (params.pkColumns.length === 0) {
-    throw new Error('Cannot update a row without a primary key.');
+    throw new Error("Cannot update a row without a primary key.");
   }
 
   return withPoolClient(params.connectionId, async (client) => {
@@ -196,27 +199,29 @@ export async function updateCell(params: UpdateCellParams): Promise<UpdateCellRe
     const sql = `
       UPDATE ${qualifiedTable}
       SET ${setClause}
-      WHERE ${whereParts.join(' AND ')}
+      WHERE ${whereParts.join(" AND ")}
       RETURNING *`;
 
     const values = params.setNull
       ? params.pkValues
       : [params.newValue, ...params.pkValues];
 
-    await client.query('BEGIN');
+    await client.query("BEGIN");
     try {
       const result = await client.query(sql, values);
       if (result.rowCount === 0) {
-        throw new Error('Row not found — it may have been modified or deleted.');
+        throw new Error(
+          "Row not found — it may have been modified or deleted.",
+        );
       }
       if (result.rowCount! > 1) {
         // PK violation in schema. Abort.
         throw new Error(`Unsafe: ${result.rowCount} rows matched — aborting.`);
       }
-      await client.query('COMMIT');
+      await client.query("COMMIT");
       return { row: result.rows[0]! };
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => undefined);
+      await client.query("ROLLBACK").catch(() => undefined);
       throw err;
     }
   });
@@ -230,10 +235,12 @@ IPC registration in [table-data-ipc.ts](apps/desktop/src/main/table-data-ipc.ts)
 #### 6. Renderer — cell editing UX
 
 **Files:**
+
 - `apps/desktop/src/components/workspace/table-viewer/editable-cell.tsx` (new) — wraps `TableCell` and card field value
 - [table-data-view.tsx](apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx) and [card-data-view.tsx](apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx) — delegate display to the new wrapper
 
 `EditableCell` responsibilities:
+
 - Receive `{ col, value, rowPkValues, schema, table, connectionId, primaryKey }`.
 - If `readOnlyMode || primaryKey === null` → render the existing display renderer with **no** interaction handlers. No wrapping `<button>`, no `onDoubleClick`, no `data-editable` attribute. The DOM should be indistinguishable from the current read-only output.
 - Otherwise:
@@ -257,22 +264,22 @@ The edit path does **not** refetch the page — it splices the returned row into
 
 ### File-by-file change map
 
-| File | Change |
-| --- | --- |
-| `apps/desktop/src/shared/types/table-data.ts` | Add `primaryKey` to `TableRowsResult`; add `UpdateCellParams`, `UpdateCellResult`, `UPDATE_CELL` channel |
-| `apps/desktop/src/main/table-data-rows.ts` | Fetch primary-key columns alongside `getRows` (skip for query results — pass through `null`) |
-| `apps/desktop/src/main/table-data-write.ts` | **New.** `updateCell` logic, `safePgCast` whitelist |
-| `apps/desktop/src/main/table-data-ipc.ts` | Wire `UPDATE_CELL` channel |
-| `apps/desktop/src/preload.ts` | Expose `tableDataApi.updateCell` (mirrors `getRows`) |
-| `apps/desktop/src/components/settings/SettingsDialog.tsx` | Remove "coming soon" copy from read-only toggle |
-| `apps/desktop/src/components/workspace/renderers/edit-registry.ts` | **New.** Registry + default editors |
-| `apps/desktop/src/components/workspace/renderers/postgis-editor.tsx` | **New.** Map modal editor |
-| `apps/desktop/src/components/workspace/renderers/register.ts` (if exists; else wire into existing registration) | Register default editors + PostGIS editor |
-| `apps/desktop/src/components/workspace/table-viewer/editable-cell.tsx` | **New.** Cell wrapper — handles gating, inline/modal editing, optimistic UI |
-| `apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx` | Accept `primaryKey`, route cells through `EditableCell` |
-| `apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx` | Same as above for card fields |
-| `apps/desktop/src/components/workspace/table-viewer/data-tab.tsx` (caller of the views) | Thread `primaryKey` from `TableRowsResult`; hold optimistic row state |
-| `package.json` | Add `leaflet`, `react-leaflet`, `@types/leaflet` for PostGIS editor |
+| File                                                                                                            | Change                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/shared/types/table-data.ts`                                                                   | Add `primaryKey` to `TableRowsResult`; add `UpdateCellParams`, `UpdateCellResult`, `UPDATE_CELL` channel |
+| `apps/desktop/src/main/table-data-rows.ts`                                                                      | Fetch primary-key columns alongside `getRows` (skip for query results — pass through `null`)             |
+| `apps/desktop/src/main/table-data-write.ts`                                                                     | **New.** `updateCell` logic, `safePgCast` whitelist                                                      |
+| `apps/desktop/src/main/table-data-ipc.ts`                                                                       | Wire `UPDATE_CELL` channel                                                                               |
+| `apps/desktop/src/preload.ts`                                                                                   | Expose `tableDataApi.updateCell` (mirrors `getRows`)                                                     |
+| `apps/desktop/src/components/settings/SettingsDialog.tsx`                                                       | Remove "coming soon" copy from read-only toggle                                                          |
+| `apps/desktop/src/components/workspace/renderers/edit-registry.ts`                                              | **New.** Registry + default editors                                                                      |
+| `apps/desktop/src/components/workspace/renderers/postgis-editor.tsx`                                            | **New.** Map modal editor                                                                                |
+| `apps/desktop/src/components/workspace/renderers/register.ts` (if exists; else wire into existing registration) | Register default editors + PostGIS editor                                                                |
+| `apps/desktop/src/components/workspace/table-viewer/editable-cell.tsx`                                          | **New.** Cell wrapper — handles gating, inline/modal editing, optimistic UI                              |
+| `apps/desktop/src/components/workspace/table-viewer/table-data-view.tsx`                                        | Accept `primaryKey`, route cells through `EditableCell`                                                  |
+| `apps/desktop/src/components/workspace/table-viewer/card-data-view.tsx`                                         | Same as above for card fields                                                                            |
+| `apps/desktop/src/components/workspace/table-viewer/data-tab.tsx` (caller of the views)                         | Thread `primaryKey` from `TableRowsResult`; hold optimistic row state                                    |
+| `package.json`                                                                                                  | Add `leaflet`, `react-leaflet`, `@types/leaflet` for PostGIS editor                                      |
 
 ---
 
@@ -283,6 +290,7 @@ We **land tests first** for every layer below. "Test harness prior to implementa
 #### Seed updates
 
 [apps/desktop/tests/support/postgres-seed.sql](apps/desktop/tests/support/postgres-seed.sql) gains:
+
 - a `geometry(Point, 4326)` column on `app.users` — gated behind `CREATE EXTENSION IF NOT EXISTS postgis` and a graceful `DO $$ BEGIN … EXCEPTION WHEN undefined_file THEN … END $$;` block so PGlite (no PostGIS) skips it and the real-Postgres suite exercises it. Suite files branch on capability.
 - a `pg_compass_test.notes` table with no primary key (for non-editable assertion).
 - a `vector(3)` column gated behind `CREATE EXTENSION IF NOT EXISTS vector` the same way.

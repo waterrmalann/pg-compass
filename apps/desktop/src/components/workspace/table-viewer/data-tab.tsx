@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   LayoutList,
+  Lock,
   Table2,
-  Search,
   CircleAlert,
   Pencil,
   Rows3,
@@ -20,18 +20,33 @@ import {
 } from "@/components/ui/panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
-  SqlEditor,
-  type CompletionSchema,
-} from "@/components/sql-editor/sql-editor";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DataPagination } from "@/components/workspace/table-viewer/data-pagination";
 import { TableDataView } from "@/components/workspace/table-viewer/table-data-view";
 import { CardDataView } from "@/components/workspace/table-viewer/card-data-view";
 import { DeleteDataDialog } from "@/components/workspace/table-viewer/delete-data-dialog";
 import { AddDataDropdown } from "@/components/workspace/table-viewer/add-data-dropdown";
+import { DataQueryToolbar } from "@/components/workspace/table-viewer/data-query-toolbar";
 import { ExportDropdown } from "@/components/workspace/export-dropdown";
-import { useWorkspace } from "@/hooks/use-workspace";
 import { useSettings } from "@/hooks/use-settings";
 import { useLatestRequest } from "@/hooks/use-latest-request";
+import { prepareDataQuery } from "@/shared/query-dsl/bind";
+import {
+  dataQueryEquals,
+  EMPTY_DATA_QUERY,
+  isEmptyDataQuery,
+  parseDataQuery,
+} from "@/shared/query-dsl/parser";
+import type {
+  DataQueryInput,
+  QueryColumnMetadata,
+  QueryDslError,
+  QueryDslField,
+} from "@/shared/query-dsl/types";
 import type { ColumnInfo } from "@/shared/types/table-data";
 import type { RelationSessionState } from "@/shared/types/workspace";
 
@@ -122,6 +137,23 @@ interface DataTabProps {
   onRefreshComplete?: (success: boolean) => void;
 }
 
+type LoadOutcome = "loaded" | "dsl-error" | "failed" | "stale";
+
+/**
+ * Instant feedback before a round trip: syntax always, and binding once the
+ * relation's columns are loaded. The main process re-validates regardless.
+ */
+function validateDraft(
+  query: DataQueryInput,
+  columns: QueryColumnMetadata[],
+): QueryDslError[] {
+  const result =
+    columns.length > 0
+      ? prepareDataQuery(query, columns)
+      : parseDataQuery(query);
+  return result.ok ? [] : result.errors;
+}
+
 export function DataTab({
   connectionId,
   schema,
@@ -132,7 +164,6 @@ export function DataTab({
   refreshSignal = 0,
   onRefreshComplete,
 }: Readonly<DataTabProps>) {
-  const { schemaCache } = useWorkspace();
   const { settings } = useSettings();
   const runLatestRequest = useLatestRequest();
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
@@ -141,12 +172,22 @@ export function DataTab({
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(session?.dataPageSize ?? 50);
-  const [whereClause, setWhereClauseState] = useState(
-    session?.dataWhereClause ?? "",
+  // `activeQuery` is the last successfully applied query; `draft` is
+  // what the user is editing. Rows, pagination, export and delete only ever
+  // use the active query.
+  const [activeQuery, setActiveQuery] = useState<DataQueryInput>(
+    session?.dataQuery ?? EMPTY_DATA_QUERY,
   );
-  const [pendingWhere, setPendingWhere] = useState(
-    session?.dataWhereClause ?? "",
+  const [draft, setDraft] = useState<DataQueryInput>(
+    session?.dataQuery ?? EMPTY_DATA_QUERY,
   );
+  const [dslErrors, setDslErrors] = useState<QueryDslError[]>([]);
+  const [optionsOpen, setOptionsOpen] = useState(
+    Boolean(
+      session?.dataQuery.projection.trim() || session?.dataQuery.sort.trim(),
+    ),
+  );
+  const [queryColumns, setQueryColumns] = useState<QueryColumnMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewModeState] = useState<ViewMode>(
     session?.dataViewMode ?? "table",
@@ -156,38 +197,16 @@ export function DataTab({
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const seenRefreshSignal = useRef(refreshSignal);
   const isTable = relationType === "table";
+  const hasProjection = activeQuery.projection.trim() !== "";
 
-  const completionSchema = useMemo<CompletionSchema>(() => {
-    const schemas: string[] = [];
-    const tables: Record<string, string[]> = {};
-    const cols: Record<string, { name: string; type?: string }[]> = {};
-
-    for (const [connId, dbSchemas] of Object.entries(schemaCache)) {
-      if (connId !== connectionId) continue;
-      for (const s of dbSchemas) {
-        schemas.push(s.name);
-        tables[s.name] = [...s.tables, ...s.views.map((view) => view.name)];
-      }
-    }
-
-    if (columns.length > 0) {
-      const key = `${schema}.${table}`;
-      cols[key] = columns.map((c) => ({ name: c.name, type: c.dataType }));
-    }
-
-    return {
-      schemas,
-      tables,
-      columns: cols,
-      defaultTable: table,
-      defaultSchema: schema,
-    };
-  }, [schemaCache, connectionId, schema, table, columns]);
-
-  const fetchRows = useCallback(
-    async (p: number, ps: number, where: string, background = false) => {
+  const loadRows = useCallback(
+    async (
+      p: number,
+      ps: number,
+      query: DataQueryInput,
+      background = false,
+    ): Promise<LoadOutcome> => {
       if (!background) setLoading(true);
-      setError(null);
       const request = await runLatestRequest(() =>
         globalThis.window.tableDataApi.getRows({
           connectionId,
@@ -195,7 +214,7 @@ export function DataTab({
           table,
           page: p,
           pageSize: ps,
-          whereClause: where || undefined,
+          query,
         }),
       );
       // A stale result means a newer call (background or foreground)
@@ -203,9 +222,9 @@ export function DataTab({
       // the final loading state when IT resolves, so this one touches
       // nothing further (in particular, it must NOT clear `loading`, since
       // the newer call may still be pending).
-      if (request.status === "stale") return false;
-      if (request.status === "error") {
-        const msg = (request.error as Error).message;
+      if (request.status === "stale") return "stale";
+
+      const failWith = (msg: string): LoadOutcome => {
         setError(msg);
         if (!background) {
           setRows([]);
@@ -213,20 +232,24 @@ export function DataTab({
         }
         setLoading(false);
         toast.error("Failed to load rows", { description: msg });
-        return false;
+        return "failed";
+      };
+
+      if (request.status === "error") {
+        return failWith((request.error as Error).message);
       }
       const result = request.value;
-      if (!result.success || !result.data) {
-        const msg = result.error ?? "Unknown error";
-        setError(msg);
-        if (!background) {
-          setRows([]);
-          setTotalCount(0);
+      if (!result.success) {
+        // Invalid DSL leaves the previous results, count and page intact;
+        // the errors are shown inline next to the offending field.
+        if (result.failure?.kind === "query-dsl") {
+          setDslErrors(result.failure.errors);
+          setLoading(false);
+          return "dsl-error";
         }
-        setLoading(false);
-        toast.error("Failed to load rows", { description: msg });
-        return false;
+        return failWith(result.error);
       }
+      setError(null);
       setColumns(result.data.columns);
       setRows(result.data.rows);
       setPrimaryKey(result.data.primaryKey);
@@ -239,35 +262,61 @@ export function DataTab({
       // foreground call went stale, and must still clear the spinner it
       // never set. Calling this when it's already false is a harmless no-op.
       setLoading(false);
-      return true;
+      return "loaded";
     },
     [connectionId, runLatestRequest, schema, table],
+  );
+
+  // The initial load reads the current view through a ref so it only
+  // re-runs when the relation changes; page, page size and query changes
+  // load explicitly from their handlers.
+  const viewRef = useRef({ page, pageSize, activeQuery });
+  viewRef.current = { page, pageSize, activeQuery };
+
+  useEffect(
+    function loadRelationRows() {
+      const view = viewRef.current;
+      void loadRows(view.page, view.pageSize, view.activeQuery);
+    },
+    [loadRows],
+  );
+
+  useEffect(
+    function loadQueryColumns() {
+      // The relation's full column list drives completion and linting; it is
+      // kept apart from result columns, which a projection can shrink.
+      let cancelled = false;
+      globalThis.window.tableDataApi
+        .getQueryColumns({ connectionId, schema, table })
+        .then((result) => {
+          if (!cancelled && result.success) setQueryColumns(result.data);
+        })
+        .catch(() => undefined);
+      return () => {
+        cancelled = true;
+      };
+    },
+    [connectionId, schema, table, refreshSignal],
   );
 
   useEffect(() => {
     if (seenRefreshSignal.current === refreshSignal) return;
     seenRefreshSignal.current = refreshSignal;
-    void fetchRows(page, pageSize, whereClause, true).then((success) =>
-      onRefreshComplete?.(success),
+    void loadRows(page, pageSize, activeQuery, true).then((outcome) =>
+      onRefreshComplete?.(outcome === "loaded"),
     );
-  }, [
-    fetchRows,
-    onRefreshComplete,
-    page,
-    pageSize,
-    refreshSignal,
-    whereClause,
-  ]);
+  }, [activeQuery, loadRows, onRefreshComplete, page, pageSize, refreshSignal]);
+
+  function handlePageChange(next: number) {
+    setPage(next);
+    void loadRows(next, pageSize, activeQuery);
+  }
 
   function setPageSize(next: number) {
     setPageSizeState(next);
     setPage(1);
     onSessionChange?.({ dataPageSize: next });
-  }
-
-  function setWhereClause(next: string) {
-    setWhereClauseState(next);
-    onSessionChange?.({ dataWhereClause: next });
+    void loadRows(1, next, activeQuery);
   }
 
   function setViewMode(next: ViewMode) {
@@ -275,23 +324,49 @@ export function DataTab({
     onSessionChange?.({ dataViewMode: next });
   }
 
-  useEffect(
-    function fetchTableData() {
-      fetchRows(page, pageSize, whereClause);
-    },
-    [fetchRows, page, pageSize, whereClause],
-  );
-
-  function handleWhereSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setPage(1);
-    setWhereClause(pendingWhere);
+  function handleDraftChange(field: QueryDslField, value: string) {
+    setDraft((previous) => ({ ...previous, [field]: value }));
+    // Ranges in an edited field no longer point at the right text.
+    setDslErrors((previous) =>
+      previous.some((dslError) => dslError.field === field)
+        ? previous.filter((dslError) => dslError.field !== field)
+        : previous,
+    );
   }
 
-  function handleClearFilter() {
-    setPendingWhere("");
-    setWhereClause("");
+  /**
+   * Validates and runs a query. Only a query that parses and binds in the
+   * main process becomes active; a database error on a valid query (say an
+   * invalid date) shows the normal result error state. All three fields
+   * change together and paging resets.
+   */
+  async function applyQuery(next: DataQueryInput) {
+    const localErrors = validateDraft(next, queryColumns);
+    if (localErrors.length > 0) {
+      setDslErrors(localErrors);
+      const optionErrors = localErrors.some(
+        (dslError) => dslError.field !== "filter",
+      );
+      if (optionErrors) setOptionsOpen(true);
+      return;
+    }
+    setDslErrors([]);
+    if (dataQueryEquals(next, activeQuery)) return;
+
+    const outcome = await loadRows(1, pageSize, next);
+    if (outcome === "stale" || outcome === "dsl-error") return;
+    setActiveQuery(next);
     setPage(1);
+    onSessionChange?.({ dataQuery: next });
+  }
+
+  function handleApply() {
+    void applyQuery(draft);
+  }
+
+  function handleClear() {
+    setDraft(EMPTY_DATA_QUERY);
+    void applyQuery(EMPTY_DATA_QUERY);
   }
 
   const handleRowUpdated = useCallback(
@@ -328,12 +403,12 @@ export function DataTab({
 
   const handleRowsDeleted = useCallback(() => {
     setPage(1);
-    void fetchRows(1, pageSize, whereClause);
-  }, [fetchRows, pageSize, whereClause]);
+    void loadRows(1, pageSize, activeQuery);
+  }, [loadRows, pageSize, activeQuery]);
 
   const handleDataChanged = useCallback(() => {
-    void fetchRows(page, pageSize, whereClause, true);
-  }, [fetchRows, page, pageSize, whereClause]);
+    void loadRows(page, pageSize, activeQuery, true);
+  }, [loadRows, page, pageSize, activeQuery]);
 
   const updatedLabel = lastRefreshedAt
     ? `Updated ${lastRefreshedAt.toLocaleTimeString([], {
@@ -341,51 +416,32 @@ export function DataTab({
         minute: "2-digit",
       })}`
     : "";
+  const canEditRows = isTable && !settings.general.readOnlyMode;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* Toolbar: filter + view switcher */}
-      <div className="flex shrink-0 items-center gap-2">
-        <form
-          onSubmit={handleWhereSubmit}
-          className="flex min-w-0 flex-1 items-center gap-2"
-        >
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <SqlEditor
-              value={pendingWhere}
-              onChange={setPendingWhere}
-              onSubmit={() => {
-                setPage(1);
-                setWhereClause(pendingWhere);
-              }}
-              placeholder="WHERE clause — e.g. id > 10 AND status = 'active'"
-              schema={completionSchema}
-              singleLine
-              minHeight="32px"
-              className="h-8 pl-6"
-            />
-          </div>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-          {whereClause && (
-            <Button type="button" variant="ghost" onClick={handleClearFilter}>
-              Clear
-            </Button>
-          )}
-        </form>
-
-        <SegmentedControl
-          ariaLabel="Data view mode"
-          value={viewMode}
-          onValueChange={setViewMode}
-          options={[
-            { value: "table", icon: <Table2 />, ariaLabel: "Table view" },
-            { value: "card", icon: <LayoutList />, ariaLabel: "Card view" },
-          ]}
-        />
-      </div>
+      <DataQueryToolbar
+        draft={draft}
+        activeQuery={activeQuery}
+        errors={dslErrors}
+        columns={queryColumns}
+        optionsOpen={optionsOpen}
+        onOptionsOpenChange={setOptionsOpen}
+        onDraftChange={handleDraftChange}
+        onApply={handleApply}
+        onClear={handleClear}
+        trailing={
+          <SegmentedControl
+            ariaLabel="Data view mode"
+            value={viewMode}
+            onValueChange={setViewMode}
+            options={[
+              { value: "table", icon: <Table2 />, ariaLabel: "Table view" },
+              { value: "card", icon: <LayoutList />, ariaLabel: "Card view" },
+            ]}
+          />
+        }
+      />
 
       <Panel className="flex-1">
         <PanelHeader className="px-3">
@@ -399,7 +455,31 @@ export function DataTab({
             {updatedLabel}
           </span>
           <div className="ml-auto flex items-center gap-1">
-            {isTable && !settings.general.readOnlyMode && (
+            {canEditRows && hasProjection && (
+              // aria-disabled rather than disabled so it can still show its
+              // tooltip on hover and focus.
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      aria-disabled="true"
+                      aria-description="Clear projection to edit rows."
+                      className="cursor-not-allowed"
+                    >
+                      <Lock />
+                      Read-only
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Clear projection to edit rows.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {canEditRows && !hasProjection && (
               <AddDataDropdown
                 connectionId={connectionId}
                 schema={schema}
@@ -434,7 +514,9 @@ export function DataTab({
               connectionId={connectionId}
               schema={schema}
               table={table}
-              whereClause={whereClause || undefined}
+              dataQuery={
+                isEmptyDataQuery(activeQuery) ? undefined : activeQuery
+              }
             />
           </div>
         </PanelHeader>
@@ -460,7 +542,7 @@ export function DataTab({
           page={page}
           pageSize={pageSize}
           totalCount={totalCount}
-          onPageChange={setPage}
+          onPageChange={handlePageChange}
           onPageSizeChange={setPageSize}
           disabled={loading}
         />
@@ -473,7 +555,7 @@ export function DataTab({
           connectionId={connectionId}
           schema={schema}
           table={table}
-          whereClause={whereClause}
+          query={activeQuery}
           totalCount={totalCount}
           initialPreviewMode={viewMode === "table" ? "table" : "json"}
           onDeleted={handleRowsDeleted}

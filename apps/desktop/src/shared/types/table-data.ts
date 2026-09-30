@@ -1,5 +1,18 @@
 /** Types for table/view data queries used across main, preload, and renderer. */
 
+import type { DataQueryInput, QueryDslError } from "../query-dsl/types";
+
+export type { DataQueryInput, QueryDslError } from "../query-dsl/types";
+
+/**
+ * Structured reason for a failed Data-tab operation. DSL failures carry
+ * field-specific errors with source ranges; everything else is a database
+ * or validation message.
+ */
+export type TableDataFailure =
+  | { kind: "query-dsl"; errors: QueryDslError[] }
+  | { kind: "database"; message: string };
+
 /**
  * Reference to the parent of a single-column foreign key. Used by the
  * renderer to swap the column's editor for an FK combobox. Composite FKs
@@ -158,7 +171,8 @@ export interface GetRowsParams {
   table: string;
   page: number;
   pageSize: number;
-  whereClause?: string;
+  /** Raw Data-tab DSL; parsed, bound and compiled in the main process. */
+  query: DataQueryInput;
 }
 
 /** Parameters for executing a read-only query. */
@@ -200,9 +214,14 @@ export interface ExportDataParams {
   format: "csv" | "json";
   /** Destination file path (from a prior save dialog). */
   filePath: string;
-  /** Full table export: schema + table. Omit sql. */
+  /** Relation export: schema + table. Omit sql. */
   schema?: string;
   table?: string;
+  /**
+   * Data-tab DSL applied to a relation export (filter, projection, sort; no
+   * pagination). Only valid together with schema + table.
+   */
+  query?: DataQueryInput;
   /** Query-based export: the SQL to run. Omit schema + table. */
   sql?: string;
 }
@@ -361,12 +380,13 @@ export interface OpenDialogOptions {
   filters?: { name: string; extensions: string[] }[];
 }
 
-/** Parameters for deleting rows from a table using the current data filter. */
+/** Parameters for deleting rows from a table using the active Data-tab filter. */
 export interface DeleteRowsParams {
   connectionId: string;
   schema: string;
   table: string;
-  whereClause?: string;
+  /** Filter DSL; empty deletes every row. Projection and sort never apply. */
+  filter: string;
 }
 
 /** Result returned after deleting rows. */
