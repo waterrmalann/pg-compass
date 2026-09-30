@@ -112,11 +112,17 @@ function buildUriDbname(
   url.pathname = `/${encodeURIComponent(database)}`;
   url.searchParams.delete("dbname");
   // Keep the password out of the process arguments (visible to local users);
-  // libpq falls back to PGPASSWORD.
+  // libpq falls back to PGPASSWORD. A `password` query parameter overrides
+  // the userinfo one in libpq, so it wins here too.
   if (url.password) {
     env.PGPASSWORD = decodeURIComponent(url.password);
   }
+  const queryPassword = url.searchParams.get("password");
+  if (queryPassword !== null) {
+    env.PGPASSWORD = queryPassword;
+  }
   url.password = "";
+  url.searchParams.delete("password");
   return url.toString();
 }
 

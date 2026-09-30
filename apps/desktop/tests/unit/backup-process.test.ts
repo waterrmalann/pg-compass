@@ -80,6 +80,23 @@ describe("conninfo and database name handling", () => {
     expect(target.env).toEqual({ PGPASSWORD: "p@ss" });
   });
 
+  it("moves a password query parameter off argv", async () => {
+    const target = await resolvePgToolTarget(
+      {
+        ...fieldsConnection,
+        mode: "uri",
+        fields: undefined,
+        uri: "postgresql://app:userinfo@db.example.com/orig?password=q%26secret&sslmode=require",
+      },
+      "shop",
+    );
+
+    expect(target.dbname).not.toContain("secret");
+    expect(target.dbname).not.toContain("userinfo");
+    expect(new URL(target.dbname).searchParams.get("sslmode")).toBe("require");
+    expect(target.env).toEqual({ PGPASSWORD: "q&secret" });
+  });
+
   it("refuses SSH-tunnelled connections", async () => {
     await expect(
       resolvePgToolTarget(
