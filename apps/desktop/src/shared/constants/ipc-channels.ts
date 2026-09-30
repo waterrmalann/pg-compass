@@ -95,6 +95,7 @@ export const BackupChannels = {
 } as const;
 
 export const ShellChannels = {
+  LOCATE_PSQL: "shell:locate-psql",
   START: "shell:start",
   WRITE: "shell:write",
   RESIZE: "shell:resize",

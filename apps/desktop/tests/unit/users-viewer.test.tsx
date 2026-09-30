@@ -8,6 +8,11 @@ import type { PgRole, RolesSnapshot } from "@/shared/types/roles";
 
 const notifyRolesChanged = vi.fn();
 
+// The Open shell button looks psql up over IPC; not under test here.
+vi.mock("@/hooks/use-psql-location", () => ({
+  usePsqlLocation: () => ({ location: null, recheck: () => undefined }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));

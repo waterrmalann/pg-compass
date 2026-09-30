@@ -10,6 +10,11 @@ const refreshSchemaTreeWithStatus = vi
   .fn()
   .mockResolvedValue({ ok: true, data: [] });
 
+// The Open shell button looks psql up over IPC; not under test here.
+vi.mock("@/hooks/use-psql-location", () => ({
+  usePsqlLocation: () => ({ location: null, recheck: () => undefined }),
+}));
+
 vi.mock("@/hooks/use-settings", () => ({
   useSettings: () => ({
     settings: DEFAULT_APP_SETTINGS,

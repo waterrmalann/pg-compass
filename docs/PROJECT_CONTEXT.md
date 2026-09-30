@@ -76,7 +76,7 @@ The Database Manager can back up a database to a local dump and restore a dump i
 
 ### Database Shell
 
-An Open shell button beside Refresh opens a new tab running `psql` for the current connection in an embedded terminal. Each tab is its own session. It needs `psql` on the user's `PATH` and the Shell access setting, which is off by default. In Read-only mode, transactions start read-only. See `docs/decisions/DB_SHELL_ADR.md`.
+An Open shell button beside Refresh opens a new tab running `psql` for the current connection in an embedded terminal. Each tab is its own session. It needs a local `psql` (found on `PATH`, in the usual install folders, or at a path set in Settings) and the Shell access setting, which is off by default. Without `psql`, the button is disabled and its tooltip explains how to install it. In Read-only mode, transactions start read-only. See `docs/decisions/DB_SHELL_ADR.md`.
 
 ### Updates
 

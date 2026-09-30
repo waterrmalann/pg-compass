@@ -48,6 +48,7 @@ import type {
 } from "./shared/types/roles";
 import type { AppSettings, AppSettingsPatch } from "./shared/types/settings";
 import type {
+  PsqlLocation,
   ShellDataEvent,
   ShellExitEvent,
   ShellResizeInput,
@@ -459,6 +460,9 @@ const backupApi = {
 } satisfies BackupApi;
 
 const shellApi = {
+  locatePsql: (): Promise<IpcResult<PsqlLocation>> =>
+    ipcRenderer.invoke(ShellChannels.LOCATE_PSQL),
+
   start: (input: ShellStartInput): Promise<IpcResult<ShellStartResult>> =>
     ipcRenderer.invoke(ShellChannels.START, input),
 

@@ -376,6 +376,7 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
     assertAllowedKeys(general, "settingsPatch.general", [
       "readOnlyMode",
       "shellAccess",
+      "psqlPath",
       "enableDevTools",
       "hideInternalSchemas",
     ]);
@@ -384,6 +385,10 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
       "settingsPatch.general.readOnlyMode",
     );
     asOptionalBoolean(general.shellAccess, "settingsPatch.general.shellAccess");
+    asOptionalString(general.psqlPath, "settingsPatch.general.psqlPath", {
+      maxLength: MAX_PATH_LENGTH,
+      allowEmpty: true,
+    });
     asOptionalBoolean(
       general.enableDevTools,
       "settingsPatch.general.enableDevTools",

@@ -33,6 +33,7 @@ import type {
   BackupRunResult,
 } from "./backup";
 import type {
+  PsqlLocation,
   ShellDataEvent,
   ShellExitEvent,
   ShellResizeInput,
@@ -205,6 +206,8 @@ export interface BackupApi {
 }
 
 export interface ShellApi {
+  /** Where psql would be started from, using the psql path setting. */
+  locatePsql(): Promise<IpcResult<PsqlLocation>>;
   /** Spawns psql in a pseudo-terminal for the connection's database. */
   start(input: ShellStartInput): Promise<IpcResult<ShellStartResult>>;
   write(input: ShellWriteInput): Promise<IpcResult<void>>;

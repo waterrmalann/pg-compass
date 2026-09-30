@@ -423,4 +423,56 @@ describe("preload API contract", () => {
     unsubscribe();
     expect(removeListener).toHaveBeenCalledWith("backup:progress", listener);
   });
+
+  it("forwards shellApi calls to the shell channels", async () => {
+    await import("@/preload");
+    const shellApi = exposeInMainWorld.mock.calls.find(
+      ([key]) => key === "shellApi",
+    )?.[1] as Record<string, (...args: unknown[]) => unknown>;
+
+    const session = { sessionId: "session-12345678" };
+    const calls: Array<[string, unknown[], unknown[]]> = [
+      ["locatePsql", [], ["shell:locate-psql"]],
+      [
+        "start",
+        [{ ...session, connectionId: "c1", cols: 80, rows: 24 }],
+        ["shell:start", { ...session, connectionId: "c1", cols: 80, rows: 24 }],
+      ],
+      [
+        "write",
+        [{ ...session, data: "\\q\r" }],
+        ["shell:write", { ...session, data: "\\q\r" }],
+      ],
+      [
+        "resize",
+        [{ ...session, cols: 100, rows: 30 }],
+        ["shell:resize", { ...session, cols: 100, rows: 30 }],
+      ],
+      ["kill", [session], ["shell:kill", session]],
+    ];
+
+    expect(Object.keys(shellApi).sort()).toEqual(
+      [...calls.map(([method]) => method), "onData", "onExit"].sort(),
+    );
+    for (const [method, args, invokeArgs] of calls) {
+      invoke.mockClear();
+      await shellApi[method]!(...args);
+      expect(invoke).toHaveBeenCalledWith(...invokeArgs);
+    }
+
+    for (const [method, channel] of [
+      ["onData", "shell:data"],
+      ["onExit", "shell:exit"],
+    ] as const) {
+      const callback = vi.fn();
+      const unsubscribe = shellApi[method]!(callback) as () => void;
+      const listener = on.mock.calls.find(
+        ([name]) => name === channel,
+      )?.[1] as (event: unknown, payload: unknown) => void;
+      listener({}, { ...session, data: "x" });
+      expect(callback).toHaveBeenCalledWith({ ...session, data: "x" });
+      unsubscribe();
+      expect(removeListener).toHaveBeenCalledWith(channel, listener);
+    }
+  });
 });

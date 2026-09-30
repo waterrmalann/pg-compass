@@ -15,7 +15,9 @@ Done.
 - [x] Gated by the Shell access setting, enforced in the main process. The button offers to turn it on.
 - [x] Read-only mode starts `psql` with read-only transactions by default.
 - [x] Copy and paste: platform clipboard shortcuts; on Windows and Linux Ctrl+C copies a selection and otherwise interrupts `psql`.
-- [x] Find bar (Ctrl/⌘+F), Restart after exit, clear errors for a missing `psql` or an SSH-tunnelled connection.
+- [x] Find bar (Ctrl/⌘+F), Restart after exit, clear errors for a missing `psql`, a bad psql path, or an SSH-tunnelled connection.
+- [x] psql lookup: a psql path setting (Settings → General, with Browse), else `PATH`, else the usual install folders per platform.
+- [x] Open shell is disabled with platform-specific install steps in its tooltip while psql cannot be found; re-checked on window focus.
 - [x] Packaging: `node-pty` is installed in the packaged app and unpacked from the asar archive.
 
 ## Not done

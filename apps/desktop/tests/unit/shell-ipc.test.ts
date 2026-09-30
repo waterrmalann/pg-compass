@@ -4,8 +4,9 @@ import { ShellChannels } from "@/shared/constants/ipc-channels";
 const mocks = vi.hoisted(() => ({
   handle: vi.fn(),
   connections: new Map<string, unknown>(),
-  settings: { readOnlyMode: false, shellAccess: true },
+  settings: { readOnlyMode: false, shellAccess: true, psqlPath: "" },
   psqlPath: "/usr/bin/psql" as string | null,
+  locatePsql: vi.fn(),
   spawn: vi.fn(),
 }));
 
@@ -25,7 +26,7 @@ vi.mock("@/main/settings-store", () => ({
 
 vi.mock("@/main/shell-process", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/main/shell-process")>()),
-  findExecutable: () => mocks.psqlPath,
+  locatePsql: mocks.locatePsql,
 }));
 
 import { configureIpcSecurity } from "@/main/ipc-security";
@@ -34,12 +35,12 @@ import { killAllShellSessions, registerShellHandlers } from "@/main/shell-ipc";
 const RENDERER_URL = "file:///app/index.html";
 const SESSION_ID = "session-12345678";
 
-function createEvent() {
+function createEvent(senderId = 1) {
   const mainFrame = { url: RENDERER_URL };
   return {
     senderFrame: mainFrame,
     sender: {
-      id: 1,
+      id: senderId,
       mainFrame,
       once: vi.fn(),
       on: vi.fn(),
@@ -81,8 +82,20 @@ describe("shell IPC", () => {
   beforeEach(() => {
     mocks.handle.mockReset();
     mocks.spawn.mockReset();
-    mocks.settings = { readOnlyMode: false, shellAccess: true };
+    mocks.settings = { readOnlyMode: false, shellAccess: true, psqlPath: "" };
     mocks.psqlPath = "/usr/bin/psql";
+    mocks.locatePsql.mockReset();
+    mocks.locatePsql.mockImplementation(() =>
+      mocks.psqlPath
+        ? { path: mocks.psqlPath, source: "path", platform: "linux" }
+        : {
+            path: null,
+            source: null,
+            platform: "linux",
+            problem:
+              "psql was not found on your PATH or in the usual install folders.",
+          },
+    );
     mocks.connections.set("local", {
       id: "local",
       label: "Local",
@@ -122,8 +135,60 @@ describe("shell IPC", () => {
     );
     expect(result).toMatchObject({
       success: false,
-      error: expect.stringMatching(/psql not found/),
+      error: expect.stringMatching(
+        /not found.*Install the PostgreSQL client tools or set the psql path in Settings/,
+      ),
     });
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it("asks to fix a bad configured path rather than install psql", async () => {
+    mocks.settings.psqlPath = "/opt/psql";
+    mocks.locatePsql.mockReturnValue({
+      path: null,
+      source: null,
+      platform: "linux",
+      problem: "No executable psql at /opt/psql.",
+    });
+
+    const result = await handler(ShellChannels.START)(
+      createEvent(),
+      startInput(),
+    );
+    expect(result).toEqual({
+      success: false,
+      error:
+        "No executable psql at /opt/psql. Fix or clear the psql path in Settings → General.",
+    });
+  });
+
+  it("locates psql with the configured path", async () => {
+    mocks.settings.psqlPath = "/opt/pg/bin/psql";
+    mocks.psqlPath = "/opt/pg/bin/psql";
+
+    const result = await handler(ShellChannels.LOCATE_PSQL)(
+      createEvent(),
+      undefined,
+    );
+    expect(mocks.locatePsql).toHaveBeenCalledWith({
+      configuredPath: "/opt/pg/bin/psql",
+    });
+    expect(result).toEqual({
+      success: true,
+      data: { path: "/opt/pg/bin/psql", source: "path", platform: "linux" },
+    });
+  });
+
+  it("starts the configured psql", async () => {
+    mocks.settings.psqlPath = "/opt/pg/bin/psql";
+    mocks.psqlPath = "/opt/pg/bin/psql";
+    mocks.spawn.mockReturnValue(createFakePty());
+
+    await handler(ShellChannels.START)(createEvent(), startInput());
+    expect(mocks.locatePsql).toHaveBeenCalledWith({
+      configuredPath: "/opt/pg/bin/psql",
+    });
+    expect(mocks.spawn.mock.calls[0]?.[0]).toBe("/opt/pg/bin/psql");
   });
 
   it("spawns psql and bridges input, output, resize and exit", async () => {
@@ -194,6 +259,39 @@ describe("shell IPC", () => {
 
     await handler(ShellChannels.KILL)(event, { sessionId: SESSION_ID });
     expect(fakePty.kill).toHaveBeenCalled();
+  });
+
+  it("kills a window's sessions when it reloads or closes", async () => {
+    // Fresh sender ids: cleanup listeners are registered once per window.
+    for (const [senderId, lifecycleEvent] of [
+      [21, "did-start-navigation"],
+      [22, "destroyed"],
+    ] as const) {
+      const fakePty = createFakePty();
+      mocks.spawn.mockReturnValue(fakePty);
+      const event = createEvent(senderId);
+      await handler(ShellChannels.START)(event, startInput());
+
+      const register =
+        lifecycleEvent === "destroyed" ? event.sender.once : event.sender.on;
+      const listener = register.mock.calls.find(
+        ([name]) => name === lifecycleEvent,
+      )?.[1] as (details?: unknown) => void;
+      if (lifecycleEvent === "did-start-navigation") {
+        listener({ isMainFrame: true, isSameDocument: true });
+        expect(fakePty.kill).not.toHaveBeenCalled();
+        listener({ isMainFrame: true, isSameDocument: false });
+      } else {
+        listener();
+      }
+
+      expect(fakePty.kill).toHaveBeenCalledTimes(1);
+      const write = await handler(ShellChannels.WRITE)(event, {
+        sessionId: SESSION_ID,
+        data: "x",
+      });
+      expect(write).toMatchObject({ success: false });
+    }
   });
 
   it("rejects malformed input", async () => {

@@ -8,6 +8,8 @@ Developers often drop to `psql` for things a GUI does poorly: `\d` describes, `C
 
 - **Run the real `psql` in a pseudo-terminal.** The main process spawns `psql` from the user's `PATH` with `node-pty`. A renderer-side **xterm.js** terminal (with the fit and search addons) renders its output and sends keystrokes back over IPC (`shellApi`, channels prefixed `shell:*`). We do not reimplement history, completion, multiline editing, the pager or ANSI handling.
 - **An Open shell button sits beside Refresh** in every connection-scoped top bar. Each click opens a new workspace tab (`shell` view) with its own session. Closing the tab, reloading the window or quitting the app kills its `psql`.
+- **psql is found, not bundled.** A **psql path** setting (Settings → General, `general.psqlPath`) is used as is when set, and a bad path is reported, never silently replaced. When it is blank, the main process searches `PATH`, then the usual install folders: Homebrew (including keg-only `libpq` and `postgresql@N`), Postgres.app and MacPorts on macOS; `C:\Program Files\PostgreSQL\<version>\bin` on Windows; `/usr/lib/postgresql/<version>/bin` and `/usr/pgsql-<version>/bin` on Linux. The newest version wins.
+- **A missing psql is visible before clicking.** The renderer asks the main process where psql is (`shell:locate-psql`) on mount, when the path setting changes and when the window regains focus. While it cannot be found, Open shell is `aria-disabled` and its tooltip gives install steps for the platform. The settings row shows the psql in use and where it came from.
 - **Shell access is opt-in.** The existing `general.shellAccess` setting (off by default) gates it. The main process refuses to start a shell while it is off. The button explains this and offers to turn it on, because `psql` can also run local commands with `\!`.
 - **Connections are resolved like backup and restore.** `psql` gets the same `--dbname` conninfo and `PGPASSWORD`/`PGSSL*` environment as `pg_dump` (`resolvePgToolTarget`), so secrets never appear in process arguments. SSH-tunnelled connections are refused.
 - **Read-only mode is a session default.** With Read-only mode on, `psql` starts with `PGOPTIONS=-c default_transaction_read_only=on`, and the shell header says "Read-only by default". A user can still `SET default_transaction_read_only = off`; a raw SQL shell cannot enforce more without a read-only role.
@@ -23,7 +25,8 @@ Accepted (2026-09-29).
 
 ## Consequences
 
-- The shell needs `psql` on `PATH` (like backup and restore need `pg_dump`). The rest of the app stays zero-configuration. macOS apps launched from Finder see a minimal `PATH`, so Homebrew-only installs may not be found.
+- The shell needs a local `psql`. The rest of the app stays zero-configuration and uses the Node driver. Searching the common install folders covers macOS apps launched from Finder (minimal `PATH`) and Windows installs that never touch `PATH`; anything else is one setting away.
+- Backup and restore still look up `pg_dump`/`pg_restore` on `PATH` only.
 - `node-pty` is a native module. It ships prebuilt binaries for Windows and macOS and compiles on Linux at package time. It is N-API based, so it needs no Electron-specific rebuild. It is unpacked from the asar archive.
 - Output is psql's native text format. Structured rendering (for example from `\pset format json`) is a possible later enhancement.
 - On Windows and Linux, `Ctrl+W` is the app's Close tab shortcut, so it closes the shell tab instead of deleting a word in `psql`.

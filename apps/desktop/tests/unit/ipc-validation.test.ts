@@ -211,6 +211,16 @@ describe("IPC runtime validation", () => {
         general: { readOnlyMode: true, unexpected: "persist me" },
       }),
     ).toThrow(/unexpected/);
+
+    expect(
+      validateSettingsPatch({ general: { psqlPath: "/usr/bin/psql" } }),
+    ).toEqual({ general: { psqlPath: "/usr/bin/psql" } });
+    expect(validateSettingsPatch({ general: { psqlPath: "" } })).toEqual({
+      general: { psqlPath: "" },
+    });
+    expect(() => validateSettingsPatch({ general: { psqlPath: 42 } })).toThrow(
+      /psqlPath/,
+    );
   });
 
   describe("roles / RBAC", () => {
