@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import type { PoolClient } from "pg";
+import { describe, expect, it, vi } from "vitest";
+import { bindAndCompile } from "@/main/query-dsl/prepare";
+import { parseDataQuery } from "@/shared/query-dsl/parser";
 import { formatIdentifier, prepareDataQuery } from "@/shared/query-dsl/bind";
 import {
   buildRelationQuery,
@@ -390,13 +393,14 @@ describe("compileDataQuery", () => {
 });
 
 describe("pageWindow", () => {
+  // `resultRows` is the count once Skip and Limit apply, as getRows counts.
   const window = (
     skip: number | null,
     limit: number | null,
     page: number,
     pageSize: number,
-    matching: number,
-  ) => pageWindow({ skip, limit }, page, pageSize, matching);
+    resultRows: number,
+  ) => pageWindow({ skip, limit }, page, pageSize, resultRows);
 
   it("reproduces plain paging without Skip or Limit", () => {
     expect(window(null, null, 1, 50, 120)).toEqual({
@@ -411,18 +415,20 @@ describe("pageWindow", () => {
     });
   });
 
-  it("shifts pages by Skip and caps the result at Limit", () => {
-    expect(window(10, 25, 1, 20, 120)).toEqual({
+  it("shifts pages by Skip and stops at the window's end", () => {
+    // Skip 10, Limit 25 over 120 matches: 25 result rows.
+    expect(window(10, 25, 1, 20, 25)).toEqual({
       count: 25,
       offset: 10,
       limit: 20,
     });
-    expect(window(10, 25, 2, 20, 120)).toEqual({
+    expect(window(10, 25, 2, 20, 25)).toEqual({
       count: 25,
       offset: 30,
       limit: 5,
     });
-    expect(window(115, null, 1, 50, 120)).toEqual({
+    // Skip 115 over 120 matches: 5 result rows.
+    expect(window(115, null, 1, 50, 5)).toEqual({
       count: 5,
       offset: 115,
       limit: 5,
@@ -430,12 +436,12 @@ describe("pageWindow", () => {
   });
 
   it("returns an empty page past the end or past all rows", () => {
-    expect(window(200, null, 1, 50, 120)).toEqual({
+    expect(window(200, null, 1, 50, 0)).toEqual({
       count: 0,
       offset: 200,
       limit: 0,
     });
-    expect(window(0, 10, 2, 10, 120).limit).toBe(0);
+    expect(window(0, 10, 2, 10, 10).limit).toBe(0);
   });
 });
 
@@ -498,5 +504,71 @@ describe("classifyTypeFamily", () => {
     ["mystery_ext_string", "S", "other"],
   ])("maps %s (%s) to %s", (typeName, category, family) => {
     expect(classifyTypeFamily(typeName, category)).toBe(family);
+  });
+});
+
+describe("bindAndCompile relation lock", () => {
+  function fakeClient(lockError?: { code: string }) {
+    const statements: string[] = [];
+    const query = vi.fn(async (text: string) => {
+      statements.push(text);
+      if (text.startsWith("LOCK TABLE") && lockError) throw lockError;
+      if (text.includes("relkind")) return { rows: [{ relkind: "m" }] };
+      if (text.includes("column_types")) {
+        return {
+          rows: [
+            {
+              attname: "id",
+              declared_type: "int4",
+              base_type: "int4",
+              base_category: "N",
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    return { client: { query } as unknown as PoolClient, statements };
+  }
+
+  const ast = () => {
+    const parsed = parseDataQuery(input({ filter: "id = 1" }));
+    if (!parsed.ok) throw new Error("parse failed");
+    return parsed.value;
+  };
+
+  it("locks inside a savepoint before reading the catalog", async () => {
+    const { client, statements } = fakeClient();
+    await bindAndCompile(client, "app", "t", ast(), "ROW EXCLUSIVE");
+    expect(statements.slice(0, 3)).toEqual([
+      "SAVEPOINT pg_compass_relation_lock",
+      'LOCK TABLE "app"."t" IN ROW EXCLUSIVE MODE',
+      "RELEASE SAVEPOINT pg_compass_relation_lock",
+    ]);
+  });
+
+  it.each(["42809", "42501"])(
+    "falls back without a lock when LOCK fails with %s",
+    async (code) => {
+      const { client, statements } = fakeClient({ code });
+      const prepared = await bindAndCompile(
+        client,
+        "app",
+        "mv",
+        ast(),
+        "ACCESS SHARE",
+      );
+      expect(prepared.compiled.whereSql).toBe('"id" = $1');
+      expect(statements).toContain(
+        "ROLLBACK TO SAVEPOINT pg_compass_relation_lock",
+      );
+    },
+  );
+
+  it("rethrows any other LOCK failure", async () => {
+    const { client } = fakeClient({ code: "55P03" });
+    await expect(
+      bindAndCompile(client, "app", "t", ast(), "ACCESS SHARE"),
+    ).rejects.toMatchObject({ code: "55P03" });
   });
 });

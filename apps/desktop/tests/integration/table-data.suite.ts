@@ -1693,6 +1693,78 @@ export function runTableDataIntegrationSuite(
         expect(modes).toContain("RowExclusiveLock");
       });
 
+      it("queries materialized views, which LOCK TABLE refuses", async () => {
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { getRows } = await import("@/main/table-data-rows");
+        const { previewQuerySql } = await import("@/main/table-data-export");
+        await withPoolClient(connectionId, async (client) => {
+          await client.query("DROP MATERIALIZED VIEW IF EXISTS app.user_mv");
+          await client.query(
+            "CREATE MATERIALIZED VIEW app.user_mv AS SELECT id, display_name FROM app.users WHERE id <= 10",
+          );
+        });
+        const query = { ...NO_QUERY, filter: "id > 5", sort: "id DESC" };
+
+        const result = await getRows({
+          connectionId,
+          schema: "app",
+          table: "user_mv",
+          page: 1,
+          pageSize: 25,
+          query,
+        });
+        expect(result.rows.map((row) => row.id)).toEqual([10, 9, 8, 7, 6]);
+        expect(result.primaryKey).toBeNull();
+        await expect(
+          previewQuerySql({
+            connectionId,
+            schema: "app",
+            table: "user_mv",
+            query,
+          }),
+        ).resolves.toMatchObject({ values: ["5"] });
+      });
+
+      it("serves roles that only hold column-level SELECT", async (context) => {
+        if (!(await tracksTableLocks(connectionId))) context.skip();
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { bindAndCompile, parseDataQueryOrThrow } =
+          await import("@/main/query-dsl/prepare");
+        const ast = parseDataQueryOrThrow({
+          ...NO_QUERY,
+          filter: "id = 1",
+          projection: "id",
+        });
+        const rows = await withPoolClient(connectionId, async (client) => {
+          await client.query("BEGIN");
+          try {
+            await client.query("CREATE ROLE pgc_column_reader NOLOGIN");
+            await client.query(
+              "GRANT USAGE ON SCHEMA app TO pgc_column_reader",
+            );
+            await client.query(
+              "GRANT SELECT (id) ON app.users TO pgc_column_reader",
+            );
+            await client.query("SET LOCAL ROLE pgc_column_reader");
+            const { compiled } = await bindAndCompile(
+              client,
+              "app",
+              "users",
+              ast,
+              "ACCESS SHARE",
+            );
+            const result = await client.query(
+              `SELECT ${compiled.selectListSql} FROM app.users WHERE ${compiled.whereSql}`,
+              compiled.values,
+            );
+            return result.rows;
+          } finally {
+            await client.query("ROLLBACK");
+          }
+        });
+        expect(rows).toEqual([{ id: 1 }]);
+      });
+
       it("sorts by source columns even when an alias shares their name", async () => {
         const { withPoolClient } = await import("@/main/pg-utils");
         const { getRows } = await import("@/main/table-data-rows");

@@ -123,19 +123,17 @@ export function compileDataQuery(
 
 /**
  * Where one Data-tab page falls inside the query's Skip/Limit window.
- * `count` is the number of rows the query returns in total (the Rows
- * badge); `offset`/`limit` go straight into the page's SQL.
+ * `resultRows` is how many rows the query returns once Skip and Limit
+ * apply (the Rows badge); `offset`/`limit` go straight into the page's SQL.
  */
 export function pageWindow(
   compiled: Pick<CompiledDataQuery, "skip" | "limit">,
   page: number,
   pageSize: number,
-  matchingRows: number,
+  resultRows: number,
 ): { count: number; offset: number; limit: number } {
   const skip = compiled.skip ?? 0;
-  const afterSkip = Math.max(0, matchingRows - skip);
-  const count =
-    compiled.limit === null ? afterSkip : Math.min(afterSkip, compiled.limit);
+  const count = resultRows;
   const pageStart = (page - 1) * pageSize;
   const rowsLeft = Math.max(0, count - pageStart);
   return {
