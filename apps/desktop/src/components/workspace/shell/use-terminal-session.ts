@@ -67,9 +67,14 @@ function handleTerminalKey(
 /**
  * Owns one xterm.js terminal and the psql session behind it. Each start uses
  * a fresh session id, so output from a previous (restarted) psql is ignored.
+ * While `inputDisabled` is set the terminal stays readable but takes no input.
  */
-export function useTerminalSession(connectionId: string) {
+export function useTerminalSession(
+  connectionId: string,
+  inputDisabled: boolean,
+) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputDisabledRef = useRef(inputDisabled);
   const terminalRef = useRef<Terminal | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -126,7 +131,8 @@ export function useTerminalSession(connectionId: string) {
         fontFamily: TERMINAL_FONT,
         fontSize: TERMINAL_FONT_SIZE,
         lineHeight: 1.4,
-        cursorBlink: true,
+        cursorBlink: !inputDisabledRef.current,
+        disableStdin: inputDisabledRef.current,
         scrollback: 5_000,
         allowProposedApi: false,
         theme: buildTerminalTheme(container),
@@ -210,6 +216,18 @@ export function useTerminalSession(connectionId: string) {
       };
     },
     [startSession, stopSession],
+  );
+
+  useEffect(
+    function syncInputDisabled() {
+      inputDisabledRef.current = inputDisabled;
+      const terminal = terminalRef.current;
+      if (!terminal) return;
+      terminal.options.disableStdin = inputDisabled;
+      terminal.options.cursorBlink = !inputDisabled;
+      if (inputDisabled) terminal.blur();
+    },
+    [inputDisabled],
   );
 
   const findNext = useCallback((term: string) => {

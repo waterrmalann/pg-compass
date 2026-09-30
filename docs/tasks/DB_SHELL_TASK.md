@@ -13,6 +13,7 @@ Done.
 - [x] Open shell button in every connection-scoped top bar; every click opens an independent shell tab.
 - [x] Sessions are killed when their tab closes, the window reloads or the app quits.
 - [x] Gated by the Shell access setting, enforced in the main process. The button offers to turn it on.
+- [x] Turning Shell access off leaves open shell tabs in place but locks them: the terminal is grayed out and takes no input (also refused in the main process), and a warning note above it offers to turn access back on.
 - [x] Read-only mode starts `psql` with read-only transactions by default.
 - [x] Copy and paste: platform clipboard shortcuts; on Windows and Linux Ctrl+C copies a selection and otherwise interrupts `psql`.
 - [x] Find bar (Ctrl/⌘+F), Restart after exit, clear errors for a missing `psql`, a bad psql path, or an SSH-tunnelled connection.

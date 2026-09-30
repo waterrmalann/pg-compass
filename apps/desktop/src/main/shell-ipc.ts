@@ -174,6 +174,10 @@ export function registerShellHandlers(): void {
   registerIpcHandler(ShellChannels.WRITE, (event, rawInput: unknown) => {
     try {
       const input: ShellWriteInput = validateShellWriteInput(rawInput);
+      // Open sessions outlive the setting being turned off, but take no input.
+      if (!getSettings().general.shellAccess) {
+        throw new Error("Shell access is turned off.");
+      }
       requireSession(event.sender, input.sessionId).process.write(input.data);
       return { success: true, data: undefined };
     } catch (err) {

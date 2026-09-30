@@ -6,6 +6,7 @@ import {
   RotateCcw,
   Search,
   SquareTerminal,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,9 @@ import {
   useTerminalSession,
   type ShellStatus,
 } from "@/components/workspace/shell/use-terminal-session";
+import { useSettings } from "@/hooks/use-settings";
 import { useWorkspace } from "@/hooks/use-workspace";
+import { cn } from "@/lib/utils";
 import type { DatabaseViewerPath } from "@/shared/types/workspace";
 
 /**
@@ -26,7 +29,10 @@ import type { DatabaseViewerPath } from "@/shared/types/workspace";
  */
 export function ShellViewer({ path }: Readonly<{ path: DatabaseViewerPath }>) {
   const { openTab } = useWorkspace();
-  const session = useTerminalSession(path.connectionId);
+  const { settings, updateSettings } = useSettings();
+  // Turning shell access off leaves open tabs in place but locks them.
+  const accessOff = !settings.general.shellAccess;
+  const session = useTerminalSession(path.connectionId, accessOff);
 
   return (
     <ViewerShell
@@ -70,7 +76,7 @@ export function ShellViewer({ path }: Readonly<{ path: DatabaseViewerPath }>) {
               variant="outline"
               size="xs"
               onClick={session.restart}
-              disabled={session.status.kind === "starting"}
+              disabled={accessOff || session.status.kind === "starting"}
               title="Start a new psql session in this tab"
             >
               <RotateCcw />
@@ -78,7 +84,20 @@ export function ShellViewer({ path }: Readonly<{ path: DatabaseViewerPath }>) {
             </Button>
           </div>
         </PanelHeader>
-        <div className="min-h-0 flex-1 bg-card py-2 pl-3 pr-1">
+        {accessOff ? (
+          <ShellAccessOffNote
+            onTurnOn={() =>
+              void updateSettings({ general: { shellAccess: true } })
+            }
+          />
+        ) : null}
+        <div
+          className={cn(
+            "min-h-0 flex-1 bg-card py-2 pl-3 pr-1 transition-opacity duration-150",
+            accessOff && "opacity-64",
+          )}
+          aria-disabled={accessOff || undefined}
+        >
           <div
             ref={session.containerRef}
             data-terminal
@@ -87,6 +106,24 @@ export function ShellViewer({ path }: Readonly<{ path: DatabaseViewerPath }>) {
         </div>
       </Panel>
     </ViewerShell>
+  );
+}
+
+function ShellAccessOffNote({ onTurnOn }: Readonly<{ onTurnOn: () => void }>) {
+  return (
+    <div
+      role="note"
+      className="flex shrink-0 items-center gap-2 border-b border-border bg-warning/10 px-3 py-2 text-xs text-warning-foreground"
+    >
+      <TriangleAlert className="size-3.5 shrink-0" />
+      <p className="min-w-0 flex-1">
+        Shell access is off, so this terminal can&apos;t be used. Turn it on to
+        type in psql again.
+      </p>
+      <Button type="button" variant="outline" size="xs" onClick={onTurnOn}>
+        Turn on
+      </Button>
+    </div>
   );
 }
 
