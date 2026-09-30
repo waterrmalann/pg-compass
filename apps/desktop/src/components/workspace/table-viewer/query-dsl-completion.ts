@@ -141,11 +141,12 @@ function listOptions(
 ): DslCompletionOption[] {
   const last = tokens.at(-1);
   const beforeLast = tokens.at(-2);
-  if (last === undefined || isPunctuation(last, ",")) {
-    return columnOptions(columns);
-  }
+  const startsItem =
+    last === undefined || isPunctuation(last, ",") || last.kind === "exclude";
+  if (startsItem) return columnOptions(columns);
   const itemStarted =
     beforeLast === undefined || isPunctuation(beforeLast, ",");
+  // After `-column` nothing may follow but a comma: exclusions have no alias.
   if (!isIdentifier(last) || !itemStarted) return [];
   if (field === "projection") return [keyword("AS")];
   return [keyword("ASC"), keyword("DESC")];
@@ -162,14 +163,26 @@ export function suggestDslCompletions(
 ): DslCompletionResult | null {
   const partial = PARTIAL_PATTERN.exec(textBeforeCursor)?.[0] ?? "";
   const from = textBeforeCursor.length - partial.length;
-  const tokenized = tokenize(field, textBeforeCursor.slice(0, from));
+
+  // A bare `-` in Project only becomes an exclusion once a column follows,
+  // so offer columns when it starts an item.
+  const beforePartial = textBeforeCursor.slice(0, from);
+  if (field === "projection" && beforePartial.endsWith("-")) {
+    const beforeDash = tokenize(field, beforePartial.slice(0, -1));
+    const last = beforeDash.ok ? beforeDash.value.at(-1) : undefined;
+    const startsItem =
+      beforeDash.ok && (last === undefined || isPunctuation(last, ","));
+    return startsItem ? { from, options: columnOptions(columns) } : null;
+  }
+  const tokenized = tokenize(field, beforePartial);
   if (!tokenized.ok) return null;
 
   const tokens = tokenized.value;
-  const options =
-    field === "filter"
-      ? filterOptions(tokens, columns)
-      : listOptions(field, tokens, columns);
+  let options: DslCompletionOption[] = [];
+  if (field === "filter") options = filterOptions(tokens, columns);
+  if (field === "projection" || field === "sort") {
+    options = listOptions(field, tokens, columns);
+  }
   if (options.length === 0) return null;
   return { from, options };
 }

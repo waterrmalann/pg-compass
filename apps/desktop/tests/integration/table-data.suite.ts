@@ -4,7 +4,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { WebContents } from "electron";
 import { createTempDir } from "../support/store";
 import { buildConnectionFromUrl } from "../support/postgres";
-import { hasExtension, hasColumn } from "../support/capabilities";
+import {
+  hasColumn,
+  hasExtension,
+  tracksTableLocks,
+} from "../support/capabilities";
 
 vi.mock("electron", () => ({
   safeStorage: {
@@ -20,7 +24,7 @@ interface SeededDatabase {
 }
 
 const INJECTION_COLUMN = 'evil"col; DROP TABLE x; --';
-const NO_QUERY = { filter: "", projection: "", sort: "" };
+const NO_QUERY = { filter: "", projection: "", sort: "", skip: "", limit: "" };
 
 export function runTableDataIntegrationSuite(
   label: string,
@@ -1602,6 +1606,93 @@ export function runTableDataIntegrationSuite(
         expect(result.totalCount).toBe(1);
       });
 
+      it("applies Skip and Limit to the count and the pages", async () => {
+        const query = {
+          filter: "id > 60",
+          sort: "id",
+          skip: "5",
+          limit: "12",
+        };
+        const first = await usersQuery(query, 1, 5);
+        const third = await usersQuery(query, 3, 5);
+        const past = await usersQuery(query, 4, 5);
+
+        expect(first.totalCount).toBe(12);
+        expect(first.rows.map((row) => row.id)).toEqual([66, 67, 68, 69, 70]);
+        expect(third.rows.map((row) => row.id)).toEqual([76, 77]);
+        expect(past.rows).toEqual([]);
+        expect(past.columns.length).toBeGreaterThan(0);
+
+        const beyond = await usersQuery({ filter: "id > 60", skip: "500" });
+        expect(beyond.totalCount).toBe(0);
+        expect(beyond.rows).toEqual([]);
+      });
+
+      it("returns every column except the excluded ones", async () => {
+        const result = await usersQuery({
+          filter: "id = 61",
+          projection: "-profile, -tags, -role_history",
+        });
+        const names = result.columns.map((column) => column.name);
+        expect(names).not.toContain("profile");
+        expect(names).not.toContain("tags");
+        expect(names).toContain("display_name");
+        expect(names[0]).toBe("id");
+        expect(result.rows[0]).not.toHaveProperty("profile");
+        expect(result.primaryKey).toBeNull();
+      });
+
+      it("previews the export SQL with Skip/Limit parameters and no execution", async () => {
+        const { previewQuerySql } = await import("@/main/table-data-export");
+        const preview = await previewQuerySql({
+          connectionId,
+          schema: "app",
+          table: "users",
+          query: {
+            ...NO_QUERY,
+            filter: "role = 'admin'",
+            projection: "id, display_name AS name",
+            sort: "id DESC",
+            skip: "2",
+            limit: "3",
+          },
+        });
+        expect(preview).toEqual({
+          sql: [
+            'SELECT "id", "display_name" AS "name"',
+            'FROM "app"."users"',
+            'WHERE "role" = $1',
+            'ORDER BY "app"."users"."id" DESC',
+            "OFFSET $2",
+            "LIMIT $3",
+          ].join("\n"),
+          values: ["admin", 2, 3],
+        });
+      });
+
+      it("locks the relation before reading its catalog", async (context) => {
+        if (!(await tracksTableLocks(connectionId))) context.skip();
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { bindAndCompile, parseDataQueryOrThrow } =
+          await import("@/main/query-dsl/prepare");
+        const ast = parseDataQueryOrThrow({ ...NO_QUERY, filter: "id = 1" });
+        const modes = await withPoolClient(connectionId, async (client) => {
+          await client.query("BEGIN");
+          try {
+            await bindAndCompile(client, "app", "users", ast, "ROW EXCLUSIVE");
+            const locks = await client.query<{ mode: string }>(
+              `SELECT mode FROM pg_locks
+               WHERE relation = 'app.users'::regclass
+                 AND pid = pg_backend_pid()`,
+            );
+            return locks.rows.map((row) => row.mode);
+          } finally {
+            await client.query("ROLLBACK");
+          }
+        });
+        expect(modes).toContain("RowExclusiveLock");
+      });
+
       it("sorts by source columns even when an alias shares their name", async () => {
         const { withPoolClient } = await import("@/main/pg-utils");
         const { getRows } = await import("@/main/table-data-rows");
@@ -1624,7 +1715,7 @@ export function runTableDataIntegrationSuite(
           // "name" and "id" are aliases of other columns here; Sort and the
           // primary-key tie-breaker must still use the table's columns.
           query: {
-            filter: "",
+            ...NO_QUERY,
             projection: "label AS name, name AS id",
             sort: "name",
           },
@@ -1678,6 +1769,7 @@ export function runTableDataIntegrationSuite(
           page: 1,
           pageSize: 25,
           query: {
+            ...NO_QUERY,
             filter: `"CreatedAt" >= '2026-01-01' AND "select" = 'b'`,
             projection: `"quote""col" AS "Quote", "CreatedAt"`,
             sort: `"CreatedAt" DESC`,
@@ -1711,7 +1803,7 @@ export function runTableDataIntegrationSuite(
           table: "active_users",
           page: 1,
           pageSize: 3,
-          query: { filter: "id < 10", projection: "", sort: "id DESC" },
+          query: { ...NO_QUERY, filter: "id < 10", sort: "id DESC" },
         });
         expect(result.totalCount).toBe(8);
         expect(result.rows.map((row) => row.id)).toEqual([9, 8, 6]);
@@ -1761,6 +1853,7 @@ export function runTableDataIntegrationSuite(
             schema: "app",
             table: "users",
             query: {
+              ...NO_QUERY,
               filter: "role = 'admin' AND id <= 30",
               projection: "id, display_name AS name",
               sort: "id DESC",
@@ -1774,6 +1867,39 @@ export function runTableDataIntegrationSuite(
         expect(lines[0]).toBe("id,name");
         expect(lines[1]).toBe("30,User 30");
         expect(lines).toHaveLength(11);
+      });
+
+      it("exports only the Skip/Limit window, with excluded columns dropped", async () => {
+        const { exportData } = await import("@/main/table-data-export");
+        const directory = createTempDir("pg-compass-dsl-export-");
+        const filePath = path.join(directory, "users.json");
+        const sender = { send: () => undefined } as unknown as WebContents;
+
+        const result = await exportData(
+          {
+            connectionId,
+            format: "json",
+            filePath,
+            schema: "app",
+            table: "users",
+            query: {
+              ...NO_QUERY,
+              filter: "id > 60",
+              projection: "-profile",
+              sort: "id",
+              skip: "10",
+              limit: "3",
+            },
+          },
+          sender,
+        );
+
+        expect(result.rowCount).toBe(3);
+        const exported = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+          id: number;
+        }[];
+        expect(exported.map((row) => row.id)).toEqual([71, 72, 73]);
+        expect(exported[0]).not.toHaveProperty("profile");
       });
 
       it("rejects an invalid export query without writing a file", async () => {

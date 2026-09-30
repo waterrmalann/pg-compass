@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { formatIdentifier, prepareDataQuery } from "@/shared/query-dsl/bind";
-import { compileDataQuery } from "@/main/query-dsl/compile";
+import {
+  buildRelationQuery,
+  compileDataQuery,
+  pageWindow,
+} from "@/main/query-dsl/compile";
 import { classifyTypeFamily } from "@/main/query-dsl/relation-metadata";
 import type {
   BoundDataQuery,
@@ -29,7 +33,14 @@ const COLUMNS: QueryColumnMetadata[] = [
 ];
 
 function input(query: Partial<DataQueryInput>): DataQueryInput {
-  return { filter: "", projection: "", sort: "", ...query };
+  return {
+    filter: "",
+    projection: "",
+    sort: "",
+    skip: "",
+    limit: "",
+    ...query,
+  };
 }
 
 function bound(query: Partial<DataQueryInput>): BoundDataQuery {
@@ -181,6 +192,56 @@ describe("bindDataQuery", () => {
   });
 });
 
+describe("bindDataQuery exclusions and Skip/Limit", () => {
+  it("expands -column into every other column in catalog order", () => {
+    expect(
+      bound({ projection: `-id, -"CreatedAt", -raw` }).projection.map(
+        (item) => item.column,
+      ),
+    ).toEqual(
+      COLUMNS.map((column) => column.name).filter(
+        (name) => !["id", "CreatedAt", "raw"].includes(name),
+      ),
+    );
+    expect(bound({ projection: "-id" }).projection[0]).toEqual({
+      column: "status",
+      outputName: "status",
+      aliased: false,
+    });
+  });
+
+  it("rejects excluding an unknown column or every column", () => {
+    expect(errors({ projection: "-nope" })[0]).toMatchObject({
+      code: "unknown-column",
+      field: "projection",
+      from: 1,
+      to: 5,
+    });
+    const one: QueryColumnMetadata[] = [
+      { name: "a", typeName: "text", family: "text" },
+    ];
+    const result = prepareDataQuery(input({ projection: "-a" }), one);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0]).toMatchObject({
+      field: "projection",
+      message: "Every column is excluded. Keep at least one.",
+    });
+  });
+
+  it("carries Skip and Limit through binding", () => {
+    expect(bound({ skip: "10", limit: "5" })).toMatchObject({
+      skip: 10,
+      limit: 5,
+    });
+    expect(bound({})).toMatchObject({ skip: null, limit: null });
+    expect(errors({ skip: "x", limit: "0" }).map((e) => e.field)).toEqual([
+      "skip",
+      "limit",
+    ]);
+  });
+});
+
 describe("formatIdentifier", () => {
   it.each([
     ["created_at", "created_at"],
@@ -214,6 +275,8 @@ describe("compileDataQuery", () => {
       orderBySql: '"app"."t"."created_at" DESC, "app"."t"."id" ASC',
       values: ["active", "10"],
       hasProjection: true,
+      skip: null,
+      limit: null,
     });
   });
 
@@ -224,6 +287,8 @@ describe("compileDataQuery", () => {
       orderBySql: "",
       values: [],
       hasProjection: false,
+      skip: null,
+      limit: null,
     });
     expect(compileDataQuery(bound({}), ["a", "b"], REL).orderBySql).toBe(
       '"app"."t"."a" ASC, "app"."t"."b" ASC',
@@ -321,6 +386,91 @@ describe("compileDataQuery", () => {
       expect(sql).not.toContain(payload);
       expect(compiled.values).toEqual([payload, payload]);
     }
+  });
+});
+
+describe("pageWindow", () => {
+  const window = (
+    skip: number | null,
+    limit: number | null,
+    page: number,
+    pageSize: number,
+    matching: number,
+  ) => pageWindow({ skip, limit }, page, pageSize, matching);
+
+  it("reproduces plain paging without Skip or Limit", () => {
+    expect(window(null, null, 1, 50, 120)).toEqual({
+      count: 120,
+      offset: 0,
+      limit: 50,
+    });
+    expect(window(null, null, 3, 50, 120)).toEqual({
+      count: 120,
+      offset: 100,
+      limit: 20,
+    });
+  });
+
+  it("shifts pages by Skip and caps the result at Limit", () => {
+    expect(window(10, 25, 1, 20, 120)).toEqual({
+      count: 25,
+      offset: 10,
+      limit: 20,
+    });
+    expect(window(10, 25, 2, 20, 120)).toEqual({
+      count: 25,
+      offset: 30,
+      limit: 5,
+    });
+    expect(window(115, null, 1, 50, 120)).toEqual({
+      count: 5,
+      offset: 115,
+      limit: 5,
+    });
+  });
+
+  it("returns an empty page past the end or past all rows", () => {
+    expect(window(200, null, 1, 50, 120)).toEqual({
+      count: 0,
+      offset: 200,
+      limit: 0,
+    });
+    expect(window(0, 10, 2, 10, 120).limit).toBe(0);
+  });
+});
+
+describe("buildRelationQuery", () => {
+  it("writes one clause per line with Skip/Limit after the filter values", () => {
+    const compiled = compileDataQuery(
+      bound({
+        filter: "status = 'active'",
+        projection: "id",
+        sort: "id DESC",
+        skip: "20",
+        limit: "10",
+      }),
+      ["id"],
+      REL,
+    );
+    expect(buildRelationQuery(REL, compiled)).toEqual({
+      text: [
+        'SELECT "id"',
+        'FROM "app"."t"',
+        'WHERE "status" = $1',
+        'ORDER BY "app"."t"."id" DESC',
+        "OFFSET $2",
+        "LIMIT $3",
+      ].join("\n"),
+      values: ["active", 20, 10],
+    });
+  });
+
+  it("omits empty clauses", () => {
+    const compiled = compileDataQuery(bound({}), null, REL);
+    expect(buildRelationQuery(REL, compiled)).toEqual({
+      text: 'SELECT *\nFROM "app"."t"',
+      values: [],
+    });
   });
 });
 

@@ -104,6 +104,10 @@ test("filters, projects, sorts and exports with the Data tab query DSL", async (
 
   await page.getByRole("button", { name: "Export" }).click();
   await page.getByRole("menuitem", { name: "Export selected query" }).click();
+  await page.getByRole("button", { name: "Show SQL" }).click();
+  await expect(page.getByTestId("export-sql-preview")).toContainText(
+    'ORDER BY "app"."users"."id" DESC',
+  );
   await page.getByRole("button", { name: "Export" }).click();
   // The export streams to a temporary file and renames it when done.
   await expect(page.getByText("Exported 4 rows")).toBeVisible();
@@ -115,6 +119,21 @@ test("filters, projects, sorts and exports with the Data tab query DSL", async (
     "14,User 14",
     "7,User 7",
   ]);
+
+  // Exclusion projection plus Skip and Limit.
+  await page.getByRole("textbox", { name: "Project" }).click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("-profile, -tags");
+  await page.keyboard.press("Escape");
+  await page.getByRole("textbox", { name: "Skip" }).fill("1");
+  await page.getByRole("textbox", { name: "Limit" }).fill("2");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(rowCount).toHaveText("2");
+  await expect(headers.filter({ hasText: "display_name" })).toHaveCount(1);
+  await expect(headers.filter({ hasText: "tags" })).toHaveCount(0);
+  await expect(
+    page.locator("tbody tr").filter({ visible: true }).first(),
+  ).toContainText("21");
 
   await app.close();
 });

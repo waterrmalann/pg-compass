@@ -17,7 +17,7 @@ import {
   getTypes,
   toggleTrigger,
 } from "./table-data-meta";
-import { exportData, sqlDump } from "./table-data-export";
+import { exportData, previewQuerySql, sqlDump } from "./table-data-export";
 import { importData } from "./table-data-import";
 import {
   deleteRows,
@@ -35,6 +35,7 @@ import {
   validateImportDataParams,
   validateImportOpenDialogOptions,
   validateInsertRowParams,
+  validatePreviewQuerySqlParams,
   validateSaveDialogOptions,
   validateSearchForeignKeyParams,
   validateSqlDumpParams,
@@ -335,6 +336,19 @@ export function registerTableDataHandlers(): void {
           "export",
         );
         const data = await exportData({ ...params, filePath }, event.sender);
+        return { success: true, data };
+      } catch (err) {
+        return toDataQueryFailure(err);
+      }
+    },
+  );
+
+  registerIpcHandler(
+    TableDataChannels.PREVIEW_QUERY_SQL,
+    async (_event, rawParams: unknown) => {
+      try {
+        const params = validatePreviewQuerySqlParams(rawParams);
+        const data = await previewQuerySql(params);
         return { success: true, data };
       } catch (err) {
         return toDataQueryFailure(err);

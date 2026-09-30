@@ -269,14 +269,26 @@ describe("useWorkspace", () => {
       result.current.updateRelationSession(tabId, {
         activeSubTab: "indexes",
         dataPageSize: 100,
-        dataQuery: { filter: "id > 10", projection: "", sort: "" },
+        dataQuery: {
+          filter: "id > 10",
+          projection: "",
+          sort: "",
+          skip: "",
+          limit: "",
+        },
         dataViewMode: "card",
       });
     });
     expect(result.current.relationSessions[tabId]).toMatchObject({
       activeSubTab: "indexes",
       dataPageSize: 100,
-      dataQuery: { filter: "id > 10", projection: "", sort: "" },
+      dataQuery: {
+        filter: "id > 10",
+        projection: "",
+        sort: "",
+        skip: "",
+        limit: "",
+      },
       dataViewMode: "card",
     });
 

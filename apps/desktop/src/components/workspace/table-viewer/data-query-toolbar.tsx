@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowDownUp,
   CircleAlert,
@@ -7,7 +7,9 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { EMPTY_DATA_QUERY } from "@/shared/query-dsl/parser";
 import type {
   DataQueryInput,
   QueryColumnMetadata,
@@ -15,6 +17,25 @@ import type {
   QueryDslField,
 } from "@/shared/query-dsl/types";
 import { QueryDslEditor } from "./query-dsl-editor";
+
+type ErrorsByField = Record<QueryDslField, QueryDslError[]>;
+
+const NO_ERRORS: QueryDslError[] = [];
+const OPTION_FIELDS = ["projection", "sort", "skip", "limit"] as const;
+
+function groupErrors(errors: QueryDslError[]): ErrorsByField {
+  const grouped: ErrorsByField = {
+    filter: NO_ERRORS,
+    projection: NO_ERRORS,
+    sort: NO_ERRORS,
+    skip: NO_ERRORS,
+    limit: NO_ERRORS,
+  };
+  for (const error of errors) {
+    grouped[error.field] = [...grouped[error.field], error];
+  }
+  return grouped;
+}
 
 function FieldErrors({
   id,
@@ -37,7 +58,7 @@ function FieldErrors({
 }
 
 interface DslFieldProps {
-  field: QueryDslField;
+  field: "filter" | "projection" | "sort";
   icon: ReactNode;
   value: string;
   placeholder: string;
@@ -84,65 +105,129 @@ function DslField({
   );
 }
 
+/** Skip/Limit input. Its errors render under the whole options row. */
+function CountField({
+  field,
+  label,
+  placeholder,
+  value,
+  hasErrors,
+  errorId,
+  onChange,
+}: Readonly<{
+  field: "skip" | "limit";
+  label: string;
+  placeholder: string;
+  value: string;
+  hasErrors: boolean;
+  errorId: string;
+  onChange: (field: QueryDslField, value: string) => void;
+}>) {
+  return (
+    <div className="w-28 shrink-0">
+      <div className="relative">
+        <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
+          {label}
+        </span>
+        <Input
+          value={value}
+          onChange={(event) => onChange(field, event.target.value)}
+          inputMode="numeric"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={placeholder}
+          aria-label={label}
+          aria-invalid={hasErrors || undefined}
+          aria-describedby={hasErrors ? errorId : undefined}
+          className="h-8 pl-12 font-mono text-[12.5px]"
+        />
+      </div>
+    </div>
+  );
+}
+
 interface DataQueryToolbarProps {
-  draft: DataQueryInput;
+  /** Last applied query; drafts start from it. */
   activeQuery: DataQueryInput;
   errors: QueryDslError[];
   columns: QueryColumnMetadata[];
-  optionsOpen: boolean;
-  onOptionsOpenChange: (open: boolean) => void;
-  onDraftChange: (field: QueryDslField, value: string) => void;
-  onApply: () => void;
-  onClear: () => void;
+  /** Validate and run the draft. The parent decides whether it becomes active. */
+  onApply: (draft: DataQueryInput) => void;
+  /** A field was edited; errors pointing into it are now stale. */
+  onFieldEdited: (field: QueryDslField) => void;
   /** Rendered at the end of the first row (the view switcher). */
   trailing?: ReactNode;
 }
 
 /**
- * Filter, Project and Sort inputs for the Data tab. Filter stays visible;
- * Project and Sort live in a collapsible second row behind Query options.
+ * Filter, Project, Sort, Skip and Limit for the Data tab. Drafts and the
+ * options row's open state live here so typing and toggling never
+ * re-render the results grid. Filter stays visible; the rest sit behind
+ * Query options.
  */
 export function DataQueryToolbar({
-  draft,
   activeQuery,
   errors,
   columns,
-  optionsOpen,
-  onOptionsOpenChange,
-  onDraftChange,
   onApply,
-  onClear,
+  onFieldEdited,
   trailing,
 }: Readonly<DataQueryToolbarProps>) {
   const optionsRowId = useId();
-  const errorsFor = (field: QueryDslField) =>
-    errors.filter((error) => error.field === field);
+  const skipErrorId = useId();
+  const limitErrorId = useId();
+  const [draft, setDraft] = useState<DataQueryInput>(activeQuery);
+  const [optionsOpen, setOptionsOpen] = useState(() =>
+    OPTION_FIELDS.some((field) => activeQuery[field].trim() !== ""),
+  );
+  const errorsByField = useMemo(() => groupErrors(errors), [errors]);
+  const hasOptionErrors = OPTION_FIELDS.some(
+    (field) => errorsByField[field].length > 0,
+  );
 
-  const activeOptionCount =
-    (activeQuery.projection.trim() ? 1 : 0) + (activeQuery.sort.trim() ? 1 : 0);
+  // An error in a hidden field must be visible to be fixed.
+  useEffect(() => {
+    if (hasOptionErrors) setOptionsOpen(true);
+  }, [hasOptionErrors]);
+
+  function handleChange(field: QueryDslField, value: string) {
+    setDraft((previous) =>
+      previous[field] === value ? previous : { ...previous, [field]: value },
+    );
+    onFieldEdited(field);
+  }
+
+  function handleApply() {
+    onApply(draft);
+  }
+
+  function handleClear() {
+    setDraft(EMPTY_DATA_QUERY);
+    onApply(EMPTY_DATA_QUERY);
+  }
+
+  const activeOptionCount = OPTION_FIELDS.filter(
+    (field) => activeQuery[field].trim() !== "",
+  ).length;
   const showActiveCount = !optionsOpen && activeOptionCount > 0;
-  const optionsErrorCount =
-    errorsFor("projection").length + errorsFor("sort").length;
   const optionsLabel =
     activeOptionCount > 0
       ? `Query options, ${String(activeOptionCount)} active`
       : "Query options";
 
-  const hasAnyText =
-    [draft.filter, draft.projection, draft.sort].some((text) => text.trim()) ||
-    [activeQuery.filter, activeQuery.projection, activeQuery.sort].some(
-      (text) => text.trim(),
-    );
+  const hasAnyText = [draft, activeQuery].some((query) =>
+    Object.values(query).some((text) => text.trim() !== ""),
+  );
 
   return (
-    <div className="flex shrink-0 flex-col gap-2">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onApply();
-        }}
-        className="flex items-start gap-2"
-      >
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        handleApply();
+      }}
+      className="flex shrink-0 flex-col gap-2"
+    >
+      <div className="flex items-start gap-2">
         <DslField
           field="filter"
           icon={<Search />}
@@ -150,20 +235,22 @@ export function DataQueryToolbar({
           placeholder="Filter — e.g. status = 'active' AND score > 10"
           ariaLabel="Filter"
           columns={columns}
-          errors={errorsFor("filter")}
-          onChange={onDraftChange}
-          onApply={onApply}
+          errors={errorsByField.filter}
+          onChange={handleChange}
+          onApply={handleApply}
         />
         <Button
           type="button"
           variant="outline"
           aria-expanded={optionsOpen}
-          aria-controls={optionsOpen ? optionsRowId : undefined}
+          aria-controls={optionsRowId}
           aria-label={optionsLabel}
           title={optionsLabel}
-          onClick={() => onOptionsOpenChange(!optionsOpen)}
+          onClick={() => setOptionsOpen((open) => !open)}
           className={cn(
-            showActiveCount || optionsErrorCount > 0 ? "px-2" : "w-8 px-0",
+            showActiveCount || (!optionsOpen && hasOptionErrors)
+              ? "px-2"
+              : "w-8 px-0",
           )}
         >
           <SlidersHorizontal />
@@ -175,7 +262,7 @@ export function DataQueryToolbar({
               {activeOptionCount}
             </span>
           ) : null}
-          {!optionsOpen && optionsErrorCount > 0 ? (
+          {!optionsOpen && hasOptionErrors ? (
             <CircleAlert
               aria-hidden="true"
               className="text-destructive-foreground"
@@ -186,46 +273,71 @@ export function DataQueryToolbar({
           Apply
         </Button>
         {hasAnyText ? (
-          <Button type="button" variant="ghost" onClick={onClear}>
+          <Button type="button" variant="ghost" onClick={handleClear}>
             Clear
           </Button>
         ) : null}
         {trailing}
-      </form>
+      </div>
 
-      {optionsOpen ? (
-        <div id={optionsRowId} className="flex flex-col gap-1.5">
-          <div className="flex items-start gap-2">
-            <DslField
-              field="projection"
-              icon={<Columns3 />}
-              value={draft.projection}
-              placeholder="Project — e.g. id, name AS label"
-              ariaLabel="Project"
-              columns={columns}
-              errors={errorsFor("projection")}
-              onChange={onDraftChange}
-              onApply={onApply}
-            />
-            <DslField
-              field="sort"
-              icon={<ArrowDownUp />}
-              value={draft.sort}
-              placeholder="Sort — e.g. created_at DESC, name"
-              ariaLabel="Sort"
-              columns={columns}
-              errors={errorsFor("sort")}
-              onChange={onDraftChange}
-              onApply={onApply}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Project and Sort take comma-separated columns. Sort accepts ASC,
-            DESC, 1 or -1. Projected rows are read-only. Without a primary key,
-            rows with equal sort values can move between pages.
-          </p>
+      {/* Kept mounted while hidden so opening it is instant and its
+          editors keep their undo history. */}
+      <div
+        id={optionsRowId}
+        hidden={!optionsOpen}
+        className="flex flex-col gap-1.5"
+      >
+        <div className="flex items-start gap-2">
+          <DslField
+            field="projection"
+            icon={<Columns3 />}
+            value={draft.projection}
+            placeholder="Project — e.g. id, name AS label or -notes"
+            ariaLabel="Project"
+            columns={columns}
+            errors={errorsByField.projection}
+            onChange={handleChange}
+            onApply={handleApply}
+          />
+          <DslField
+            field="sort"
+            icon={<ArrowDownUp />}
+            value={draft.sort}
+            placeholder="Sort — e.g. created_at DESC, name"
+            ariaLabel="Sort"
+            columns={columns}
+            errors={errorsByField.sort}
+            onChange={handleChange}
+            onApply={handleApply}
+          />
+          <CountField
+            field="skip"
+            label="Skip"
+            placeholder="0"
+            value={draft.skip}
+            hasErrors={errorsByField.skip.length > 0}
+            errorId={skipErrorId}
+            onChange={handleChange}
+          />
+          <CountField
+            field="limit"
+            label="Limit"
+            placeholder="All"
+            value={draft.limit}
+            hasErrors={errorsByField.limit.length > 0}
+            errorId={limitErrorId}
+            onChange={handleChange}
+          />
         </div>
-      ) : null}
-    </div>
+        <FieldErrors id={skipErrorId} errors={errorsByField.skip} />
+        <FieldErrors id={limitErrorId} errors={errorsByField.limit} />
+        <p className="text-xs text-muted-foreground">
+          Project lists columns to keep, or -column to drop one. Sort accepts
+          ASC, DESC, 1 or -1. Skip and Limit narrow the result but never what
+          Delete removes. Projected rows are read-only. Without a primary key,
+          rows with equal sort values can move between pages.
+        </p>
+      </div>
+    </form>
   );
 }

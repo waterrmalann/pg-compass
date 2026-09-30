@@ -316,14 +316,36 @@ export function bindDataQuery(
       columns,
       lastItem?.range.to ?? 0,
     );
-    return ast.projection.map((item) => {
-      const column = resolveColumn(item.column, "projection", columns);
-      return {
+    const resolved = ast.projection.map((item) => ({
+      item,
+      column: resolveColumn(item.column, "projection", columns),
+    }));
+    const isExclusion = ast.projection[0]?.exclude === true;
+    if (!isExclusion) {
+      return resolved.map(({ item, column }) => ({
         column: column.name,
         outputName: item.alias?.value ?? column.name,
         aliased: item.alias !== undefined,
-      };
-    });
+      }));
+    }
+
+    // `-a, -b`: every other column, in the relation's own order.
+    const excluded = new Set(resolved.map(({ column }) => column.name));
+    const kept = columns.filter((column) => !excluded.has(column.name));
+    if (kept.length === 0) {
+      throw new BindError(
+        "limit-exceeded",
+        "Every column is excluded. Keep at least one.",
+        "projection",
+        ast.projection[0]!.range.from,
+        lastItem!.range.to,
+      );
+    }
+    return kept.map((column) => ({
+      column: column.name,
+      outputName: column.name,
+      aliased: false,
+    }));
   });
 
   const sort = attempt(() => {
@@ -338,7 +360,10 @@ export function bindDataQuery(
   if (errors.length > 0 || filter === undefined || !projection || !sort) {
     return { ok: false, errors };
   }
-  return { ok: true, value: { filter, projection, sort } };
+  return {
+    ok: true,
+    value: { filter, projection, sort, skip: ast.skip, limit: ast.limit },
+  };
 }
 
 /** Parses and binds all three fields in one step. */

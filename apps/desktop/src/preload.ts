@@ -75,6 +75,8 @@ import type {
   InsertRowParams,
   InsertRowResult,
   OpenDialogOptions,
+  PreviewQuerySqlParams,
+  PreviewQuerySqlResult,
   SaveDialogOptions,
   SqlDumpParams,
   TableMetaParams,
@@ -202,6 +204,11 @@ const tableDataApi = {
     options: OpenDialogOptions,
   ): Promise<IpcResult<string | null>> =>
     ipcRenderer.invoke(TableDataChannels.SHOW_OPEN_DIALOG, options),
+
+  previewQuerySql: (
+    params: PreviewQuerySqlParams,
+  ): Promise<IpcResult<PreviewQuerySqlResult>> =>
+    ipcRenderer.invoke(TableDataChannels.PREVIEW_QUERY_SQL, params),
 
   exportData: (params: ExportDataParams): Promise<IpcResult<ExportResult>> =>
     ipcRenderer.invoke(TableDataChannels.EXPORT_DATA, params),
