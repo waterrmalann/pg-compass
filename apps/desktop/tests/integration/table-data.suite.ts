@@ -20,6 +20,7 @@ interface SeededDatabase {
 }
 
 const INJECTION_COLUMN = 'evil"col; DROP TABLE x; --';
+const NO_QUERY = { filter: "", projection: "", sort: "" };
 
 export function runTableDataIntegrationSuite(
   label: string,
@@ -72,6 +73,7 @@ export function runTableDataIntegrationSuite(
         table: "users",
         page: 2,
         pageSize: 25,
+        query: NO_QUERY,
       });
       expect(rows.totalCount).toBe(120);
       expect(rows.rows).toHaveLength(25);
@@ -283,6 +285,7 @@ export function runTableDataIntegrationSuite(
         table: "active_users",
         page: 1,
         pageSize: 10,
+        query: NO_QUERY,
       });
 
       expect(rows.primaryKey).toBeNull();
@@ -333,6 +336,7 @@ export function runTableDataIntegrationSuite(
           table: "users",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         expect(result.primaryKey).toEqual(["id"]);
       });
@@ -345,6 +349,7 @@ export function runTableDataIntegrationSuite(
           table: "order_items",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         expect(result.primaryKey).toEqual(["order_id", "line_number"]);
       });
@@ -357,6 +362,7 @@ export function runTableDataIntegrationSuite(
           table: "notes",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         expect(result.primaryKey).toBeNull();
       });
@@ -369,6 +375,7 @@ export function runTableDataIntegrationSuite(
           table: "active_users",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         expect(result.primaryKey).toBeNull();
       });
@@ -809,6 +816,7 @@ export function runTableDataIntegrationSuite(
           table: "users",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         const roleCol = result.columns.find((c) => c.name === "role");
         expect(roleCol).toBeDefined();
@@ -1297,7 +1305,10 @@ export function runTableDataIntegrationSuite(
             table: "delete_target",
             page: 1,
             pageSize: 25,
-            whereClause: "TRUE; COMMIT; DROP TABLE app.delete_target; --",
+            query: {
+              ...NO_QUERY,
+              filter: "TRUE; COMMIT; DROP TABLE app.delete_target; --",
+            },
           }),
         ).rejects.toThrow();
         expect(await countDeleteTarget()).toBe(5);
@@ -1311,7 +1322,7 @@ export function runTableDataIntegrationSuite(
           connectionId,
           schema: "app",
           table: "delete_target",
-          whereClause: "category = 'old'",
+          filter: "category = 'old'",
         });
 
         expect(result.deletedCount).toBe(3);
@@ -1319,22 +1330,19 @@ export function runTableDataIntegrationSuite(
         expect(await countDeleteTarget("category = 'keep'")).toBe(2);
       });
 
-      it("evaluates the filter only in the read-only selection, then deletes captured keys", async () => {
+      it("rejects function calls in a delete filter before touching rows", async () => {
         await resetDeleteTarget();
         const { deleteRows } = await import("@/main/table-data-write");
 
-        // True only inside a read-only transaction: if the DELETE re-applied
-        // the free-form filter (write transaction), nothing would be deleted.
-        const result = await deleteRows({
-          connectionId,
-          schema: "app",
-          table: "delete_target",
-          whereClause:
-            "category = 'old' AND current_setting('transaction_read_only') = 'on'",
-        });
-
-        expect(result.deletedCount).toBe(3);
-        expect(await countDeleteTarget()).toBe(2);
+        await expect(
+          deleteRows({
+            connectionId,
+            schema: "app",
+            table: "delete_target",
+            filter: "category = 'old' AND pg_sleep(1) IS NULL",
+          }),
+        ).rejects.toThrow(/functions are not supported/i);
+        expect(await countDeleteTarget()).toBe(5);
       });
 
       it("returns zero when the current filter matches no rows", async () => {
@@ -1345,7 +1353,7 @@ export function runTableDataIntegrationSuite(
           connectionId,
           schema: "app",
           table: "delete_target",
-          whereClause: "category = 'missing'",
+          filter: "category = 'missing'",
         });
 
         expect(result.deletedCount).toBe(0);
@@ -1361,7 +1369,7 @@ export function runTableDataIntegrationSuite(
             connectionId,
             schema: "app",
             table: "delete_target",
-            whereClause: "TRUE; DROP TABLE app.delete_target; --",
+            filter: "TRUE; DROP TABLE app.delete_target; --",
           }),
         ).rejects.toThrow();
         expect(await countDeleteTarget()).toBe(5);
@@ -1385,6 +1393,7 @@ export function runTableDataIntegrationSuite(
           table: "delete_target",
           page: 1,
           pageSize: 25,
+          query: NO_QUERY,
         });
 
         expect(rows.rows.map((row) => row.id)).toEqual([1, 2, 3, 4, 5]);
@@ -1398,6 +1407,7 @@ export function runTableDataIntegrationSuite(
           connectionId,
           schema: "app",
           table: "delete_target",
+          filter: "",
         });
 
         expect(result.deletedCount).toBe(5);
@@ -1416,7 +1426,7 @@ export function runTableDataIntegrationSuite(
               connectionId,
               schema: "app",
               table: "delete_target",
-              whereClause: "category = 'old'",
+              filter: "category = 'old'",
             }),
           ).rejects.toThrow(/read-only/i);
         } finally {
@@ -1425,6 +1435,462 @@ export function runTableDataIntegrationSuite(
 
         expect(await countDeleteTarget()).toBe(5);
       });
+    });
+
+    // -----------------------------------------------------------------------
+    // Data-tab query DSL
+    // -----------------------------------------------------------------------
+
+    describe("query DSL", () => {
+      async function usersQuery(
+        query: Partial<typeof NO_QUERY>,
+        page = 1,
+        pageSize = 25,
+      ) {
+        const { getRows } = await import("@/main/table-data-rows");
+        return getRows({
+          connectionId,
+          schema: "app",
+          table: "users",
+          page,
+          pageSize,
+          query: { ...NO_QUERY, ...query },
+        });
+      }
+
+      async function expectDslFailure(
+        promise: Promise<unknown>,
+        expected: { field: string; code: string },
+      ) {
+        const { QueryDslFailure } = await import("@/main/query-dsl/prepare");
+        const error = await promise.then(
+          () => null,
+          (err: unknown) => err,
+        );
+        expect(error).toBeInstanceOf(QueryDslFailure);
+        expect(
+          (error as InstanceType<typeof QueryDslFailure>).errors[0],
+        ).toMatchObject(expected);
+      }
+
+      it("combines filter, projection and sort with aliases, count and pages", async () => {
+        const query = {
+          filter: "status = 'active' AND id >= 60",
+          projection: "id, display_name AS name",
+          sort: "login_count DESC",
+        };
+        const first = await usersQuery(query, 1, 5);
+        const second = await usersQuery(query, 2, 5);
+
+        // 60..120 minus the 9 multiples of 7 marked inactive.
+        expect(first.totalCount).toBe(52);
+        expect(first.columns.map((column) => column.name)).toEqual([
+          "id",
+          "name",
+        ]);
+        expect(first.rows[0]).toEqual({ id: 120, name: "User 120" });
+        expect(first.rows.map((row) => row.id)).toEqual([
+          120, 118, 117, 116, 115,
+        ]);
+        expect(second.rows.map((row) => row.id)).toEqual([
+          114, 113, 111, 110, 109,
+        ]);
+        expect(first.primaryKey).toBeNull();
+        expect(first.columns[1]).not.toHaveProperty("isNullable");
+      });
+
+      it("keeps edit identity and metadata for filter- and sort-only results", async () => {
+        const result = await usersQuery({
+          filter: "role = 'admin'",
+          sort: "id -1",
+        });
+
+        expect(result.primaryKey).toEqual(["id"]);
+        expect(result.totalCount).toBe(40);
+        expect(result.rows[0]?.id).toBe(120);
+        const role = result.columns.find((column) => column.name === "role");
+        expect(role?.enumLabels).toEqual(["admin", "editor", "viewer"]);
+        expect(
+          result.columns.find((column) => column.name === "email")?.isNullable,
+        ).toBe(false);
+      });
+
+      it("matches the unfiltered default when every field is empty", async () => {
+        const result = await usersQuery({}, 1, 3);
+        expect(result.totalCount).toBe(120);
+        expect(result.rows.map((row) => row.id)).toEqual([1, 2, 3]);
+        expect(result.primaryKey).toEqual(["id"]);
+      });
+
+      // Rows 61..120 are never modified by earlier write tests.
+      it.each([
+        ["is_verified = TRUE", 20],
+        ["is_verified IN (true, false)", 60],
+        ["score > 11.5", 5],
+        ["score >= 1.15e1", 6],
+        ["balance_cents = 120000", 1],
+        ["balance_cents >= -1", 60],
+        ["login_count NOT IN (61, 62, 63)", 57],
+        ["created_at >= '2000-01-01'", 60],
+        ["external_id = '00000000-0000-0000-0000-000000000077'", 1],
+        ["role IN ('admin')", 20],
+        ["role > 'editor'", 20],
+        [`profile = '{"rank": 61, "tags": ["seed", "user"]}'`, 1],
+        ["contact_email LIKE '%@%'", 0],
+        ["tags IS NOT NULL", 60],
+        ["profile_note IS NULL", 12],
+        ["display_name ILIKE 'user 1%'", 21],
+      ])("filters %s", async (filter, expectedCount) => {
+        const result = await usersQuery({ filter: `id > 60 AND (${filter})` });
+        expect(result.totalCount).toBe(expectedCount);
+      });
+
+      it("applies AND before OR, and parentheses override it", async () => {
+        const withoutParens = await usersQuery({
+          filter: "id = 1 OR id = 2 AND status = 'inactive'",
+        });
+        const withParens = await usersQuery({
+          filter: "(id = 1 OR id = 2) AND status = 'inactive'",
+        });
+        expect(withoutParens.totalCount).toBe(1);
+        expect(withParens.totalCount).toBe(0);
+      });
+
+      it("rejects operators a type family does not support before querying", async () => {
+        await expectDslFailure(usersQuery({ filter: "tags = 'seed'" }), {
+          field: "filter",
+          code: "operator-not-supported",
+        });
+        await expectDslFailure(
+          usersQuery({ filter: "login_count LIKE '1%'" }),
+          {
+            field: "filter",
+            code: "operator-not-supported",
+          },
+        );
+        await expectDslFailure(usersQuery({ filter: "login_count = '1'" }), {
+          field: "filter",
+          code: "literal-type-mismatch",
+        });
+      });
+
+      it("reports unknown columns in projection and sort with suggestions", async () => {
+        const { QueryDslFailure } = await import("@/main/query-dsl/prepare");
+        const error = await usersQuery({
+          projection: "id, display_nam",
+          sort: "created DESC",
+        }).catch((err: unknown) => err);
+        expect(error).toBeInstanceOf(QueryDslFailure);
+        const errors = (error as InstanceType<typeof QueryDslFailure>).errors;
+        expect(errors).toEqual([
+          expect.objectContaining({
+            field: "projection",
+            code: "unknown-column",
+            from: 4,
+            to: 15,
+            message: expect.stringContaining("display_name"),
+          }),
+          expect.objectContaining({ field: "sort", code: "unknown-column" }),
+        ]);
+      });
+
+      it("rolls back and stays usable after a database conversion error", async () => {
+        await expect(
+          usersQuery({ filter: "external_id = 'not-a-uuid'" }),
+        ).rejects.toThrow(/uuid/i);
+        const result = await usersQuery({ filter: "id = 1" });
+        expect(result.totalCount).toBe(1);
+      });
+
+      it("sorts by source columns even when an alias shares their name", async () => {
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { getRows } = await import("@/main/table-data-rows");
+        await withPoolClient(connectionId, async (client) => {
+          await client.query("DROP TABLE IF EXISTS app.alias_shadow");
+          await client.query(
+            "CREATE TABLE app.alias_shadow (id INT PRIMARY KEY, name TEXT, label TEXT)",
+          );
+          await client.query(
+            "INSERT INTO app.alias_shadow VALUES (1, 'b', 'z'), (2, 'a', 'y'), (3, 'c', 'x')",
+          );
+        });
+
+        const result = await getRows({
+          connectionId,
+          schema: "app",
+          table: "alias_shadow",
+          page: 1,
+          pageSize: 25,
+          // "name" and "id" are aliases of other columns here; Sort and the
+          // primary-key tie-breaker must still use the table's columns.
+          query: {
+            filter: "",
+            projection: "label AS name, name AS id",
+            sort: "name",
+          },
+        });
+        expect(result.rows).toEqual([
+          { name: "y", id: "a" },
+          { name: "z", id: "b" },
+          { name: "x", id: "c" },
+        ]);
+      });
+
+      it("breaks sort ties with composite primary-key columns", async () => {
+        const { getRows } = await import("@/main/table-data-rows");
+        const result = await getRows({
+          connectionId,
+          schema: "app",
+          table: "order_items",
+          page: 1,
+          pageSize: 4,
+          query: { ...NO_QUERY, sort: "quantity DESC" },
+        });
+        // quantity = (gs % 5) + 1 is 5 for gs = 4, 9, 14, 19 …; ties fall
+        // back to (order_id, line_number) ascending.
+        expect(
+          result.rows.map((row) => [row.order_id, row.line_number]),
+        ).toEqual([
+          [4, 1],
+          [4, 2],
+          [9, 1],
+          [9, 2],
+        ]);
+      });
+
+      it("handles quoted, mixed-case and reserved identifiers", async () => {
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { getRows } = await import("@/main/table-data-rows");
+        await withPoolClient(connectionId, async (client) => {
+          await client.query('DROP TABLE IF EXISTS app."MixedCase"');
+          await client.query(
+            'CREATE TABLE app."MixedCase" (id SERIAL PRIMARY KEY, "CreatedAt" DATE NOT NULL, "select" TEXT, "quote""col" TEXT)',
+          );
+          await client.query(
+            `INSERT INTO app."MixedCase" ("CreatedAt", "select", "quote""col") VALUES ('2025-12-31', 'a', 'x'), ('2026-01-02', 'b', 'y'), ('2026-03-01', 'b', 'z')`,
+          );
+        });
+
+        const result = await getRows({
+          connectionId,
+          schema: "app",
+          table: "MixedCase",
+          page: 1,
+          pageSize: 25,
+          query: {
+            filter: `"CreatedAt" >= '2026-01-01' AND "select" = 'b'`,
+            projection: `"quote""col" AS "Quote", "CreatedAt"`,
+            sort: `"CreatedAt" DESC`,
+          },
+        });
+        expect(result.totalCount).toBe(2);
+        expect(result.rows.map((row) => row.Quote)).toEqual(["z", "y"]);
+        expect(result.columns.map((column) => column.name)).toEqual([
+          "Quote",
+          "CreatedAt",
+        ]);
+
+        await expectDslFailure(
+          getRows({
+            connectionId,
+            schema: "app",
+            table: "MixedCase",
+            page: 1,
+            pageSize: 25,
+            query: { ...NO_QUERY, sort: "createdat" },
+          }),
+          { field: "sort", code: "case-mismatch" },
+        );
+      });
+
+      it("queries views without edit identity", async () => {
+        const { getRows } = await import("@/main/table-data-rows");
+        const result = await getRows({
+          connectionId,
+          schema: "app",
+          table: "active_users",
+          page: 1,
+          pageSize: 3,
+          query: { filter: "id < 10", projection: "", sort: "id DESC" },
+        });
+        expect(result.totalCount).toBe(8);
+        expect(result.rows.map((row) => row.id)).toEqual([9, 8, 6]);
+        expect(result.primaryKey).toBeNull();
+      });
+
+      it("returns catalog columns with type families for completion", async () => {
+        const { getQueryColumns } = await import("@/main/table-data-rows");
+        const columns = await getQueryColumns({
+          connectionId,
+          schema: "app",
+          table: "users",
+        });
+        const families = Object.fromEntries(
+          columns.map((column) => [column.name, column.family]),
+        );
+        expect(families).toMatchObject({
+          id: "numeric",
+          email: "text",
+          role: "enum",
+          role_history: "other",
+          contact_email: "text",
+          mailing_address: "other",
+          is_verified: "boolean",
+          score: "numeric",
+          profile: "jsonb",
+          tags: "other",
+          external_id: "uuid",
+          created_at: "temporal",
+        });
+        expect(
+          columns.find((column) => column.name === "contact_email")?.typeName,
+        ).toBe("email_text");
+      });
+
+      it("exports the active filter, projection and sort without pagination", async () => {
+        const { exportData } = await import("@/main/table-data-export");
+        const directory = createTempDir("pg-compass-dsl-export-");
+        const filePath = path.join(directory, "users.csv");
+        const sender = { send: () => undefined } as unknown as WebContents;
+
+        const result = await exportData(
+          {
+            connectionId,
+            format: "csv",
+            filePath,
+            schema: "app",
+            table: "users",
+            query: {
+              filter: "role = 'admin' AND id <= 30",
+              projection: "id, display_name AS name",
+              sort: "id DESC",
+            },
+          },
+          sender,
+        );
+
+        expect(result.rowCount).toBe(10);
+        const lines = fs.readFileSync(filePath, "utf8").trim().split("\n");
+        expect(lines[0]).toBe("id,name");
+        expect(lines[1]).toBe("30,User 30");
+        expect(lines).toHaveLength(11);
+      });
+
+      it("rejects an invalid export query without writing a file", async () => {
+        const { exportData } = await import("@/main/table-data-export");
+        const directory = createTempDir("pg-compass-dsl-export-");
+        const filePath = path.join(directory, "users.csv");
+        const sender = { send: () => undefined } as unknown as WebContents;
+
+        await expectDslFailure(
+          exportData(
+            {
+              connectionId,
+              format: "csv",
+              filePath,
+              schema: "app",
+              table: "users",
+              query: { ...NO_QUERY, projection: "id, missing" },
+            },
+            sender,
+          ),
+          { field: "projection", code: "unknown-column" },
+        );
+        expect(fs.readdirSync(directory)).toEqual([]);
+      });
+
+      it("fails closed when the filtered column was dropped after preview", async () => {
+        await resetDeleteTarget();
+        const { withPoolClient } = await import("@/main/pg-utils");
+        const { deleteRows } = await import("@/main/table-data-write");
+        await withPoolClient(connectionId, async (client) => {
+          await client.query(
+            "ALTER TABLE app.delete_target ADD COLUMN flag BOOLEAN",
+          );
+          await client.query("ALTER TABLE app.delete_target DROP COLUMN flag");
+        });
+
+        await expectDslFailure(
+          deleteRows({
+            connectionId,
+            schema: "app",
+            table: "delete_target",
+            filter: "flag = TRUE",
+          }),
+          { field: "filter", code: "unknown-column" },
+        );
+        expect(await countDeleteTarget()).toBe(5);
+      });
+
+      it("refuses to delete from a view", async () => {
+        const { deleteRows } = await import("@/main/table-data-write");
+        await expect(
+          deleteRows({
+            connectionId,
+            schema: "app",
+            table: "active_users",
+            filter: "id = 1",
+          }),
+        ).rejects.toThrow(/only tables/i);
+        const users = await usersQuery({ filter: "id = 1" });
+        expect(users.totalCount).toBe(1);
+      });
+
+      it.each([
+        "'; DROP TABLE users; --",
+        "1 OR TRUE",
+        "name); DELETE FROM users; --",
+        `"name""; DROP TABLE users; --"`,
+        "pg_sleep(10)",
+        "(SELECT secret FROM credentials)",
+      ])(
+        "treats %s as a DSL error or a parameter in every field",
+        async (payload) => {
+          await resetDeleteTarget();
+          const { getRows } = await import("@/main/table-data-rows");
+          const { deleteRows } = await import("@/main/table-data-write");
+          const attempts = [
+            { ...NO_QUERY, filter: payload },
+            { ...NO_QUERY, filter: `category = ${payload}` },
+            {
+              ...NO_QUERY,
+              filter: `category = '${payload.replaceAll("'", "''")}'`,
+            },
+            { ...NO_QUERY, projection: payload },
+            { ...NO_QUERY, sort: payload },
+          ];
+          for (const query of attempts) {
+            const outcome = await getRows({
+              connectionId,
+              schema: "app",
+              table: "delete_target",
+              page: 1,
+              pageSize: 25,
+              query,
+            }).then(
+              (result) => result,
+              (err: unknown) => err as Error,
+            );
+            if (!(outcome instanceof Error)) {
+              // Only the quoted-value attempt may succeed: the payload was a value.
+              expect(outcome.totalCount).toBe(0);
+            }
+          }
+          await deleteRows({
+            connectionId,
+            schema: "app",
+            table: "delete_target",
+            filter: `category = '${payload.replaceAll("'", "''")}'`,
+          });
+          await deleteRows({
+            connectionId,
+            schema: "app",
+            table: "delete_target",
+            filter: payload,
+          }).catch(() => undefined);
+          expect(await countDeleteTarget()).toBe(5);
+        },
+      );
     });
 
     // -----------------------------------------------------------------------
@@ -1440,6 +1906,7 @@ export function runTableDataIntegrationSuite(
           table: "orders",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         const userIdCol = result.columns.find((c) => c.name === "user_id");
         expect(userIdCol?.foreignKey).toEqual({
@@ -1459,6 +1926,7 @@ export function runTableDataIntegrationSuite(
           table: "order_items",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         const fkCol = result.columns.find((c) => c.name === "order_id");
         expect(fkCol?.foreignKey).toEqual({
@@ -1478,6 +1946,7 @@ export function runTableDataIntegrationSuite(
           table: "users",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         for (const col of result.columns) {
           expect(col.foreignKey).toBeUndefined();
@@ -1593,6 +2062,7 @@ export function runTableDataIntegrationSuite(
           table: "users",
           page: 1,
           pageSize: 1,
+          query: NO_QUERY,
         });
         expect(rows.totalCount).toBeGreaterThan(0);
       });

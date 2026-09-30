@@ -22,13 +22,13 @@ You should also ensure not to cause conflicts with any existing shortcuts in Ele
 
 ### Keyboard Shortcuts
 
-| Shortcut | Windows/Linux | macOS | Implementation |
-|---|---|---|---|
-| Close tab | Ctrl+W | Cmd+W | Electron menu accelerator (`CmdOrCtrl+W`) → IPC → renderer |
-| Next tab | Ctrl+Tab | Ctrl+Tab | `before-input-event` in main process → IPC → renderer |
-| Previous tab | Ctrl+Shift+Tab | Ctrl+Shift+Tab | `before-input-event` in main process → IPC → renderer |
-| Reload | Ctrl+R | Cmd+R | Already handled by Electron's `reload` menu role |
-| Focus query editor | Ctrl+F | Cmd+F | Renderer-side `keydown` listener (skips if CodeMirror already focused, so CM's own search still works) |
+| Shortcut           | Windows/Linux  | macOS          | Implementation                                                                                         |
+| ------------------ | -------------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| Close tab          | Ctrl+W         | Cmd+W          | Electron menu accelerator (`CmdOrCtrl+W`) → IPC → renderer                                             |
+| Next tab           | Ctrl+Tab       | Ctrl+Tab       | `before-input-event` in main process → IPC → renderer                                                  |
+| Previous tab       | Ctrl+Shift+Tab | Ctrl+Shift+Tab | `before-input-event` in main process → IPC → renderer                                                  |
+| Reload             | Ctrl+R         | Cmd+R          | Already handled by Electron's `reload` menu role                                                       |
+| Focus query editor | Ctrl+F         | Cmd+F          | Renderer-side `keydown` listener (skips if CodeMirror already focused, so CM's own search still works) |
 
 ### Files Changed
 
@@ -43,5 +43,3 @@ You should also ensure not to cause conflicts with any existing shortcuts in Ele
 
 - **`src/components/sql-editor/use-codemirror.ts`** — Single-line Enter keymap now calls `onSubmit` (previously only consumed the event)
 - **`src/components/workspace/table-viewer/data-tab.tsx`** — Added `onSubmit` prop to the WHERE clause `SqlEditor` so Enter submits the filter
-
-

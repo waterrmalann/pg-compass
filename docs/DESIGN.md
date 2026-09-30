@@ -762,6 +762,8 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Intentional exceptions.** Theme-picker previews use fixed neutral values because they show a theme other than the active one.
 
+**Data query toolbar.** The Data tab keeps the Filter field (search icon, 32px single-line editor) in the first row with an icon-only outline **Query options** toggle, an outline Apply and a ghost Clear. The toggle opens a second row with Project and Sort fields and a 12px muted help line; while it is closed, active options show as a count chip inside the toggle, never as colour alone. Errors appear under the field as 12px `destructive-foreground` text with an alert icon and a wavy underline on the exact range. Projected results replace Add with an `aria-disabled` ghost "Read-only" button whose tooltip says "Clear projection to edit rows."
+
 **CodeMirror.** The SQL editor uses the §9.19 syntax palette through `pg-theme.ts`. CodeMirror injects its styles unlayered at runtime, so editor sizing lives in CodeMirror themes (`Prec.high` for overrides), not in Tailwind classes.
 
 ---

@@ -12,6 +12,7 @@ This matrix tracks which currently implemented behaviors are covered by unit, in
 | Query read-only guards and pagination helpers                         | Yes              | Yes, via PGlite and PostgreSQL                | Yes        |
 | Export SQL and CSV formatting helpers                                 | Yes              | No                                            | Yes        |
 | Table row loading                                                     | No               | Yes, via PGlite and PostgreSQL                | Yes        |
+| Data-tab query DSL (parse, bind, compile, toolbar, export, delete)    | Yes              | Yes, via PGlite and PostgreSQL                | Yes        |
 | Cell edit (text, json, postgis)                                       | Yes              | Yes, via PGlite (postgis gated on PostgreSQL) | Yes        |
 | Enum metadata and dropdown editing                                    | Yes              | Yes, via PGlite and PostgreSQL                | Indirect   |
 | Read-only-mode gate (no edit affordance in DOM)                       | Yes              | Yes                                           | Yes        |

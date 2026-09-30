@@ -13,6 +13,8 @@ import type {
 } from "../shared/types/table-data";
 import { extendedQuery, quoteIdent, withPoolClient } from "./pg-utils";
 import { isReadOnlyQuery } from "./table-data-rows";
+import type { CompiledDataQuery } from "./query-dsl/compile";
+import { bindAndCompile, parseDataQueryOrThrow } from "./query-dsl/prepare";
 
 function createTemporaryExportPath(filePath: string): string {
   return path.join(
@@ -111,6 +113,20 @@ export function buildExportSql(params: ExportDataParams): string {
   return `SELECT * FROM ${qualifiedTable}`;
 }
 
+/** `SELECT` for a compiled Data-tab query over a whole relation. */
+export function buildRelationQuerySql(
+  schema: string,
+  table: string,
+  compiled: CompiledDataQuery,
+): string {
+  const qualifiedTable = `${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const whereFragment = compiled.whereSql ? ` WHERE ${compiled.whereSql}` : "";
+  const orderByFragment = compiled.orderBySql
+    ? ` ORDER BY ${compiled.orderBySql}`
+    : "";
+  return `SELECT ${compiled.selectListSql} FROM ${qualifiedTable}${whereFragment}${orderByFragment}`;
+}
+
 export async function exportData(
   params: ExportDataParams,
   sender: WebContents,
@@ -118,17 +134,35 @@ export async function exportData(
   const { filePath } = params;
   const temporaryPath = createTemporaryExportPath(filePath);
 
+  // Data-tab DSL is syntax-checked before any database work.
+  const queryAst = params.query ? parseDataQueryOrThrow(params.query) : null;
+
   return withPoolClient(params.connectionId, async (client) => {
-    const sql = buildExportSql(params);
     const progress = createProgressThrottle(sender);
 
     // Stream all rows using a cursor to avoid loading everything into memory
     await client.query("BEGIN READ ONLY");
     try {
+      let sql = buildExportSql(params);
+      let values: unknown[] = [];
+      if (queryAst) {
+        // Same parser, binder and compiler as row loading, without
+        // pagination, so the export matches the Data tab's active query.
+        const { compiled } = await bindAndCompile(
+          client,
+          params.schema!,
+          params.table!,
+          queryAst,
+        );
+        sql = buildRelationQuerySql(params.schema!, params.table!, compiled);
+        values = compiled.values;
+      }
+
       const cursorName = "__export_cursor";
-      await client.query(
-        extendedQuery(`DECLARE ${cursorName} CURSOR FOR ${sql}`),
-      );
+      await client.query({
+        ...extendedQuery(`DECLARE ${cursorName} CURSOR FOR ${sql}`),
+        values,
+      });
 
       const writeStream = fs.createWriteStream(temporaryPath, {
         encoding: "utf-8",

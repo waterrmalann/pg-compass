@@ -189,6 +189,7 @@ describe("DataTab loading state", () => {
   it("clears the spinner when a background refresh supersedes a pending foreground load", async () => {
     Object.assign(window, {
       tableDataApi: {
+        getQueryColumns: vi.fn().mockResolvedValue({ success: true, data: [] }),
         getRows: vi
           .fn()
           // Initial foreground load never resolves (e.g. a slow query).

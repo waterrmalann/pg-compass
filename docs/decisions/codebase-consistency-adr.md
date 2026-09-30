@@ -11,7 +11,7 @@ The desktop application had mixed filename and formatting conventions, non-block
 - React code uses the shared accessibility rules, with narrowly documented exceptions for generated labels and intentional dialog autofocus.
 - IPC channel names and renderer API types have one shared source of truth. Main-process handlers validate runtime input and reject calls outside the trusted main frame.
 - Native save-dialog results become short-lived, operation-bound capabilities; export handlers cannot write to renderer-selected arbitrary paths.
-- Free-form filtered deletes evaluate selection in a read-only transaction, then delete only the captured primary keys with parameters.
+- Data-tab filters, projections and sorts are a restricted query DSL that the main process parses, binds to catalog columns and compiles; no renderer-authored SQL fragment reaches Data-tab SQL. Filtered deletes recompile the filter inside the delete transaction and run one parameterized `DELETE`. (Updated 2026-09-30; filtered deletes previously captured primary keys from a free-form `WHERE` in a read-only transaction.)
 - Every browser window explicitly enables isolation and sandboxing, blocks navigation and permissions, applies CSP, and allowlists external destinations.
 - Production CSP permits only self-hosted scripts. Development additionally permits Vite's inline React Fast Refresh preamble and the configured dev-server WebSocket origin.
 

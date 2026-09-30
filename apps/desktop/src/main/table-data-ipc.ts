@@ -1,7 +1,14 @@
 import path from "node:path";
 import { dialog, BrowserWindow } from "electron";
 import { TableDataChannels } from "../shared/constants/ipc-channels";
-import { cancelQuery, executeQuery, getRows } from "./table-data-rows";
+import type { TableDataFailure } from "../shared/types/table-data";
+import {
+  cancelQuery,
+  executeQuery,
+  getQueryColumns,
+  getRows,
+} from "./table-data-rows";
+import { QueryDslFailure } from "./query-dsl/prepare";
 import {
   getConstraints,
   getIndexes,
@@ -63,6 +70,30 @@ function resolveTestOpenDialogPath(): string | null {
   return process.env.PG_COMPASS_TEST_OPEN_DIALOG_PATH?.trim() || null;
 }
 
+/**
+ * Failure envelope for Data-tab operations that accept query DSL. Keeps the
+ * plain `error` string for existing callers and adds a structured reason.
+ */
+function toDataQueryFailure(err: unknown): {
+  success: false;
+  error: string;
+  failure: TableDataFailure;
+} {
+  if (err instanceof QueryDslFailure) {
+    return {
+      success: false,
+      error: err.message,
+      failure: { kind: "query-dsl", errors: err.errors },
+    };
+  }
+  const message = (err as Error).message;
+  return {
+    success: false,
+    error: message,
+    failure: { kind: "database", message },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Handler registration
 // ---------------------------------------------------------------------------
@@ -74,6 +105,19 @@ export function registerTableDataHandlers(): void {
       try {
         const params = validateGetRowsParams(rawParams);
         const data = await getRows(params);
+        return { success: true, data };
+      } catch (err) {
+        return toDataQueryFailure(err);
+      }
+    },
+  );
+
+  registerIpcHandler(
+    TableDataChannels.GET_QUERY_COLUMNS,
+    async (_event, rawParams: unknown) => {
+      try {
+        const params = validateTableMetaParams(rawParams);
+        const data = await getQueryColumns(params);
         return { success: true, data };
       } catch (err) {
         return { success: false, error: (err as Error).message };
@@ -293,7 +337,7 @@ export function registerTableDataHandlers(): void {
         const data = await exportData({ ...params, filePath }, event.sender);
         return { success: true, data };
       } catch (err) {
-        return { success: false, error: (err as Error).message };
+        return toDataQueryFailure(err);
       }
     },
   );
@@ -350,7 +394,7 @@ export function registerTableDataHandlers(): void {
         const data = await deleteRows(params);
         return { success: true, data };
       } catch (err) {
-        return { success: false, error: (err as Error).message };
+        return toDataQueryFailure(err);
       }
     },
   );

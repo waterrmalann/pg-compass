@@ -3,6 +3,7 @@ Similar to how `docs/tasks/DELETE_DATA.md` outlines the requirements and impleme
 Bulk updates on current filter.
 
 The modal will show
+
 1. Heading with "Update X documents"
 2. A filter input (read-only) that shows the current filter applied to the data. This will help users understand what data they are about to update.
 3. Update query input (we will use our DSL for this) in left pane

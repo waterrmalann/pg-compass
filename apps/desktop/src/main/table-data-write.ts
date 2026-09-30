@@ -9,9 +9,9 @@ import type {
   UpdateRowParams,
   UpdateRowResult,
 } from "../shared/types/table-data";
-import { extendedQuery, quoteIdent, withPoolClient } from "./pg-utils";
+import { quoteIdent, withPoolClient } from "./pg-utils";
 import { getSettings } from "./settings-store";
-import { resolvePrimaryKey } from "./table-data-rows";
+import { bindAndCompile, parseDataQueryOrThrow } from "./query-dsl/prepare";
 
 /**
  * Allow-listed Postgres type names that may appear as an explicit cast
@@ -361,75 +361,44 @@ export async function deleteRows(
     throw new Error("Cannot delete rows: read-only mode is enabled.");
   }
 
+  // Only the filter decides which rows are deleted; projection and sort
+  // never apply. Syntax errors fail before any database work.
+  const ast = parseDataQueryOrThrow({
+    filter: params.filter,
+    projection: "",
+    sort: "",
+  });
+
   return withPoolClient(params.connectionId, async (client) => {
     const qualifiedTable = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
-    const trimmedWhere = params.whereClause?.trim();
-    if (!trimmedWhere) {
-      const result = await client.query(`DELETE FROM ${qualifiedTable}`);
-      return { deletedCount: result.rowCount ?? 0 };
-    }
-
-    const primaryKey = await resolvePrimaryKey(
-      client,
-      params.schema,
-      params.table,
-    );
-    if (!primaryKey) {
-      throw new Error(
-        "Cannot delete filtered rows: the table has no primary key.",
-      );
-    }
-
-    const primaryKeySql = primaryKey.map(quoteIdent).join(", ");
-    let selectedRows: Record<string, unknown>[];
-    await client.query("BEGIN READ ONLY");
-    try {
-      const selected = await client.query<Record<string, unknown>>(
-        extendedQuery(
-          `SELECT ${primaryKeySql} FROM ${qualifiedTable} WHERE ${trimmedWhere}`,
-        ),
-      );
-      selectedRows = selected.rows;
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    }
-
-    if (selectedRows.length === 0) {
-      return { deletedCount: 0 };
-    }
-
-    let deletedCount = 0;
     await client.query("BEGIN");
     try {
-      const batchSize = 500;
-      for (let offset = 0; offset < selectedRows.length; offset += batchSize) {
-        const batch = selectedRows.slice(offset, offset + batchSize);
-        const values: unknown[] = [];
-        const tuples = batch.map((row) => {
-          const placeholders = primaryKey.map((column) => {
-            values.push(row[column]);
-            return `$${values.length}`;
-          });
-          return `(${placeholders.join(", ")})`;
-        });
-        const keyTuple = `(${primaryKeySql})`;
-        // The renderer-authored filter only ever runs in the read-only
-        // selection above; the write path deletes captured keys only, with
-        // parameters (codebase-consistency ADR).
-        const result = await client.query(
-          `DELETE FROM ${qualifiedTable} WHERE ${keyTuple} IN (${tuples.join(", ")})`,
-          values,
-        );
-        deletedCount += result.rowCount ?? 0;
+      // Recompile against the catalog inside the delete's own transaction:
+      // a column dropped or retyped since the preview fails closed here.
+      const { metadata, compiled } = await bindAndCompile(
+        client,
+        params.schema,
+        params.table,
+        ast,
+      );
+      if (metadata.kind !== "table") {
+        throw new Error("Cannot delete rows: only tables support deletion.");
       }
+      const whereFragment = compiled.whereSql
+        ? ` WHERE ${compiled.whereSql}`
+        : "";
+      // The filter is compiled DSL: catalog-bound quoted identifiers,
+      // operators from a closed set, and values as parameters only
+      // (codebase-consistency ADR).
+      const result = await client.query(
+        `DELETE FROM ${qualifiedTable}${whereFragment}`,
+        compiled.values,
+      );
       await client.query("COMMIT");
+      return { deletedCount: result.rowCount ?? 0 };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     }
-
-    return { deletedCount };
   });
 }
