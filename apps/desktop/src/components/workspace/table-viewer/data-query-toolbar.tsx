@@ -185,10 +185,12 @@ export function DataQueryToolbar({
     (field) => errorsByField[field].length > 0,
   );
 
-  // An error in a hidden field must be visible to be fixed.
+  // An error in a hidden field must be visible to be fixed. Keyed on the
+  // errors array so every Apply that reports one reopens the row, even if
+  // the user collapsed it while an earlier error was showing.
   useEffect(() => {
     if (hasOptionErrors) setOptionsOpen(true);
-  }, [hasOptionErrors]);
+  }, [errors, hasOptionErrors]);
 
   function handleChange(field: QueryDslField, value: string) {
     setDraft((previous) =>

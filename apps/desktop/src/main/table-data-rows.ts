@@ -109,17 +109,27 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
         ? `ORDER BY ${compiled.orderBySql}`
         : "";
 
-      const countResult = await client.query<{ count: string }>(
-        `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`,
-        compiled.values,
-      );
-      const matchingRows = parseCountRow(countResult.rows[0]?.count);
+      // With Skip/Limit the count stops at the window's end, so a small
+      // Limit never counts a huge table.
+      const hasWindow = compiled.skip !== null || compiled.limit !== null;
+      const windowOffset = `$${compiled.values.length + 1}`;
+      const windowLimit = `$${compiled.values.length + 2}`;
+      const countResult = hasWindow
+        ? await client.query<{ count: string }>(
+            `SELECT count(*) AS count FROM (SELECT 1 FROM ${qualifiedTable} ${whereFragment} OFFSET ${windowOffset} LIMIT ${windowLimit}) AS __window`,
+            [...compiled.values, compiled.skip ?? 0, compiled.limit],
+          )
+        : await client.query<{ count: string }>(
+            `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`,
+            compiled.values,
+          );
+      const resultRows = parseCountRow(countResult.rows[0]?.count);
       // Skip/Limit define the result; pages are windows inside it.
       const window = pageWindow(
         compiled,
         params.page,
         params.pageSize,
-        matchingRows,
+        resultRows,
       );
       const totalCount = window.count;
 
