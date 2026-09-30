@@ -8,6 +8,7 @@ import {
   validateDeleteRowsParams,
   validateDropRoleInput,
   validateExportDataParams,
+  validatePreviewQuerySqlParams,
   validateGetRowsParams,
   validateImportDataParams,
   validateImportOpenDialogOptions,
@@ -85,7 +86,7 @@ describe("IPC runtime validation", () => {
         table: "users",
         page: 1,
         pageSize: 101,
-        query: { filter: "", projection: "", sort: "" },
+        query: { filter: "", projection: "", sort: "", skip: "", limit: "" },
       }),
     ).toThrow(/pageSize/);
   });
@@ -98,7 +99,13 @@ describe("IPC runtime validation", () => {
       page: 1,
       pageSize: 25,
     };
-    const query = { filter: "id > 1", projection: "", sort: "" };
+    const query = {
+      filter: "id > 1",
+      projection: "",
+      sort: "",
+      skip: "",
+      limit: "10",
+    };
     expect(validateGetRowsParams({ ...base, query })).toMatchObject({ query });
     expect(() => validateGetRowsParams(base)).toThrow(/getRows.query/);
     expect(() =>
@@ -110,6 +117,22 @@ describe("IPC runtime validation", () => {
     expect(() =>
       validateGetRowsParams({ ...base, query, whereClause: "TRUE" }),
     ).toThrow(/whereClause is not allowed/);
+  });
+
+  it("validates SQL preview params", () => {
+    const params = {
+      connectionId: "connection",
+      schema: "app",
+      table: "users",
+      query: { filter: "", projection: "", sort: "", skip: "1", limit: "" },
+    };
+    expect(validatePreviewQuerySqlParams(params)).toBe(params);
+    expect(() =>
+      validatePreviewQuerySqlParams({ ...params, query: undefined }),
+    ).toThrow(/previewQuerySql.query must be an object/);
+    expect(() =>
+      validatePreviewQuerySqlParams({ ...params, sql: "SELECT 1" }),
+    ).toThrow(/previewQuerySql.sql is not allowed/);
   });
 
   it("accepts a delete filter string and nothing else", () => {
@@ -126,7 +149,13 @@ describe("IPC runtime validation", () => {
   });
 
   it("only accepts an export query together with schema and table", () => {
-    const query = { filter: "", projection: "id", sort: "" };
+    const query = {
+      filter: "",
+      projection: "id",
+      sort: "",
+      skip: "",
+      limit: "",
+    };
     expect(
       validateExportDataParams({
         connectionId: "connection",

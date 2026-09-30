@@ -42,7 +42,6 @@ interface DeleteDataDialogProps {
   table: string;
   /** The Data tab's active query. Only its filter selects rows to delete. */
   query: DataQueryInput;
-  totalCount: number;
   initialPreviewMode: PreviewMode;
   onDeleted: () => void;
 }
@@ -54,7 +53,6 @@ export function DeleteDataDialog({
   schema,
   table,
   query,
-  totalCount,
   initialPreviewMode,
   onDeleted,
 }: Readonly<DeleteDataDialogProps>) {
@@ -65,8 +63,12 @@ export function DeleteDataDialog({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Rows the filter matches: the delete target, which Skip and Limit (and
+  // so the Data tab's own count) never narrow.
+  const [matchCount, setMatchCount] = useState<number | null>(null);
   const filter = query.filter;
   const sort = query.sort;
+  const ignoresWindow = query.skip.trim() !== "" || query.limit.trim() !== "";
 
   useEffect(() => {
     if (!open) return;
@@ -76,6 +78,7 @@ export function DeleteDataDialog({
     setColumns([]);
     setRows([]);
     setPreviewError(null);
+    setMatchCount(null);
     setPreviewLoading(true);
 
     globalThis.window.tableDataApi
@@ -86,7 +89,7 @@ export function DeleteDataDialog({
         page: 1,
         pageSize: 5,
         // Complete rows, in the active order: projection never applies here.
-        query: { filter, projection: "", sort },
+        query: { filter, projection: "", sort, skip: "", limit: "" },
       })
       .then((result) => {
         if (cancelled) return;
@@ -96,6 +99,7 @@ export function DeleteDataDialog({
         }
         setColumns(result.data.columns);
         setRows(result.data.rows);
+        setMatchCount(result.data.totalCount);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -111,7 +115,7 @@ export function DeleteDataDialog({
   }, [connectionId, schema, table, filter, sort, open, initialPreviewMode]);
 
   const filterText = filter.trim() || "No filter (all documents)";
-  const documentLabel = totalCount === 1 ? "document" : "documents";
+  const documentLabel = matchCount === 1 ? "document" : "documents";
   const canDelete =
     rows.length > 0 && !previewLoading && !previewError && !deleting;
 
@@ -159,7 +163,9 @@ export function DeleteDataDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            Delete {totalCount.toLocaleString()} {documentLabel}
+            {matchCount === null
+              ? "Delete documents"
+              : `Delete ${matchCount.toLocaleString()} ${documentLabel}`}
           </DialogTitle>
           <DialogDescription className="font-mono text-xs">
             {schema}.{table}
@@ -177,6 +183,12 @@ export function DeleteDataDialog({
               className="min-w-0 font-mono text-xs"
               aria-label="Current delete filter"
             />
+            {ignoresWindow ? (
+              <p className="text-xs text-muted-foreground">
+                Skip and Limit don&apos;t apply here. Every row that matches the
+                filter is deleted.
+              </p>
+            ) : null}
           </div>
 
           <div

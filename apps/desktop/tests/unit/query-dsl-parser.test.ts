@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  EMPTY_DATA_QUERY,
   dataQueryEquals,
   isEmptyDataQuery,
   parseDataQuery,
   parseFilter,
+  parseLimit,
   parseProjection,
+  parseSkip,
   parseSort,
 } from "@/shared/query-dsl/parser";
 import { tokenize } from "@/shared/query-dsl/tokenizer";
@@ -284,6 +287,43 @@ describe("parseProjection", () => {
     expect(ok(parseProjection("  "))).toEqual([]);
   });
 
+  it("parses MongoDB-style exclusions", () => {
+    const items = ok(parseProjection(`-id, -"Display Name"`));
+    expect(
+      items.map((item) => ({
+        value: item.column.value,
+        exclude: item.exclude,
+      })),
+    ).toEqual([
+      { value: "id", exclude: true },
+      { value: "Display Name", exclude: true },
+    ]);
+    expect(items[0]?.range).toEqual({ from: 0, to: 3 });
+    expect(items[1]?.range).toEqual({ from: 5, to: 20 });
+    expect(ok(parseProjection("id, name")).every((item) => !item.exclude)).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ["id, -name", "mixed-projection", "not both", 4],
+    ["-id, name", "mixed-projection", "not both", 5],
+    ["-id AS x", "unsupported-syntax", "can't have an alias", 4],
+    ["-id, -id", "duplicate-column", "already excluded", 6],
+    ["- id", "unsupported-syntax", "", 0],
+    ["-", "unsupported-syntax", "", 0],
+    ["-1", "unexpected-token", "Expected a column name", 0],
+  ])("rejects the exclusion %j", (input, code, message, from) => {
+    const error = firstError(parseProjection(input));
+    expect(error).toMatchObject({ code, field: "projection", from });
+    expect(error.message).toContain(message);
+  });
+
+  it("keeps - an error outside Project", () => {
+    expect(firstError(parseFilter("-id = 1")).code).toBe("unsupported-syntax");
+    expect(firstError(parseSort("-id")).code).toBe("unsupported-syntax");
+  });
+
   it.each([
     ["*", "unsupported-syntax", "Leave Project empty", 0],
     ["id name", "unexpected-token", "Use AS", 3],
@@ -335,28 +375,73 @@ describe("parseSort", () => {
   });
 });
 
+describe("parseSkip and parseLimit", () => {
+  it.each([
+    ["", null],
+    ["   ", null],
+    ["0", 0],
+    [" 25 ", 25],
+    ["1000000000000", 1_000_000_000_000],
+  ])("reads skip %j as %s", (input, expected) => {
+    expect(ok(parseSkip(input))).toBe(expected);
+  });
+
+  it("reads limits of at least one", () => {
+    expect(ok(parseLimit("1"))).toBe(1);
+    expect(ok(parseLimit(""))).toBeNull();
+  });
+
+  it.each([
+    ["skip", "-1", "whole number", 0, 2],
+    ["skip", " 1.5", "whole number", 1, 4],
+    ["skip", "1e3", "whole number", 0, 3],
+    ["skip", "10 OR 1", "whole number", 0, 7],
+    ["skip", "1000000000001", "at most", 0, 13],
+    ["limit", "0", "at least 1", 0, 1],
+    ["limit", "abc", "whole number", 0, 3],
+  ] as const)("rejects %s %j", (field, input, message, from, to) => {
+    const parse = field === "skip" ? parseSkip : parseLimit;
+    const error = firstError(parse(input));
+    expect(error).toMatchObject({ code: "invalid-number", field, from, to });
+    expect(error.message).toContain(message);
+  });
+});
+
 describe("parseDataQuery", () => {
   it("parses all fields and reports one error per failing field", () => {
     const result = parseDataQuery({
       filter: "id =",
       projection: "id",
       sort: "a 5",
+      skip: "x",
+      limit: "",
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.map((error) => error.field)).toEqual([
       "filter",
       "sort",
+      "skip",
     ]);
   });
 
   it("returns an empty AST for empty input", () => {
     expect(
-      ok(parseDataQuery({ filter: "", projection: "", sort: "" })),
+      ok(
+        parseDataQuery({
+          filter: "",
+          projection: "",
+          sort: "",
+          skip: "",
+          limit: "",
+        }),
+      ),
     ).toEqual({
       filter: null,
       projection: [],
       sort: [],
+      skip: null,
+      limit: null,
     });
   });
 
@@ -367,11 +452,15 @@ describe("parseDataQuery", () => {
     "pg_sleep(10)",
     "(SELECT secret FROM credentials)",
   ])("rejects the payload %j in every field", (payload) => {
-    for (const field of ["filter", "projection", "sort"] as const) {
+    for (const field of [
+      "filter",
+      "projection",
+      "sort",
+      "skip",
+      "limit",
+    ] as const) {
       const result = parseDataQuery({
-        filter: "",
-        projection: "",
-        sort: "",
+        ...EMPTY_DATA_QUERY,
         [field]: payload,
       });
       expect(result.ok).toBe(false);
@@ -383,15 +472,15 @@ describe("query input helpers", () => {
   it("compares trimmed input and detects empty queries", () => {
     expect(
       dataQueryEquals(
-        { filter: " id = 1 ", projection: "", sort: "" },
-        { filter: "id = 1", projection: " ", sort: "" },
+        { ...EMPTY_DATA_QUERY, filter: " id = 1 ", limit: "5 " },
+        { ...EMPTY_DATA_QUERY, filter: "id = 1", projection: " ", limit: "5" },
       ),
     ).toBe(true);
-    expect(isEmptyDataQuery({ filter: " ", projection: "", sort: "" })).toBe(
-      true,
-    );
-    expect(isEmptyDataQuery({ filter: "", projection: "", sort: "a" })).toBe(
-      false,
-    );
+    expect(
+      dataQueryEquals(EMPTY_DATA_QUERY, { ...EMPTY_DATA_QUERY, skip: "1" }),
+    ).toBe(false);
+    expect(isEmptyDataQuery({ ...EMPTY_DATA_QUERY, filter: " " })).toBe(true);
+    expect(isEmptyDataQuery({ ...EMPTY_DATA_QUERY, sort: "a" })).toBe(false);
+    expect(isEmptyDataQuery({ ...EMPTY_DATA_QUERY, limit: "10" })).toBe(false);
   });
 });

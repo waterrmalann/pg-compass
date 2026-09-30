@@ -226,6 +226,20 @@ export interface ExportDataParams {
   sql?: string;
 }
 
+/** Parameters for previewing the SQL behind a Data-tab query export. */
+export interface PreviewQuerySqlParams {
+  connectionId: string;
+  schema: string;
+  table: string;
+  query: DataQueryInput;
+}
+
+/** Compiled SQL with its positional parameter values ($1, $2, …). */
+export interface PreviewQuerySqlResult {
+  sql: string;
+  values: unknown[];
+}
+
 /** Result returned after a successful data export. */
 export interface ExportResult {
   filePath: string;

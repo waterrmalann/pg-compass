@@ -199,6 +199,17 @@ export function tokenize(
       continue;
     }
 
+    // `-name` / `-"Name"` in Project excludes a column (MongoDB style).
+    const startsExclusion =
+      field === "projection" &&
+      char === "-" &&
+      (IDENTIFIER_START.test(next) || next === '"');
+    if (startsExclusion) {
+      tokens.push({ kind: "exclude", range: { from: start, to: start + 1 } });
+      position += 1;
+      continue;
+    }
+
     const startsNumber =
       DIGIT.test(char) ||
       (char === "." && DIGIT.test(next)) ||

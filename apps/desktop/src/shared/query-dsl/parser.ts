@@ -65,22 +65,18 @@ export const EMPTY_DATA_QUERY: DataQueryInput = {
   filter: "",
   projection: "",
   sort: "",
+  skip: "",
+  limit: "",
 };
 
+const QUERY_FIELDS = ["filter", "projection", "sort", "skip", "limit"] as const;
+
 export function isEmptyDataQuery(query: DataQueryInput): boolean {
-  return (
-    query.filter.trim() === "" &&
-    query.projection.trim() === "" &&
-    query.sort.trim() === ""
-  );
+  return QUERY_FIELDS.every((field) => query[field].trim() === "");
 }
 
 export function dataQueryEquals(a: DataQueryInput, b: DataQueryInput): boolean {
-  return (
-    a.filter.trim() === b.filter.trim() &&
-    a.projection.trim() === b.projection.trim() &&
-    a.sort.trim() === b.sort.trim()
-  );
+  return QUERY_FIELDS.every((field) => a[field].trim() === b[field].trim());
 }
 
 /** Thrown inside a field parser; converted to a structured error at the edge. */
@@ -95,6 +91,7 @@ class DslSyntaxError extends Error {
 }
 
 function describeToken(token: Token): string {
+  if (token.kind === "exclude") return '"-"';
   if (token.kind === "string") return "a string";
   if (token.kind === "number") return `"${token.value}"`;
   if (token.kind === "quoted-identifier") return `"${token.value}"`;
@@ -604,12 +601,22 @@ function parseProjectionTokens(
   const seenOutputs = new Set<string>();
 
   while (true) {
+    const excludeToken = stream.peek();
+    const exclude = excludeToken?.kind === "exclude";
+    if (exclude) stream.next();
     const column = parseIdentifier(stream, "a column name");
     rejectFunctionCall(stream, column);
 
     let alias: IdentifierNode | undefined;
     if (stream.isWord("AS")) {
-      stream.next();
+      const asToken = stream.next()!;
+      if (exclude) {
+        throw new DslSyntaxError(
+          "unsupported-syntax",
+          "An excluded column has no output, so it can't have an alias.",
+          asToken.range,
+        );
+      }
       alias = parseIdentifier(stream, "an alias after AS");
     } else {
       const token = stream.peek();
@@ -629,27 +636,43 @@ function parseProjectionTokens(
     if (seenColumns.has(columnKey)) {
       throw new DslSyntaxError(
         "duplicate-column",
-        `"${column.value}" is already projected.`,
+        `"${column.value}" is already ${exclude ? "excluded" : "projected"}.`,
         column.range,
       );
     }
     seenColumns.add(columnKey);
 
-    const output = alias ?? column;
-    const outputKey = identifierKey(output);
-    if (seenOutputs.has(outputKey)) {
+    const first = items[0];
+    if (first && first.exclude !== exclude) {
       throw new DslSyntaxError(
-        "duplicate-output",
-        `Two columns would both be named "${output.value}". Give one a different alias.`,
-        output.range,
+        "mixed-projection",
+        "List only columns to include, or only columns to exclude (-column), not both.",
+        {
+          from: exclude ? excludeToken!.range.from : column.range.from,
+          to: column.range.to,
+        },
       );
     }
-    seenOutputs.add(outputKey);
 
+    if (!exclude) {
+      const output = alias ?? column;
+      const outputKey = identifierKey(output);
+      if (seenOutputs.has(outputKey)) {
+        throw new DslSyntaxError(
+          "duplicate-output",
+          `Two columns would both be named "${output.value}". Give one a different alias.`,
+          output.range,
+        );
+      }
+      seenOutputs.add(outputKey);
+    }
+
+    const from = exclude ? excludeToken!.range.from : column.range.from;
     items.push({
       column,
       ...(alias ? { alias } : {}),
-      range: { from: column.range.from, to: (alias ?? column).range.to },
+      exclude,
+      range: { from, to: (alias ?? column).range.to },
     });
 
     const separator = stream.peek();
@@ -798,19 +821,69 @@ export function parseSort(input: string): DataQueryResult<Sort> {
   return parseField("sort", input, parseSortTokens);
 }
 
-/** Parses all three fields; reports at most one syntax error per field. */
+/** Largest Skip/Limit accepted; keeps values exact as JavaScript numbers. */
+export const MAX_ROW_COUNT = 1_000_000_000_000;
+
+/**
+ * Skip and Limit are plain whole numbers. Empty means "no skip" or "no
+ * limit"; Limit must be at least 1 so an empty field is the only way to
+ * say "all rows".
+ */
+function parseRowCount(
+  field: "skip" | "limit",
+  input: string,
+): DataQueryResult<number | null> {
+  const text = input.trim();
+  if (text === "") return { ok: true, value: null };
+  const from = input.indexOf(text);
+  const to = from + text.length;
+  const label = field === "skip" ? "Skip" : "Limit";
+  const fail = (message: string): DataQueryResult<number | null> => ({
+    ok: false,
+    errors: [{ code: "invalid-number", field, message, from, to }],
+  });
+  if (!/^\d+$/.test(text)) {
+    return fail(`${label} must be a whole number, or empty.`);
+  }
+  const value = Number(text);
+  if (value > MAX_ROW_COUNT) {
+    return fail(
+      `${label} can be at most ${MAX_ROW_COUNT.toLocaleString("en-US")}.`,
+    );
+  }
+  if (field === "limit" && value === 0) {
+    return fail("Limit must be at least 1, or empty for no limit.");
+  }
+  return { ok: true, value };
+}
+
+export function parseSkip(input: string): DataQueryResult<number | null> {
+  return parseRowCount("skip", input);
+}
+
+export function parseLimit(input: string): DataQueryResult<number | null> {
+  return parseRowCount("limit", input);
+}
+
+/** Parses every field; reports at most one syntax error per field. */
 export function parseDataQuery(
   input: DataQueryInput,
 ): DataQueryResult<DataQueryAst> {
   const filter = parseFilter(input.filter);
   const projection = parseProjection(input.projection);
   const sort = parseSort(input.sort);
+  const skip = parseSkip(input.skip);
+  const limit = parseLimit(input.limit);
 
   const errors: QueryDslError[] = [];
   if (!filter.ok) errors.push(...filter.errors);
   if (!projection.ok) errors.push(...projection.errors);
   if (!sort.ok) errors.push(...sort.errors);
-  if (!filter.ok || !projection.ok || !sort.ok) return { ok: false, errors };
+  if (!skip.ok) errors.push(...skip.errors);
+  if (!limit.ok) errors.push(...limit.errors);
+  if (!filter.ok || !projection.ok || !sort.ok || !skip.ok || !limit.ok) {
+    return { ok: false, errors };
+  }
 
   return {
     ok: true,
@@ -818,6 +891,8 @@ export function parseDataQuery(
       filter: filter.value,
       projection: projection.value,
       sort: sort.value,
+      skip: skip.value,
+      limit: limit.value,
     },
   };
 }

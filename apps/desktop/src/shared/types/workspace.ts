@@ -91,5 +91,5 @@ export const DEFAULT_RELATION_SESSION: RelationSessionState = {
   activeSubTab: "data",
   dataViewMode: "table",
   dataPageSize: 50,
-  dataQuery: { filter: "", projection: "", sort: "" },
+  dataQuery: { filter: "", projection: "", sort: "", skip: "", limit: "" },
 };

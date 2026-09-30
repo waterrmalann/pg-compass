@@ -12,7 +12,7 @@ const COLUMNS: QueryColumnMetadata[] = [
 ];
 
 function labels(
-  field: "filter" | "projection" | "sort",
+  field: "filter" | "projection" | "sort" | "skip" | "limit",
   text: string,
 ): string[] | null {
   return (
@@ -93,6 +93,17 @@ describe("suggestDslCompletions", () => {
     expect(labels("projection", "id, ")).toContain("name");
     expect(labels("projection", "id ")).toEqual(["AS"]);
     expect(labels("projection", "id AS ")).toBeNull();
+  });
+
+  it("completes columns after - and nothing after an excluded column", () => {
+    expect(labels("projection", "-")).toContain("name");
+    expect(labels("projection", "-id, -")).toContain('"CreatedAt"');
+    expect(labels("projection", "-id ")).toBeNull();
+  });
+
+  it("offers nothing for Skip and Limit", () => {
+    expect(labels("skip", "")).toBeNull();
+    expect(labels("limit", "1")).toBeNull();
   });
 
   it("completes sort columns and directions", () => {

@@ -9,9 +9,13 @@ export interface DataQueryInput {
   filter: string;
   projection: string;
   sort: string;
+  /** Rows to skip before the first result; empty means none. */
+  skip: string;
+  /** Maximum rows in the result; empty means no limit. */
+  limit: string;
 }
 
-export type QueryDslField = "filter" | "projection" | "sort";
+export type QueryDslField = "filter" | "projection" | "sort" | "skip" | "limit";
 
 export type QueryDslErrorCode =
   | "unexpected-character"
@@ -25,6 +29,8 @@ export type QueryDslErrorCode =
   | "limit-exceeded"
   | "duplicate-column"
   | "duplicate-output"
+  | "mixed-projection"
+  | "invalid-number"
   | "unknown-column"
   | "case-mismatch"
   | "operator-not-supported"
@@ -70,7 +76,9 @@ export type Token =
       value: "=" | "!=" | "<>" | ">" | ">=" | "<" | "<=";
       range: SourceRange;
     }
-  | { kind: "punctuation"; value: "(" | ")" | ","; range: SourceRange };
+  | { kind: "punctuation"; value: "(" | ")" | ","; range: SourceRange }
+  /** Projection only: the `-` that excludes the column right after it. */
+  | { kind: "exclude"; range: SourceRange };
 
 // ---------------------------------------------------------------------------
 // AST
@@ -119,6 +127,8 @@ export type FilterExpression =
 export interface ProjectionItem {
   column: IdentifierNode;
   alias?: IdentifierNode;
+  /** `-column`: return every column except this one. */
+  exclude: boolean;
   range: SourceRange;
 }
 
@@ -136,6 +146,8 @@ export interface DataQueryAst {
   filter: FilterExpression | null;
   projection: Projection;
   sort: Sort;
+  skip: number | null;
+  limit: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +204,8 @@ export interface BoundDataQuery {
   filter: BoundFilter | null;
   projection: { column: string; outputName: string; aliased: boolean }[];
   sort: { column: string; direction: "ASC" | "DESC" }[];
+  skip: number | null;
+  limit: number | null;
 }
 
 export type DataQueryResult<T> =

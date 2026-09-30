@@ -32,24 +32,35 @@ export interface PreparedDataQuery {
 }
 
 /**
- * Loads catalog metadata with `client` (inside the caller's transaction),
- * binds the parsed query against it and compiles SQL fragments.
+ * Table lock taken before the catalog is read. It conflicts with the
+ * ACCESS EXCLUSIVE lock every ALTER TABLE needs, so the columns and types
+ * the query was bound against can't change before the transaction ends.
+ * Reads use ACCESS SHARE (what SELECT takes anyway); deletes use ROW
+ * EXCLUSIVE (what DELETE takes anyway).
+ */
+export type RelationLockMode = "ACCESS SHARE" | "ROW EXCLUSIVE";
+
+/**
+ * Locks the relation, loads its catalog metadata with `client` (inside the
+ * caller's transaction), binds the parsed query against it and compiles
+ * SQL fragments.
  */
 export async function bindAndCompile(
   client: PoolClient,
   schema: string,
   table: string,
   ast: DataQueryAst,
+  lockMode: RelationLockMode,
 ): Promise<PreparedDataQuery> {
+  const relationSql = `${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const lockSql =
+    lockMode === "ROW EXCLUSIVE" ? "ROW EXCLUSIVE" : "ACCESS SHARE";
+  await client.query(`LOCK TABLE ${relationSql} IN ${lockSql} MODE`);
   const metadata = await loadRelationMetadata(client, schema, table);
   const bound = bindDataQuery(ast, metadata.columns);
   if (!bound.ok) throw new QueryDslFailure(bound.errors);
   return {
     metadata,
-    compiled: compileDataQuery(
-      bound.value,
-      metadata.primaryKey,
-      `${quoteIdent(schema)}.${quoteIdent(table)}`,
-    ),
+    compiled: compileDataQuery(bound.value, metadata.primaryKey, relationSql),
   };
 }

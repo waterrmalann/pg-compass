@@ -21,6 +21,10 @@ export interface CompiledDataQuery {
   /** Filter parameters, in placeholder order ($1, $2, …). */
   values: unknown[];
   hasProjection: boolean;
+  /** Rows skipped before the result starts, or null. */
+  skip: number | null;
+  /** Maximum rows in the result, or null for no limit. */
+  limit: number | null;
 }
 
 const OPERATOR_SQL: Record<ComparisonOperator, string> = {
@@ -112,5 +116,55 @@ export function compileDataQuery(
     orderBySql: orderParts.join(", "),
     values,
     hasProjection,
+    skip: bound.skip,
+    limit: bound.limit,
   };
+}
+
+/**
+ * Where one Data-tab page falls inside the query's Skip/Limit window.
+ * `count` is the number of rows the query returns in total (the Rows
+ * badge); `offset`/`limit` go straight into the page's SQL.
+ */
+export function pageWindow(
+  compiled: Pick<CompiledDataQuery, "skip" | "limit">,
+  page: number,
+  pageSize: number,
+  matchingRows: number,
+): { count: number; offset: number; limit: number } {
+  const skip = compiled.skip ?? 0;
+  const afterSkip = Math.max(0, matchingRows - skip);
+  const count =
+    compiled.limit === null ? afterSkip : Math.min(afterSkip, compiled.limit);
+  const pageStart = (page - 1) * pageSize;
+  const rowsLeft = Math.max(0, count - pageStart);
+  return {
+    count,
+    offset: skip + pageStart,
+    limit: Math.min(pageSize, rowsLeft),
+  };
+}
+
+/**
+ * The complete `SELECT` for a compiled query over a whole relation, with
+ * Skip/Limit as parameters after the filter's. Used by export and by the
+ * SQL preview, so the preview shows exactly what the export runs.
+ */
+export function buildRelationQuery(
+  relationSql: string,
+  compiled: CompiledDataQuery,
+): { text: string; values: unknown[] } {
+  const values = [...compiled.values];
+  const lines = [`SELECT ${compiled.selectListSql}`, `FROM ${relationSql}`];
+  if (compiled.whereSql) lines.push(`WHERE ${compiled.whereSql}`);
+  if (compiled.orderBySql) lines.push(`ORDER BY ${compiled.orderBySql}`);
+  if (compiled.skip !== null) {
+    values.push(compiled.skip);
+    lines.push(`OFFSET $${values.length}`);
+  }
+  if (compiled.limit !== null) {
+    values.push(compiled.limit);
+    lines.push(`LIMIT $${values.length}`);
+  }
+  return { text: lines.join("\n"), values };
 }

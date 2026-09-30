@@ -29,6 +29,7 @@ export const TableDataChannels = {
   SHOW_SAVE_DIALOG: "table-data:show-save-dialog",
   SHOW_OPEN_DIALOG: "table-data:show-open-dialog",
   EXPORT_DATA: "table-data:export-data",
+  PREVIEW_QUERY_SQL: "table-data:preview-query-sql",
   EXPORT_PROGRESS: "table-data:export-progress",
   SQL_DUMP: "table-data:sql-dump",
   IMPORT_DATA: "table-data:import-data",

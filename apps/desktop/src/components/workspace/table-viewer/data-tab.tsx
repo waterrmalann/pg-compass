@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   LayoutList,
@@ -82,7 +82,11 @@ function DataViewContent({
   );
 }
 
-function DataContent({
+/**
+ * Memoized so query-toolbar activity (errors appearing or clearing) never
+ * re-renders a large grid whose inputs didn't change.
+ */
+const DataContent = memo(function DataContent({
   viewMode,
   columns,
   rows,
@@ -124,7 +128,7 @@ function DataContent({
       </div>
     </div>
   );
-}
+});
 
 interface DataTabProps {
   connectionId: string;
@@ -172,21 +176,15 @@ export function DataTab({
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(session?.dataPageSize ?? 50);
-  // `activeQuery` is the last successfully applied query; `draft` is
-  // what the user is editing. Rows, pagination, export and delete only ever
-  // use the active query.
+  // `activeQuery` is the last successfully applied query. Drafts live in
+  // the toolbar so typing never re-renders this component or its grid.
+  // Rows, pagination, export and delete only ever use the active query.
   const [activeQuery, setActiveQuery] = useState<DataQueryInput>(
     session?.dataQuery ?? EMPTY_DATA_QUERY,
   );
-  const [draft, setDraft] = useState<DataQueryInput>(
-    session?.dataQuery ?? EMPTY_DATA_QUERY,
-  );
   const [dslErrors, setDslErrors] = useState<QueryDslError[]>([]);
-  const [optionsOpen, setOptionsOpen] = useState(
-    Boolean(
-      session?.dataQuery.projection.trim() || session?.dataQuery.sort.trim(),
-    ),
-  );
+  // The query of an Apply still waiting for its rows, if any.
+  const pendingApplyRef = useRef<DataQueryInput | null>(null);
   const [queryColumns, setQueryColumns] = useState<QueryColumnMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewModeState] = useState<ViewMode>(
@@ -324,15 +322,15 @@ export function DataTab({
     onSessionChange?.({ dataViewMode: next });
   }
 
-  function handleDraftChange(field: QueryDslField, value: string) {
-    setDraft((previous) => ({ ...previous, [field]: value }));
-    // Ranges in an edited field no longer point at the right text.
+  const handleFieldEdited = useCallback((field: QueryDslField) => {
+    // Ranges in an edited field no longer point at the right text. Returning
+    // the same array when nothing changes lets React skip the re-render.
     setDslErrors((previous) =>
       previous.some((dslError) => dslError.field === field)
         ? previous.filter((dslError) => dslError.field !== field)
         : previous,
     );
-  }
+  }, []);
 
   /**
    * Validates and runs a query. Only a query that parses and binds in the
@@ -344,29 +342,31 @@ export function DataTab({
     const localErrors = validateDraft(next, queryColumns);
     if (localErrors.length > 0) {
       setDslErrors(localErrors);
-      const optionErrors = localErrors.some(
-        (dslError) => dslError.field !== "filter",
-      );
-      if (optionErrors) setOptionsOpen(true);
       return;
     }
     setDslErrors([]);
-    if (dataQueryEquals(next, activeQuery)) return;
+    if (dataQueryEquals(next, activeQuery)) {
+      // A slower Apply of a different query may still be in flight (say the
+      // user hit Clear while it loads). Reloading the active query makes
+      // that response stale, so it can never install itself afterwards.
+      if (pendingApplyRef.current) {
+        pendingApplyRef.current = null;
+        void loadRows(page, pageSize, activeQuery);
+      }
+      return;
+    }
 
+    pendingApplyRef.current = next;
     const outcome = await loadRows(1, pageSize, next);
+    if (pendingApplyRef.current === next) pendingApplyRef.current = null;
     if (outcome === "stale" || outcome === "dsl-error") return;
     setActiveQuery(next);
     setPage(1);
     onSessionChange?.({ dataQuery: next });
   }
 
-  function handleApply() {
-    void applyQuery(draft);
-  }
-
-  function handleClear() {
-    setDraft(EMPTY_DATA_QUERY);
-    void applyQuery(EMPTY_DATA_QUERY);
+  function handleApply(next: DataQueryInput) {
+    void applyQuery(next);
   }
 
   const handleRowUpdated = useCallback(
@@ -421,15 +421,11 @@ export function DataTab({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <DataQueryToolbar
-        draft={draft}
         activeQuery={activeQuery}
         errors={dslErrors}
         columns={queryColumns}
-        optionsOpen={optionsOpen}
-        onOptionsOpenChange={setOptionsOpen}
-        onDraftChange={handleDraftChange}
         onApply={handleApply}
-        onClear={handleClear}
+        onFieldEdited={handleFieldEdited}
         trailing={
           <SegmentedControl
             ariaLabel="Data view mode"
@@ -556,7 +552,6 @@ export function DataTab({
           schema={schema}
           table={table}
           query={activeQuery}
-          totalCount={totalCount}
           initialPreviewMode={viewMode === "table" ? "table" : "json"}
           onDeleted={handleRowsDeleted}
         />

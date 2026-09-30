@@ -15,6 +15,7 @@ import {
 } from "./pg-utils";
 import { buildEnumTypeMap, buildTypeMap } from "./table-data-utils";
 import { resolveForeignKeys } from "./table-data-fk";
+import { pageWindow } from "./query-dsl/compile";
 import { bindAndCompile, parseDataQueryOrThrow } from "./query-dsl/prepare";
 import { loadRelationMetadata } from "./query-dsl/relation-metadata";
 
@@ -83,11 +84,10 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
 
   return withPoolClient(params.connectionId, async (client) => {
     const qualifiedTable = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
-    const offset = (params.page - 1) * params.pageSize;
 
     // One read-only transaction: catalog binding, count and data all see
-    // the same snapshot, so a concurrent schema change can't slip between
-    // validation and execution.
+    // the same snapshot, and the ACCESS SHARE lock taken before binding
+    // keeps a concurrent ALTER TABLE out until the page is read.
     await client.query("BEGIN READ ONLY");
     try {
       const { metadata, compiled } = await bindAndCompile(
@@ -95,6 +95,7 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
         params.schema,
         params.table,
         ast,
+        "ACCESS SHARE",
       );
       const whereFragment = compiled.whereSql
         ? `WHERE ${compiled.whereSql}`
@@ -112,13 +113,21 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
         `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`,
         compiled.values,
       );
-      const totalCount = parseCountRow(countResult.rows[0]?.count);
+      const matchingRows = parseCountRow(countResult.rows[0]?.count);
+      // Skip/Limit define the result; pages are windows inside it.
+      const window = pageWindow(
+        compiled,
+        params.page,
+        params.pageSize,
+        matchingRows,
+      );
+      const totalCount = window.count;
 
       const limitPlaceholder = `$${compiled.values.length + 1}`;
       const offsetPlaceholder = `$${compiled.values.length + 2}`;
       const dataResult = await client.query(
         `SELECT ${compiled.selectListSql} FROM ${qualifiedTable} ${whereFragment} ${orderByFragment} LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
-        [...compiled.values, params.pageSize, offset],
+        [...compiled.values, window.limit, window.offset],
       );
 
       const nullability = compiled.hasProjection

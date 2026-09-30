@@ -4,6 +4,7 @@ import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { DataQuerySummary } from "@/components/workspace/data-query-summary";
 import {
   Dialog,
   DialogContent,
@@ -162,26 +163,13 @@ export function ExportDialog({
           </div>
         )}
 
-        {dataQuery && !sql && (
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-lg border border-border bg-code p-3 text-xs">
-            {(
-              [
-                ["Filter", dataQuery.filter],
-                ["Project", dataQuery.projection],
-                ["Sort", dataQuery.sort],
-              ] as const
-            ).map(([label, text]) => (
-              <div key={label} className="contents">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd
-                  className="truncate font-mono"
-                  title={text.trim() || undefined}
-                >
-                  {text.trim() || "—"}
-                </dd>
-              </div>
-            ))}
-          </dl>
+        {dataQuery && !sql && schema && table && (
+          <DataQuerySummary
+            connectionId={connectionId}
+            schema={schema}
+            table={table}
+            query={dataQuery}
+          />
         )}
 
         <DialogFooter>

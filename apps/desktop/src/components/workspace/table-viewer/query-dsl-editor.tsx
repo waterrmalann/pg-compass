@@ -127,7 +127,7 @@ export function QueryDslEditor({
         if (!typedSomething && !context.explicit) {
           // Open automatically after a separator, not on every keystroke.
           const previous = before.at(-1) ?? "";
-          if (!/[\s(,]/.test(previous) && before.length > 0) return null;
+          if (!/[\s(,-]/.test(previous) && before.length > 0) return null;
         }
         return {
           from: result.from,

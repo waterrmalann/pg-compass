@@ -61,6 +61,8 @@ import type {
   InsertRowParams,
   InsertRowResult,
   OpenDialogOptions,
+  PreviewQuerySqlParams,
+  PreviewQuerySqlResult,
   SaveDialogOptions,
   SearchForeignKeyParams,
   SearchForeignKeyResult,
@@ -128,6 +130,9 @@ export interface TableDataApi {
   showSaveDialog(options: SaveDialogOptions): Promise<IpcResult<string | null>>;
   showOpenDialog(options: OpenDialogOptions): Promise<IpcResult<string | null>>;
   exportData(params: ExportDataParams): Promise<IpcResult<ExportResult>>;
+  previewQuerySql(
+    params: PreviewQuerySqlParams,
+  ): Promise<IpcResult<PreviewQuerySqlResult>>;
   sqlDump(params: SqlDumpParams): Promise<IpcResult<ExportResult>>;
   importData(params: ImportDataParams): Promise<IpcResult<ImportResult>>;
   insertRow(params: InsertRowParams): Promise<IpcResult<InsertRowResult>>;

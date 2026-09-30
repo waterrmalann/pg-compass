@@ -38,6 +38,7 @@ import type {
   ImportDataParams,
   InsertRowParams,
   OpenDialogOptions,
+  PreviewQuerySqlParams,
   SaveDialogOptions,
   SearchForeignKeyParams,
   SqlDumpParams,
@@ -455,10 +456,18 @@ export function validateTableMetaParams(value: unknown): TableMetaParams {
  * Shape check only: each field is a bounded string. The DSL itself is parsed
  * and bound later so its errors come back with field-specific ranges.
  */
+const DATA_QUERY_FIELDS = [
+  "filter",
+  "projection",
+  "sort",
+  "skip",
+  "limit",
+] as const;
+
 function validateDataQueryInput(value: unknown, name: string): void {
   const query = asRecord(value, name);
-  assertAllowedKeys(query, name, ["filter", "projection", "sort"]);
-  for (const field of ["filter", "projection", "sort"] as const) {
+  assertAllowedKeys(query, name, DATA_QUERY_FIELDS);
+  for (const field of DATA_QUERY_FIELDS) {
     asString(query[field], `${name}.${field}`, {
       maxLength: MAX_QUERY_DSL_LENGTH,
       allowEmpty: true,
@@ -476,6 +485,14 @@ export function validateGetRowsParams(value: unknown): GetRowsParams {
   asInteger(params.pageSize, "getRows.pageSize", 1, 100);
   validateDataQueryInput(params.query, "getRows.query");
   return value as GetRowsParams;
+}
+
+export function validatePreviewQuerySqlParams(
+  value: unknown,
+): PreviewQuerySqlParams {
+  const params = validateTableIdentity(value, "previewQuerySql", ["query"]);
+  validateDataQueryInput(params.query, "previewQuerySql.query");
+  return value as PreviewQuerySqlParams;
 }
 
 export function validateExecuteQueryParams(value: unknown): ExecuteQueryParams {

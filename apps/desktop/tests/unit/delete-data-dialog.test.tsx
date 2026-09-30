@@ -71,8 +71,9 @@ function renderDialog(
         filter: "status = 'inactive'",
         projection: "id, name AS label",
         sort: "name DESC",
+        skip: "",
+        limit: "",
       }}
-      totalCount={2}
       initialPreviewMode="table"
       onDeleted={onDeleted}
       {...overrides}
@@ -90,7 +91,7 @@ describe("DeleteDataDialog", () => {
     const { getRows, deleteRows } = installTableDataApiMock();
     const { onOpenChange, onDeleted } = renderDialog();
 
-    expect(screen.getByText("Delete 2 documents")).toBeInTheDocument();
+    expect(await screen.findByText("Delete 2 documents")).toBeInTheDocument();
     expect(screen.getByLabelText("Current delete filter")).toHaveValue(
       "status = 'inactive'",
     );
@@ -106,6 +107,8 @@ describe("DeleteDataDialog", () => {
         filter: "status = 'inactive'",
         projection: "",
         sort: "name DESC",
+        skip: "",
+        limit: "",
       },
     });
     expect(await screen.findByText("Alice")).toBeInTheDocument();
@@ -126,8 +129,7 @@ describe("DeleteDataDialog", () => {
   it("shows no-filter copy and sends an empty filter when deleting all documents", async () => {
     const { getRows, deleteRows } = installTableDataApiMock();
     renderDialog({
-      query: { filter: "", projection: "", sort: "" },
-      totalCount: 2,
+      query: { filter: "", projection: "", sort: "", skip: "", limit: "" },
     });
 
     expect(screen.getByLabelText("Current delete filter")).toHaveValue(
@@ -136,7 +138,7 @@ describe("DeleteDataDialog", () => {
     await waitFor(() =>
       expect(getRows).toHaveBeenCalledWith(
         expect.objectContaining({
-          query: { filter: "", projection: "", sort: "" },
+          query: { filter: "", projection: "", sort: "", skip: "", limit: "" },
         }),
       ),
     );
@@ -175,12 +177,40 @@ describe("DeleteDataDialog", () => {
         },
       })),
     });
-    renderDialog({ totalCount: 0 });
+    renderDialog();
 
     expect(
       await screen.findByText("No documents match the current filter."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  });
+
+  it("counts every row the filter matches, ignoring Skip and Limit", async () => {
+    const getRows = vi.fn(async () => ({
+      success: true,
+      data: { columns, rows, totalCount: 57, primaryKey: ["id"] },
+    }));
+    installTableDataApiMock({ getRows });
+    renderDialog({
+      query: {
+        filter: "status = 'inactive'",
+        projection: "",
+        sort: "",
+        skip: "10",
+        limit: "5",
+      },
+    });
+
+    expect(screen.getByText("Delete documents")).toBeInTheDocument();
+    expect(await screen.findByText("Delete 57 documents")).toBeInTheDocument();
+    expect(getRows).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({ skip: "", limit: "" }),
+      }),
+    );
+    expect(
+      screen.getByText(/Skip and Limit don.t apply here/),
+    ).toBeInTheDocument();
   });
 
   it("shows preview errors and keeps the destructive action disabled", async () => {

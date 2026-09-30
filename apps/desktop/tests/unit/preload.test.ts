@@ -38,6 +38,7 @@ describe("preload API contract", () => {
         onImportProgress: (callback: () => void) => () => void;
         getRows: (params: unknown) => Promise<unknown>;
         getQueryColumns: (params: unknown) => Promise<unknown>;
+        previewQuerySql: (params: unknown) => Promise<unknown>;
         getTriggers: (params: unknown) => Promise<unknown>;
         getTypes: (params: unknown) => Promise<unknown>;
         toggleTrigger: (params: unknown) => Promise<unknown>;
@@ -80,10 +81,23 @@ describe("preload API contract", () => {
       ...triggerMetaParams,
       page: 1,
       pageSize: 25,
-      query: { filter: "id > 1", projection: "id", sort: "id DESC" },
+      query: {
+        filter: "id > 1",
+        projection: "id",
+        sort: "id DESC",
+        skip: "",
+        limit: "",
+      },
     };
     await exposed.tableDataApi.getRows(getRowsParams);
     expect(invoke).toHaveBeenCalledWith("table-data:get-rows", getRowsParams);
+
+    const previewParams = { ...getRowsParams, page: undefined };
+    await exposed.tableDataApi.previewQuerySql(previewParams);
+    expect(invoke).toHaveBeenCalledWith(
+      "table-data:preview-query-sql",
+      previewParams,
+    );
 
     await exposed.tableDataApi.getTypes(triggerMetaParams);
     expect(invoke).toHaveBeenCalledWith(

@@ -361,12 +361,14 @@ export async function deleteRows(
     throw new Error("Cannot delete rows: read-only mode is enabled.");
   }
 
-  // Only the filter decides which rows are deleted; projection and sort
-  // never apply. Syntax errors fail before any database work.
+  // Only the filter decides which rows are deleted; projection, sort,
+  // skip and limit never apply. Syntax errors fail before any database work.
   const ast = parseDataQueryOrThrow({
     filter: params.filter,
     projection: "",
     sort: "",
+    skip: "",
+    limit: "",
   });
 
   return withPoolClient(params.connectionId, async (client) => {
@@ -375,11 +377,14 @@ export async function deleteRows(
     try {
       // Recompile against the catalog inside the delete's own transaction:
       // a column dropped or retyped since the preview fails closed here.
+      // The lock is taken before binding, so an ALTER TABLE can't slip in
+      // between reading the catalog and running the DELETE.
       const { metadata, compiled } = await bindAndCompile(
         client,
         params.schema,
         params.table,
         ast,
+        "ROW EXCLUSIVE",
       );
       if (metadata.kind !== "table") {
         throw new Error("Cannot delete rows: only tables support deletion.");

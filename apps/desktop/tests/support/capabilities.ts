@@ -40,3 +40,23 @@ export async function hasColumn(
     return Boolean(result.rows[0]?.exists);
   });
 }
+
+/**
+ * Whether `pg_locks` shows this session's own table locks. PGlite runs
+ * single-user and records none, so lock assertions only run on PostgreSQL.
+ */
+export async function tracksTableLocks(connectionId: string): Promise<boolean> {
+  return withPoolClient(connectionId, async (client) => {
+    await client.query("BEGIN");
+    try {
+      await client.query("LOCK TABLE app.users IN ACCESS SHARE MODE");
+      const result = await client.query<{ count: string }>(
+        `SELECT count(*) AS count FROM pg_locks
+         WHERE relation = 'app.users'::regclass AND pid = pg_backend_pid()`,
+      );
+      return Number(result.rows[0]?.count ?? 0) > 0;
+    } finally {
+      await client.query("ROLLBACK");
+    }
+  });
+}

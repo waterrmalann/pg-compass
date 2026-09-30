@@ -9,11 +9,13 @@ import { TableDataChannels } from "../shared/constants/ipc-channels";
 import type {
   ExportDataParams,
   ExportResult,
+  PreviewQuerySqlParams,
+  PreviewQuerySqlResult,
   SqlDumpParams,
 } from "../shared/types/table-data";
 import { extendedQuery, quoteIdent, withPoolClient } from "./pg-utils";
 import { isReadOnlyQuery } from "./table-data-rows";
-import type { CompiledDataQuery } from "./query-dsl/compile";
+import { buildRelationQuery } from "./query-dsl/compile";
 import { bindAndCompile, parseDataQueryOrThrow } from "./query-dsl/prepare";
 
 function createTemporaryExportPath(filePath: string): string {
@@ -113,18 +115,31 @@ export function buildExportSql(params: ExportDataParams): string {
   return `SELECT * FROM ${qualifiedTable}`;
 }
 
-/** `SELECT` for a compiled Data-tab query over a whole relation. */
-export function buildRelationQuerySql(
-  schema: string,
-  table: string,
-  compiled: CompiledDataQuery,
-): string {
-  const qualifiedTable = `${quoteIdent(schema)}.${quoteIdent(table)}`;
-  const whereFragment = compiled.whereSql ? ` WHERE ${compiled.whereSql}` : "";
-  const orderByFragment = compiled.orderBySql
-    ? ` ORDER BY ${compiled.orderBySql}`
-    : "";
-  return `SELECT ${compiled.selectListSql} FROM ${qualifiedTable}${whereFragment}${orderByFragment}`;
+/**
+ * The exact SQL and parameters "Export selected query" runs for a Data-tab
+ * query, for the export dialog's preview. Nothing is executed.
+ */
+export async function previewQuerySql(
+  params: PreviewQuerySqlParams,
+): Promise<PreviewQuerySqlResult> {
+  const ast = parseDataQueryOrThrow(params.query);
+  return withPoolClient(params.connectionId, async (client) => {
+    await client.query("BEGIN READ ONLY");
+    try {
+      const { compiled } = await bindAndCompile(
+        client,
+        params.schema,
+        params.table,
+        ast,
+        "ACCESS SHARE",
+      );
+      const relationSql = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
+      const { text, values } = buildRelationQuery(relationSql, compiled);
+      return { sql: text, values };
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+    }
+  });
 }
 
 export async function exportData(
@@ -146,16 +161,19 @@ export async function exportData(
       let sql = buildExportSql(params);
       let values: unknown[] = [];
       if (queryAst) {
-        // Same parser, binder and compiler as row loading, without
-        // pagination, so the export matches the Data tab's active query.
+        // Same parser, binder and compiler as row loading, without paging
+        // but with Skip/Limit, so the export matches the active query.
         const { compiled } = await bindAndCompile(
           client,
           params.schema!,
           params.table!,
           queryAst,
+          "ACCESS SHARE",
         );
-        sql = buildRelationQuerySql(params.schema!, params.table!, compiled);
-        values = compiled.values;
+        const relationSql = `${quoteIdent(params.schema!)}.${quoteIdent(params.table!)}`;
+        const relationQuery = buildRelationQuery(relationSql, compiled);
+        sql = relationQuery.text;
+        values = relationQuery.values;
       }
 
       const cursorName = "__export_cursor";
