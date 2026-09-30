@@ -17,7 +17,7 @@ import {
   buildPsqlArgs,
   buildPsqlEnv,
   connectionDatabase,
-  findExecutable,
+  locatePsql,
 } from "./shell-process";
 import {
   validateShellResizeInput,
@@ -101,12 +101,15 @@ async function startShell(
   const connection = getConnectionById(input.connectionId);
   if (!connection) throw new Error("Connection not found.");
 
-  const psqlPath = findExecutable("psql");
-  if (!psqlPath) {
-    throw new Error(
-      "psql not found. Install the PostgreSQL client tools and make sure psql is on your PATH.",
-    );
+  const configuredPath = settings.general.psqlPath;
+  const psql = locatePsql({ configuredPath });
+  if (!psql.path) {
+    const nextStep = configuredPath.trim()
+      ? "Fix or clear the psql path in Settings → General."
+      : "Install the PostgreSQL client tools or set the psql path in Settings → General.";
+    throw new Error(`${psql.problem ?? "psql was not found."} ${nextStep}`);
   }
+  const psqlPath = psql.path;
 
   const database = connectionDatabase(connection);
   const readOnly = settings.general.readOnlyMode;
@@ -148,6 +151,16 @@ async function startShell(
 // ---------------------------------------------------------------------------
 
 export function registerShellHandlers(): void {
+  registerIpcHandler(ShellChannels.LOCATE_PSQL, () => {
+    try {
+      const configuredPath = getSettings().general.psqlPath;
+      const data = locatePsql({ configuredPath });
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  });
+
   registerIpcHandler(ShellChannels.START, async (event, rawInput: unknown) => {
     try {
       const input = validateShellStartInput(rawInput);

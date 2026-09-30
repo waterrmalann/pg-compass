@@ -6,8 +6,13 @@ import type { ConnectionConfig } from "@/shared/types/connection";
 import {
   buildPsqlArgs,
   buildPsqlEnv,
+  commonPsqlDirectories,
   connectionDatabase,
   findExecutable,
+  findInDirectories,
+  isExecutableFile,
+  locatePsql,
+  versionedDirectories,
 } from "@/main/shell-process";
 
 function buildConnection(
@@ -124,5 +129,155 @@ describe("psql invocation", () => {
     expect(buildPsqlEnv(target, true).PGOPTIONS).toBe(
       "-c default_transaction_read_only=on",
     );
+  });
+});
+
+describe("locating psql", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function makeDir(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pg-compass-psql-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  function makeExecutable(directory: string, name = "psql"): string {
+    fs.mkdirSync(directory, { recursive: true });
+    const filePath = path.join(directory, name);
+    fs.writeFileSync(filePath, "#!/bin/sh\n", { mode: 0o755 });
+    return filePath;
+  }
+
+  it("recognises only executable files", () => {
+    const dir = makeDir();
+    const executable = makeExecutable(dir);
+    const plain = path.join(dir, "notes.txt");
+    fs.writeFileSync(plain, "", { mode: 0o644 });
+
+    expect(isExecutableFile(executable)).toBe(true);
+    expect(isExecutableFile(plain)).toBe(false);
+    expect(isExecutableFile(dir)).toBe(false);
+    expect(isExecutableFile(path.join(dir, "missing"))).toBe(false);
+  });
+
+  it("tries PATHEXT extensions on Windows", () => {
+    const dir = makeDir();
+    const psqlExe = makeExecutable(dir, "psql.EXE");
+
+    expect(
+      findInDirectories("psql", [dir], { PATHEXT: ".COM;.EXE" }, "win32"),
+    ).toBe(psqlExe);
+    expect(findInDirectories("psql", [dir], {}, "linux")).toBeNull();
+  });
+
+  it("lists versioned install folders newest first", () => {
+    const parent = makeDir();
+    for (const entry of ["9.6", "16", "13", "notes"]) {
+      fs.mkdirSync(path.join(parent, entry));
+    }
+
+    expect(versionedDirectories(parent, /^(\d+(?:\.\d+)?)$/, "bin")).toEqual([
+      path.join(parent, "16", "bin"),
+      path.join(parent, "13", "bin"),
+      path.join(parent, "9.6", "bin"),
+    ]);
+    expect(
+      versionedDirectories(path.join(parent, "missing"), /^(\d+)$/, "bin"),
+    ).toEqual([]);
+  });
+
+  it("knows the usual install folders per platform", () => {
+    const programFiles = makeDir();
+    fs.mkdirSync(path.join(programFiles, "PostgreSQL", "15"), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(programFiles, "PostgreSQL", "17"), {
+      recursive: true,
+    });
+
+    expect(
+      commonPsqlDirectories("win32", { ProgramFiles: programFiles }),
+    ).toEqual([
+      path.join(programFiles, "PostgreSQL", "17", "bin"),
+      path.join(programFiles, "PostgreSQL", "15", "bin"),
+    ]);
+    expect(commonPsqlDirectories("darwin", {})).toEqual(
+      expect.arrayContaining([
+        "/opt/homebrew/bin",
+        "/opt/homebrew/opt/libpq/bin",
+        "/usr/local/opt/libpq/bin",
+        "/Applications/Postgres.app/Contents/Versions/latest/bin",
+      ]),
+    );
+    expect(commonPsqlDirectories("linux", {})).toEqual(
+      expect.arrayContaining(["/usr/bin", "/usr/local/pgsql/bin"]),
+    );
+  });
+
+  it("uses a configured path as is", () => {
+    const psql = makeExecutable(makeDir());
+
+    expect(
+      locatePsql({ configuredPath: `  ${psql} `, env: {}, platform: "linux" }),
+    ).toEqual({ path: psql, source: "setting", platform: "linux" });
+  });
+
+  it("does not fall back to another psql when the configured one is bad", () => {
+    const onPath = makeDir();
+    makeExecutable(onPath);
+
+    const location = locatePsql({
+      configuredPath: "/nowhere/psql",
+      env: { PATH: onPath },
+      platform: "linux",
+    });
+    expect(location.path).toBeNull();
+    expect(location.problem).toMatch(/No executable psql at \/nowhere\/psql/);
+  });
+
+  it("prefers PATH, then the common folders", () => {
+    const onPath = makeDir();
+    const common = makeDir();
+    const commonPsql = makeExecutable(common);
+
+    expect(
+      locatePsql({
+        configuredPath: "",
+        env: { PATH: onPath },
+        platform: "linux",
+        commonDirectories: [common],
+      }),
+    ).toEqual({ path: commonPsql, source: "common", platform: "linux" });
+
+    const pathPsql = makeExecutable(onPath);
+    expect(
+      locatePsql({
+        configuredPath: "",
+        env: { PATH: onPath },
+        platform: "linux",
+        commonDirectories: [common],
+      }),
+    ).toEqual({ path: pathPsql, source: "path", platform: "linux" });
+  });
+
+  it("explains when psql is nowhere", () => {
+    const location = locatePsql({
+      configuredPath: "",
+      env: { PATH: makeDir() },
+      platform: "darwin",
+      commonDirectories: [makeDir()],
+    });
+    expect(location).toMatchObject({
+      path: null,
+      source: null,
+      platform: "darwin",
+      problem: expect.stringMatching(/not found/),
+    });
   });
 });

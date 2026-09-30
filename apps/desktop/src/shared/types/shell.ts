@@ -42,3 +42,16 @@ export interface ShellExitEvent {
   sessionId: string;
   exitCode: number;
 }
+
+/** Where psql was found: the Settings path, PATH, or a common install folder. */
+export type PsqlSource = "setting" | "path" | "common";
+
+export interface PsqlLocation {
+  /** Absolute path to psql, or null when it could not be found. */
+  path: string | null;
+  source: PsqlSource | null;
+  /** Main-process platform, so the renderer can show matching install steps. */
+  platform: string;
+  /** Why psql is unavailable, when `path` is null. */
+  problem?: string;
+}

@@ -37,8 +37,9 @@ function mergeSettings(
   };
 }
 
+/** Stored settings over the defaults, so keys added later always exist. */
 export function getSettings(): AppSettings {
-  return store.get("settings");
+  return mergeSettings(DEFAULT_APP_SETTINGS, store.get("settings"));
 }
 
 export function updateSettings(patch: AppSettingsPatch): AppSettings {

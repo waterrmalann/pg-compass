@@ -2,6 +2,17 @@ import { Fragment, type ReactNode } from "react";
 import { RefreshCw, SquareTerminal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  psqlSettingsPointer,
+  psqlUnavailableMessage,
+} from "@/components/workspace/shell/psql-install-hint";
+import { usePsqlLocation } from "@/hooks/use-psql-location";
 import { useSettings } from "@/hooks/use-settings";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { cn } from "@/lib/utils";
@@ -129,11 +140,14 @@ export function ViewerShell({
 
 /**
  * Opens a new psql tab for the connection. Shell access is opt-in (Settings →
- * General), so while it is off the button offers to turn it on instead.
+ * General), so while it is off the button offers to turn it on instead. When
+ * psql cannot be found the button is disabled and its tooltip says how to
+ * install it.
  */
 function OpenShellButton({ path }: Readonly<{ path: DatabaseViewerPath }>) {
   const { settings, updateSettings } = useSettings();
   const { forceOpenTab } = useWorkspace();
+  const { location } = usePsqlLocation();
 
   function openShell() {
     void forceOpenTab({ type: "shell", path });
@@ -158,6 +172,36 @@ function OpenShellButton({ path }: Readonly<{ path: DatabaseViewerPath }>) {
         },
       },
     });
+  }
+
+  const psqlMissing = location !== null && location.path === null;
+  if (psqlMissing) {
+    const hasConfiguredPath = settings.general.psqlPath.trim() !== "";
+    const message = `${psqlUnavailableMessage(location, hasConfiguredPath)} ${psqlSettingsPointer(hasConfiguredPath)}`;
+    // aria-disabled rather than disabled: a disabled button gets no pointer
+    // or focus events, so it could not show its tooltip.
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-disabled="true"
+              aria-description={message}
+              className="cursor-not-allowed opacity-64"
+            >
+              <SquareTerminal />
+              Open shell
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="end">
+            {message}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   }
 
   return (

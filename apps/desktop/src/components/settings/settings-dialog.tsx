@@ -24,6 +24,7 @@ import type {
   ThemePreference,
 } from "@/shared/types/settings";
 import { KeyboardShortcutsDialog } from "@/components/help/keyboard-shortcuts-dialog";
+import { PsqlPathSetting } from "@/components/settings/psql-path-setting";
 
 type SettingsCategory = "general" | "appearance" | "privacy";
 
@@ -161,6 +162,8 @@ function GeneralSettingsPanel() {
           updateSettings({ general: { shellAccess: checked } })
         }
       />
+
+      <PsqlPathSetting />
 
       <SettingToggleRow
         label="DevTools"
