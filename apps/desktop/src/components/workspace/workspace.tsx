@@ -9,6 +9,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
@@ -29,10 +30,11 @@ import type { WorkspaceTab, WorkspaceTabView } from "@/shared/types/workspace";
 import { WelcomeScreen } from "./welcome-screen";
 import { ApplicationTitle } from "../topbar/application-title";
 import { buildWindowTitle } from "./utils/build-window-title";
+import { useTabReorder } from "./use-tab-reorder";
 import { matchesShortcut } from "@/shared/constants/shortcuts";
 
 export function Workspace() {
-  const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs } =
+  const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs, moveTab } =
     useWorkspace();
   const density = useDensity();
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
@@ -87,6 +89,7 @@ export function Workspace() {
         onSelectTab={setActiveTab}
         onCloseTab={closeTab}
         onCloseAllTabs={closeAllTabs}
+        onMoveTab={moveTab}
       />
       {tabs.length === 0 ? (
         <WelcomeScreen />
@@ -103,14 +106,22 @@ function WorkspaceTabBar({
   onSelectTab,
   onCloseTab,
   onCloseAllTabs,
+  onMoveTab,
 }: Readonly<{
   tabs: ReturnType<typeof useWorkspace>["tabs"];
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   onCloseAllTabs: () => void;
+  onMoveTab: (id: string, toIndex: number) => void;
 }>) {
   const { connections } = useConnections();
+  const { stripRef, handleTabPointerDown } = useTabReorder({
+    tabIds: tabs.map((tab) => tab.id),
+    // Like a browser, the tab being dragged becomes the active one.
+    onDragStart: onSelectTab,
+    onMoveTab,
+  });
 
   // Resolve colours from the live connection list so every tab of a
   // connection is tinted (not only ones opened from the sidebar) and colour
@@ -133,10 +144,15 @@ function WorkspaceTabBar({
   }
 
   return (
-    <div className="workspace-tab-scrollbar flex h-10 min-h-10 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-sidebar px-1.5">
-      {tabs.map((tab) => {
+    <div
+      ref={stripRef}
+      className="workspace-tab-scrollbar relative flex h-10 min-h-10 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-sidebar px-1.5 select-none"
+    >
+      {tabs.map((tab, index) => {
         const isActive = tab.id === activeTabId;
         const color = colorFor(tab);
+        const isFirst = index === 0;
+        const isLast = index === tabs.length - 1;
 
         function handleTabAuxClick(event: ReactMouseEvent<HTMLButtonElement>) {
           if (event.button !== 1) return;
@@ -155,9 +171,13 @@ function WorkspaceTabBar({
             <ContextMenuTrigger asChild>
               <div
                 title={tab.title}
+                data-tab-id={tab.id}
                 data-active={isActive}
+                onPointerDown={(event) => handleTabPointerDown(tab.id, event)}
                 className={cn(
                   "group flex h-7 w-44 min-w-32 max-w-44 shrink-0 items-center gap-1.5 rounded-md border pr-0.5 pl-2.5 text-xs transition-colors duration-150",
+                  // Set by useTabReorder while the tab is lifted.
+                  "data-[dragging=true]:z-10 data-[dragging=true]:cursor-grabbing data-[dragging=true]:shadow-lg data-[dragging=true]:*:cursor-grabbing",
                   isActive
                     ? "border-border bg-background font-medium text-foreground shadow-xs/5 dark:shadow-edge"
                     : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
@@ -195,6 +215,7 @@ function WorkspaceTabBar({
                     isActive && "opacity-100",
                   )}
                   aria-label={`Close ${tab.title}`}
+                  data-tab-close
                   onClick={(event) => {
                     event.stopPropagation();
                     onCloseTab(tab.id);
@@ -210,6 +231,19 @@ function WorkspaceTabBar({
               </ContextMenuItem>
               <ContextMenuItem onClick={onCloseAllTabs}>
                 Close all tabs
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                disabled={isFirst}
+                onClick={() => onMoveTab(tab.id, index - 1)}
+              >
+                Move left
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={isLast}
+                onClick={() => onMoveTab(tab.id, index + 1)}
+              >
+                Move right
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>

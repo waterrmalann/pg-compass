@@ -738,6 +738,8 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Shell.** A resizable sidebar (256px default, 240px to 45vw) on the `sidebar` tone, then the workspace: a 40px tab strip (also `sidebar` tone, active tab lifted onto `background`), a 44px top bar (§9.21) with the `/` breadcrumb and a `sm` outline Refresh, then content padded 16px. Table and view tabs put their sub-views (Data, Structure, Indexes…) in a segmented switcher (§9.2) under the top bar.
 
+**Tab reordering.** Tabs reorder like browser tabs. After 4px of travel the pressed tab becomes active and lifts (`shadow-lg`, not the full Floating shadow, which the 40px strip would clip; grabbing cursor). It follows the pointer along the strip and stops at the ends. Neighbours slide aside with the default 150ms transform once the dragged tab covers half of one. On drop the tab glides into its slot. Escape cancels, and the strip scrolls when the pointer is near either end. Under `prefers-reduced-motion`, neighbours and the drop snap into place. The tab context menu's Move left / Move right do the same from the keyboard.
+
 **Primitives beyond shadcn.**
 
 | Component | Use |

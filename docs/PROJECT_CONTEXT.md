@@ -41,7 +41,7 @@ Typical use cases:
 The GUI is split into 2 main sections:
 
 1. **Sidebar**: Displays connections and database schemas in a tree view.
-2. **Main Area**: The main workspace for the rest of the app. This is a tabbed interface where users can open multiple views for tables, query results, and schema inspectors.
+2. **Main Area**: The main workspace for the rest of the app. This is a tabbed interface where users can open multiple views for tables, query results, and schema inspectors. Tabs can be reordered by dragging them, as in a browser, or with Move left / Move right in a tab's context menu.
 
 ### Connection Management
 

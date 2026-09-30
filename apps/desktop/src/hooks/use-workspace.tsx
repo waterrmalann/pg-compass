@@ -26,6 +26,8 @@ interface WorkspaceContextValue {
   closeTab: (id: string) => void;
   closeConnectionTabs: (connectionId: string) => void;
   closeAllTabs: () => void;
+  /** Move a tab to `toIndex` in the tab strip (drag, or Move left/right). */
+  moveTab: (id: string, toIndex: number) => void;
   openTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
   forceOpenTab: (view: WorkspaceTabView, color?: string) => Promise<void>;
   navigateToView: (view: WorkspaceTabView) => Promise<void>;
@@ -260,6 +262,20 @@ export function WorkspaceProvider({
     setRelationSessions({});
   }, []);
 
+  const moveTab = useCallback((id: string, toIndex: number) => {
+    setTabs((prevTabs) => {
+      const fromIndex = prevTabs.findIndex((tab) => tab.id === id);
+      const movedTab = prevTabs[fromIndex];
+      const lastIndex = prevTabs.length - 1;
+      const targetIndex = Math.min(Math.max(toIndex, 0), lastIndex);
+      if (!movedTab || fromIndex === targetIndex) return prevTabs;
+
+      const nextTabs = prevTabs.filter((tab) => tab.id !== id);
+      nextTabs.splice(targetIndex, 0, movedTab);
+      return nextTabs;
+    });
+  }, []);
+
   const notifyRolesChanged = useCallback(() => {
     setRolesRevision((revision) => revision + 1);
   }, []);
@@ -373,6 +389,7 @@ export function WorkspaceProvider({
       closeTab,
       closeConnectionTabs,
       closeAllTabs,
+      moveTab,
       openTab,
       forceOpenTab,
       navigateToView,
@@ -392,6 +409,7 @@ export function WorkspaceProvider({
       closeTab,
       closeConnectionTabs,
       closeAllTabs,
+      moveTab,
       openTab,
       forceOpenTab,
       navigateToView,
