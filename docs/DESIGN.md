@@ -524,7 +524,7 @@ tbody tr: transition-colors hover:bg-muted/40; selected → bg-accent
 - **Inline bar (optional):** a 48×4px track (`bg-muted`, radius 2px) with a `--chart-ink` fill, placed before a size value to show relative magnitude.
 - **Status column:** a status chip only where something needs attention. Leave healthy rows empty or show a muted "—".
 - **Sort:** the active header is foreground with a 12px chevron. Inactive headers show the chevron on hover only.
-- **Overflow:** the table scrolls horizontally inside the panel (`overflow-x: auto`), never the page. The first column can be `position: sticky; left: 0` with a `--card` background.
+- **Overflow:** the table scrolls horizontally inside the panel (`overflow-x: auto`), never the page. The first column can be `position: sticky; left: 0` with a `--card` background, clipped to the padding box so row borders show. `--muted` is translucent, so layer the row hover tint over that fill rather than replacing it. When a table also scrolls vertically, one box scrolls both axes. A nested horizontal scroll box hides its scrollbar below the last row and stops a sticky header from sticking.
 - **Density:** `h-8` rows for dense variants, `h-12` when rows have two lines.
 
 ### 9.18 Chart

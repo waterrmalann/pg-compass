@@ -50,8 +50,8 @@ export function TableDataView({
     editContext.primaryKey.length > 0;
 
   return (
-    <div className="h-full overflow-auto">
-      <Table>
+    <div className="h-full overflow-auto" data-testid="table-data-scroll">
+      <Table scrollable={false}>
         <TableHeader className="sticky top-0 z-10 bg-card">
           <TableRow>
             <TableHead className="sticky left-0 z-20 w-8 bg-card px-0" />
@@ -83,7 +83,12 @@ export function TableDataView({
             const pkValues = pkValuesFor(row, editContext.primaryKey);
             return (
               <TableRow key={rowKey} className="group">
-                <TableCell className="w-8 p-0 align-middle">
+                {/* Sticky, so it needs an opaque card fill. --muted is
+                    translucent, so the row's hover tint is layered on top
+                    as a flat gradient instead of replacing the fill. The
+                    fill is clipped to the padding box so the row's border
+                    still shows. */}
+                <TableCell className="sticky left-0 z-1 w-8 bg-card bg-clip-padding p-0 align-middle group-hover:bg-linear-to-r group-hover:from-muted/40 group-hover:to-muted/40">
                   <div className="flex h-full items-center justify-center gap-0.5 px-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                     <DataCopyButton
                       label={`Copy row ${String(rowIndex + 1)}`}

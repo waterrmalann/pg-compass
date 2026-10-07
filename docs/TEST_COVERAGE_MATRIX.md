@@ -16,6 +16,7 @@ This matrix tracks which currently implemented behaviors are covered by unit, in
 | Cell edit (text, json, postgis)                                       | Yes              | Yes, via PGlite (postgis gated on PostgreSQL) | Yes        |
 | Enum metadata and dropdown editing                                    | Yes              | Yes, via PGlite and PostgreSQL                | Indirect   |
 | Read-only-mode gate (no edit affordance in DOM)                       | Yes              | Yes                                           | Yes        |
+| Data grid scrolling (one scroll box, sticky header and gutter)        | No               | No                                            | Yes        |
 | Structure, index, and constraint metadata                             | No               | Yes, via PGlite and PostgreSQL                | Partial    |
 | Connection-to-schema navigation flow                                  | No               | No                                            | Yes        |
 | Query tab execution                                                   | No               | Yes                                           | Yes        |

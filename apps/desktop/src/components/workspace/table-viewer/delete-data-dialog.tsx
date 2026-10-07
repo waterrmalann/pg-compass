@@ -325,7 +325,7 @@ function DeletePreview({
       className="h-52 min-w-0 max-w-full overflow-auto rounded-lg border border-border"
       data-testid="delete-preview-table-scroll"
     >
-      <Table className="w-max min-w-full table-fixed">
+      <Table className="w-max min-w-full table-fixed" scrollable={false}>
         <TableHeader className="sticky top-0 z-10 bg-card">
           <TableRow>
             {columns.map((column) => (

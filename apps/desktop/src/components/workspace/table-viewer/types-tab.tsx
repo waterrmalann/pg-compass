@@ -99,7 +99,7 @@ function TypeDetails({ type }: Readonly<{ type: TableTypeInfo }>) {
 
   return (
     <div className="overflow-auto rounded-lg border border-border bg-background">
-      <Table>
+      <Table scrollable={false}>
         <TableHeader>
           <TableRow>
             <TableHead>Attribute</TableHead>
@@ -194,7 +194,7 @@ export function TypesTab({
   return (
     <Panel className="max-h-full">
       <div className="min-h-0 overflow-auto">
-        <Table>
+        <Table scrollable={false}>
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <TableHead>Name</TableHead>

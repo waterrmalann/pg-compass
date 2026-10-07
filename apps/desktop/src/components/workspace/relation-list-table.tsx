@@ -50,7 +50,7 @@ export function RelationListTable({
   return (
     <Panel className="max-h-full">
       <div className="min-h-0 overflow-auto">
-        <Table>
+        <Table scrollable={false}>
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <TableHead>Name</TableHead>

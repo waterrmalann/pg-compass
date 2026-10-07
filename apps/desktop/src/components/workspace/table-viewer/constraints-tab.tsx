@@ -138,7 +138,7 @@ export function ConstraintsTab({
             </span>
           </PanelHeader>
           <div className="overflow-auto">
-            <Table>
+            <Table scrollable={false}>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
