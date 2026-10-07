@@ -5,10 +5,13 @@ import {
   type ElectronApplication,
   type TestInfo,
 } from "@playwright/test";
+import type { ConnectionConfig } from "@/shared/types/connection";
 
 export type E2ERuntimeState = {
   storeDir: string;
   exportDir: string;
+  /** The seeded database's saved connection. */
+  connection: ConnectionConfig;
 };
 
 export function getRuntimeState(testInfo: TestInfo): E2ERuntimeState {

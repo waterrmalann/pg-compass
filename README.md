@@ -17,6 +17,7 @@ A fast, minimal desktop database viewer for **PostgreSQL**, inspired by the usab
 - 🔌 **Multiple connections** — save, label, and color-code connections. Favorite the ones you use most.
 - 📊 **Table data viewer** — paginated row browsing (25/50/75/100 per page) with a card view for JSONB-heavy tables.
 - 🏗️ **Structure inspector** — view columns, data types, indexes, and constraints at a glance.
+- 🗺️ **ER diagram** — see a schema's tables and foreign keys as a pannable, zoomable diagram, built from catalog queries alone.
 - 📥 **Export** — export query results and table data as CSV or JSON.
 - 🔍 **SQL query editor** — run ad-hoc queries with inline result previews.
 - 🌓 **Dark/Light mode** — dark by default, because we're not animals.

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { WebContents } from "electron";
 import { createTempDir } from "../support/store";
 import { buildConnectionFromUrl } from "../support/postgres";
+import { buildDiagramFixture } from "../support/diagram-fixture";
 import {
   hasColumn,
   hasExtension,
@@ -298,6 +299,95 @@ export function runTableDataIntegrationSuite(
         name: "active_users",
         definition: expect.stringContaining("FROM app.users"),
       });
+    });
+
+    it("reads the diagram catalog for the seeded schema", async () => {
+      const { getSchemaDiagram } = await import("@/main/schema-diagram");
+
+      const diagram = await getSchemaDiagram({
+        connectionId,
+        schemas: ["app"],
+      });
+
+      const users = diagram.tables.find((table) => table.name === "users");
+      expect(
+        users?.columns.find((column) => column.name === "id"),
+      ).toMatchObject({ isPrimaryKey: true, isNullable: false });
+      expect(
+        users?.columns.find((column) => column.name === "email"),
+      ).toMatchObject({ isUnique: true, isPrimaryKey: false });
+      expect(
+        users?.columns.find((column) => column.name === "role_history")
+          ?.dataType,
+      ).toBe("app.user_role[]");
+      // Views are not part of the diagram.
+      expect(
+        diagram.tables.some((table) => table.name === "active_users"),
+      ).toBe(false);
+      expect(diagram.foreignKeys).toContainEqual(
+        expect.objectContaining({
+          sourceTable: "orders",
+          sourceColumns: ["user_id"],
+          targetSchema: "app",
+          targetTable: "users",
+          targetColumns: ["id"],
+        }),
+      );
+    });
+
+    it("reads partitioned, composite and cross-schema keys for the diagram", async () => {
+      const { getSchemaDiagram } = await import("@/main/schema-diagram");
+      const { withPoolClient } = await import("@/main/pg-utils");
+      const fixture = buildDiagramFixture({
+        schema: "diagram_bulk",
+        otherSchema: "diagram_other",
+        tableCount: 60,
+      });
+      await withPoolClient(connectionId, async (client) => {
+        for (const batch of fixture.batches) await client.query(batch);
+      });
+
+      try {
+        const bulk = await getSchemaDiagram({
+          connectionId,
+          schemas: ["diagram_bulk"],
+        });
+        expect(bulk.tables).toHaveLength(fixture.tableCount);
+        expect(bulk.foreignKeys).toHaveLength(fixture.foreignKeyCount);
+        const tableNames = bulk.tables.map((table) => table.name);
+        expect(tableNames).toContain("events");
+        expect(tableNames).not.toContain("events_2025");
+        expect(
+          bulk.tables.find((table) => table.name === "empty_shell")?.columns,
+        ).toEqual([]);
+        expect(bulk.foreignKeys).toContainEqual(
+          expect.objectContaining({
+            sourceTable: "stores",
+            sourceColumns: ["country", "region_code"],
+            targetTable: "regions",
+            targetColumns: ["country", "code"],
+          }),
+        );
+
+        const both = await getSchemaDiagram({
+          connectionId,
+          schemas: ["diagram_bulk", "diagram_other"],
+        });
+        expect(both.foreignKeys).toContainEqual(
+          expect.objectContaining({
+            sourceSchema: "diagram_other",
+            sourceTable: "audit",
+            targetSchema: "diagram_bulk",
+            targetTable: "stores",
+          }),
+        );
+      } finally {
+        await withPoolClient(connectionId, (client) =>
+          client.query(
+            "DROP SCHEMA diagram_bulk CASCADE; DROP SCHEMA diagram_other CASCADE",
+          ),
+        );
+      }
     });
 
     it("fetches view data and metadata without edit primary-key state", async () => {

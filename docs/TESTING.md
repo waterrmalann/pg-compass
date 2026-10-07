@@ -79,6 +79,8 @@ Do not re-enable the inspect fuse to make tests attach. See [E2E_LAUNCH_ADR.md](
 
 Specs share one store directory, so Playwright runs them with a single worker.
 
+The schema diagram spec seeds its own schemas on top of the seeded database (`tests/support/diagram-fixture.ts`): a realistic shop schema and a generated schema of 1,500 tables with cycles, self-references, composite and cross-schema keys, partitions, unrelated tables and a table with no columns. The fixture runs in batches, because creating thousands of tables in one transaction exhausts the server's lock table. Set `PG_COMPASS_E2E_SCREENSHOT_DIR` to a directory to also save screenshots of the diagram (used for `docs/screenshots/er-diagram`).
+
 ## Coverage Policy
 
 Coverage is risk-based, not a single global percentage:

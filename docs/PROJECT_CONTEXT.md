@@ -50,6 +50,12 @@ Users can create and store multiple PostgreSQL connections. An URI (or individua
 **Connections Listing:**
 Connections are available in the sidebar. A "Connect" button is visible on hover, which can be clicked to establish a connection. This connection can now be expanded (it works like an accordion) to show the database schemas. The schemas can be expanded to show the tables which is as far as the sidebar goes.
 
+### Database Diagram
+
+Opening a database shows two sub-tabs: **Schemas** (the schema list) and **Diagram**, an entity-relationship diagram in the style of Supabase's schema visualizer. Each table is a card listing its columns with primary-key, foreign-key, unique and nullable markers, and each foreign key is a line from the referencing column to the referenced one. It shows one schema at a time (`public` first, else the largest schema), or all schemas. Pan by dragging, zoom with the wheel or the keyboard, drag tables to rearrange them, select a table to highlight its relationships, find a table by name, and open a table from its card.
+
+The diagram is loaded only when the tab is first opened, with two read-only `pg_catalog` queries. It never reads table data, row counts or relation sizes. Only the tables near the view are rendered, so it stays responsive with thousands of tables. See `docs/decisions/ER_DIAGRAM_ADR.md`.
+
 ### Table Listing
 
 Clicking on a schema opens a new tab in the main area with the table listing. Clicking on a table (from this listing or from the sidebar) opens a new tab with the table viewer. The table listing has the following columns: name, storage size, row count, indexes count, and last vaccum time.

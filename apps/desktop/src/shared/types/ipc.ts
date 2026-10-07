@@ -20,6 +20,7 @@ import type {
   SetTriggerEnabledInput,
   TableRestrictionInput,
 } from "./roles";
+import type { SchemaDiagram, SchemaDiagramParams } from "./schema-diagram";
 import type { AppSettings, AppSettingsPatch } from "./settings";
 import type { UpdateStatus } from "./updates";
 import type {
@@ -105,6 +106,10 @@ export interface ConnectionApi {
     id: string,
     options?: SchemaTreeOptions,
   ): Promise<IpcResult<DatabaseSchema[]>>;
+  /** Tables, columns and foreign keys for the database Diagram tab. */
+  getSchemaDiagram(
+    params: SchemaDiagramParams,
+  ): Promise<IpcResult<SchemaDiagram>>;
   showOpenFileDialog(
     options: ConnectionFileDialogOptions,
   ): Promise<IpcResult<string | null>>;

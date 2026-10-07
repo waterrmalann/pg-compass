@@ -16,6 +16,7 @@ import {
   validateInsertRowParams,
   validateMembershipInput,
   validateRolesSnapshotInput,
+  validateSchemaDiagramParams,
   validateSetDbAccessLevelInput,
   validateSetTriggerEnabledInput,
   validateSettingsPatch,
@@ -24,6 +25,46 @@ import {
 } from "@/main/ipc-validation";
 
 describe("IPC runtime validation", () => {
+  it("accepts schema diagram params and rejects malformed schema lists", () => {
+    const params = { connectionId: "c1", schemas: ["public", "app"] };
+    expect(validateSchemaDiagramParams(params)).toBe(params);
+    expect(
+      validateSchemaDiagramParams({ connectionId: "c1", schemas: [] }),
+    ).toEqual({
+      connectionId: "c1",
+      schemas: [],
+    });
+
+    expect(() =>
+      validateSchemaDiagramParams({ connectionId: "c1", schemas: "public" }),
+    ).toThrow(/schemas must be an array/);
+    expect(() =>
+      validateSchemaDiagramParams({ connectionId: "c1", schemas: [""] }),
+    ).toThrow(/schemas\[0\]/);
+    expect(() =>
+      validateSchemaDiagramParams({ connectionId: "c1", schemas: ["a\0b"] }),
+    ).toThrow(/NUL/);
+    expect(() =>
+      validateSchemaDiagramParams({
+        connectionId: "c1",
+        schemas: ["x".repeat(64)],
+      }),
+    ).toThrow(/63-byte/);
+    expect(() =>
+      validateSchemaDiagramParams({
+        connectionId: "c1",
+        schemas: Array.from({ length: 10_001 }, (_, index) => `s${index}`),
+      }),
+    ).toThrow(/at most 10000/);
+    expect(() =>
+      validateSchemaDiagramParams({
+        connectionId: "c1",
+        schemas: [],
+        extra: 1,
+      }),
+    ).toThrow(/extra is not allowed/);
+  });
+
   it("accepts a valid connection and rejects an invalid port", () => {
     const connection = {
       label: "Local",

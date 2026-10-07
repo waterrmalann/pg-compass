@@ -19,6 +19,8 @@ This matrix tracks which currently implemented behaviors are covered by unit, in
 | Data grid scrolling (one scroll box, sticky header and gutter)        | No               | No                                            | Yes        |
 | Structure, index, and constraint metadata                             | No               | Yes, via PGlite and PostgreSQL                | Partial    |
 | Connection-to-schema navigation flow                                  | No               | No                                            | Yes        |
+| ER diagram (catalog snapshot, layout, culling, find, select, drag)    | Yes              | Yes, via PGlite and PostgreSQL                | Yes        |
+| Export and import progress throttling                                 | Yes              | No                                            | Indirect   |
 | Query tab execution                                                   | No               | Yes                                           | Yes        |
 | Export flow                                                           | No               | No                                            | Yes        |
 | Role DDL (SCRAM passwords, atomicity, read-only gate, trigger toggle) | Yes              | Yes, via PGlite (pooled mutations only)       | No         |

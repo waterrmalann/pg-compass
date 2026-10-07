@@ -46,6 +46,10 @@ import type {
   SetTriggerEnabledInput,
   TableRestrictionInput,
 } from "./shared/types/roles";
+import type {
+  SchemaDiagram,
+  SchemaDiagramParams,
+} from "./shared/types/schema-diagram";
 import type { AppSettings, AppSettingsPatch } from "./shared/types/settings";
 import type {
   PsqlLocation,
@@ -138,6 +142,11 @@ const connectionApi = {
     options?: SchemaTreeOptions,
   ): Promise<IpcResult<DatabaseSchema[]>> =>
     ipcRenderer.invoke(ConnectionChannels.GET_SCHEMA_TREE, id, options),
+
+  getSchemaDiagram: (
+    params: SchemaDiagramParams,
+  ): Promise<IpcResult<SchemaDiagram>> =>
+    ipcRenderer.invoke(ConnectionChannels.GET_SCHEMA_DIAGRAM, params),
 
   showOpenFileDialog: (
     options: ConnectionFileDialogOptions,
