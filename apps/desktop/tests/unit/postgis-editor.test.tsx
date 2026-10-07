@@ -127,23 +127,23 @@ describe("GeometryMapEditor", () => {
     ).toBe("SRID=3857;POINT(-122.419 40)");
   });
 
-  it("editing WKT disables point-mode sync (textarea wins)", () => {
+  it("editing WKT hands control to the textarea until a point field changes", () => {
     renderEditor("SRID=4326;POINT(-122.419 37.775)");
+    expect(screen.getByTestId("mock-marker")).toBeInTheDocument();
     const wkt = screen.getByTestId("postgis-wkt") as HTMLTextAreaElement;
+
     fireEvent.change(wkt, {
       target: { value: "POLYGON((0 0, 1 0, 1 1, 0 0))" },
     });
-    // Further lat changes must NOT clobber the textarea.
+    // Point mode is off: no marker, and the typed WKT is kept.
+    expect(screen.queryByTestId("mock-marker")).not.toBeInTheDocument();
+    expect(wkt.value).toBe("POLYGON((0 0, 1 0, 1 1, 0 0))");
+
+    // Editing a point field turns point mode back on and rewrites the WKT.
     const lat = screen.getByTestId("postgis-lat") as HTMLInputElement;
     fireEvent.change(lat, { target: { value: "50" } });
-    // Because lat change flips pointMode back on, the textarea updates —
-    // verify the opposite path too: wkt edits stick until a lat/lng/srid
-    // change re-engages the sync. This is the exact behaviour we want.
-    // Reset and re-assert the "wkt edit wins until point-mode is re-engaged".
-    fireEvent.change(wkt, {
-      target: { value: "POLYGON((0 0, 1 0, 1 1, 0 0))" },
-    });
-    expect(wkt.value).toBe("POLYGON((0 0, 1 0, 1 1, 0 0))");
+    expect(wkt.value).toBe("SRID=4326;POINT(-122.419 50)");
+    expect(screen.getByTestId("mock-marker")).toBeInTheDocument();
   });
 
   it("a map click sets lat/lng and writes the WKT", () => {

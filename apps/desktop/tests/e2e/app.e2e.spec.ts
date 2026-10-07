@@ -1,8 +1,5 @@
 import fs from "node:fs";
-import {
-  test,
-  expect,
-} from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { getRuntimeState, launchApp } from "./electron-app";
 
 test.skip(

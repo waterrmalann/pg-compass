@@ -47,7 +47,7 @@ describe("useConnections", () => {
     });
   });
 
-  it("loads connections and can create new ones", async () => {
+  it("loads connections and reloads them after creating one", async () => {
     const { result } = renderHook(() => useConnections(), {
       wrapper: ConnectionProvider,
     });
@@ -65,6 +65,33 @@ describe("useConnections", () => {
       });
     });
 
-    expect((created as ConnectionConfig | null)?.label).toBe("Created");
+    expect((created as ConnectionConfig | null)?.id).toBe("conn-2");
+    // The list is reloaded from the store after a successful create.
+    expect(window.connectionApi.getAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns null and keeps the list when creating fails", async () => {
+    vi.mocked(window.connectionApi.create).mockResolvedValueOnce({
+      success: false,
+      error: "label is required",
+    });
+    const { result } = renderHook(() => useConnections(), {
+      wrapper: ConnectionProvider,
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let created: ConnectionConfig | null = baseConnection;
+    await act(async () => {
+      created = await result.current.create({
+        label: "",
+        favourite: false,
+        mode: "fields",
+        fields: baseConnection.fields,
+      });
+    });
+
+    expect(created).toBeNull();
+    expect(window.connectionApi.getAll).toHaveBeenCalledTimes(1);
+    expect(result.current.connections).toHaveLength(1);
   });
 });

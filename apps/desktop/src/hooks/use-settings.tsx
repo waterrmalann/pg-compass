@@ -25,12 +25,6 @@ interface SettingsContextValue {
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
-function resolveSystemTheme(): "light" | "dark" {
-  return globalThis.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
 export function SettingsProvider({
   children,
 }: Readonly<{ children: ReactNode }>) {
@@ -132,5 +126,3 @@ export function useSettings(): SettingsContextValue {
 
   return context;
 }
-
-export { resolveSystemTheme };

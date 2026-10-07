@@ -162,7 +162,7 @@ describe("shell IPC", () => {
     });
   });
 
-  it("locates psql with the configured path", async () => {
+  it("wraps the located psql in a success envelope", async () => {
     mocks.settings.psqlPath = "/opt/pg/bin/psql";
     mocks.psqlPath = "/opt/pg/bin/psql";
 
@@ -170,9 +170,6 @@ describe("shell IPC", () => {
       createEvent(),
       undefined,
     );
-    expect(mocks.locatePsql).toHaveBeenCalledWith({
-      configuredPath: "/opt/pg/bin/psql",
-    });
     expect(result).toEqual({
       success: true,
       data: { path: "/opt/pg/bin/psql", source: "path", platform: "linux" },

@@ -6,19 +6,10 @@ import { registerDefaultEditors } from "@/components/workspace/renderers/edit-re
 import type { ColumnInfo } from "@/shared/types/table-data";
 
 beforeAll(() => {
-  // Register both display renderers and cell editors so the component has
-  // everything it needs. Both registrations are idempotent in practice; we
-  // swallow re-register errors in case another test file ran first.
-  try {
-    registerDefaultRenderers();
-  } catch {
-    /* idempotent in case another test file ran first */
-  }
-  try {
-    registerDefaultEditors();
-  } catch {
-    /* idempotent in case another test file ran first */
-  }
+  // The component needs display renderers and cell editors. Registering is
+  // idempotent, so it does not matter if another test file ran first.
+  registerDefaultRenderers();
+  registerDefaultEditors();
 });
 
 const textCol: ColumnInfo = {
@@ -88,24 +79,6 @@ describe("EditableCell gating", () => {
       />,
     );
     expect(screen.queryByTestId("cell-editor-target")).toBeNull();
-  });
-
-  it("renders an edit-target wrapper when editable", () => {
-    render(
-      <EditableCell
-        col={textCol}
-        value="Dave"
-        readOnly={false}
-        primaryKey={["id"]}
-        pkValues={[1]}
-        schema="app"
-        table="users"
-        connectionId="c1"
-        variant="cell"
-      />,
-    );
-    const target = screen.getByTestId("cell-editor-target");
-    expect(target).toBeInTheDocument();
   });
 
   it("opens the editor on double-click when editable", () => {

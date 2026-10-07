@@ -228,7 +228,10 @@ export function useTabReorder({
   return { stripRef, handleTabPointerDown };
 }
 
-function beginDrag(strip: HTMLElement, element: HTMLElement): ActiveDrag | null {
+function beginDrag(
+  strip: HTMLElement,
+  element: HTMLElement,
+): ActiveDrag | null {
   const tabElements = Array.from(
     strip.querySelectorAll<HTMLElement>(":scope > [data-tab-id]"),
   );

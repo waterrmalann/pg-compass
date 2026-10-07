@@ -5,20 +5,12 @@ import {
 } from "@/components/workspace/renderers/edit-registry";
 
 /**
- * These tests are written against the intended API — they will FAIL until
- * `registerDefaultEditors` is implemented in the next turn (rollout step 4).
- *
- * Cases distilled from the Phase 1 edge-case report. Every pre-validated type
- * has its own describe block; pass-through types (interval, money, xml) are
- * confirmed to not pre-reject.
+ * Every pre-validated type has its own describe block; pass-through types
+ * (interval, money, xml) are confirmed to not pre-reject.
  */
 
 beforeAll(() => {
-  try {
-    registerDefaultEditors();
-  } catch {
-    // expected during tests-first phase; individual assertions will surface.
-  }
+  registerDefaultEditors();
 });
 
 describe("text editor", () => {
