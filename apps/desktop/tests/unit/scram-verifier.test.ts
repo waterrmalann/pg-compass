@@ -1,4 +1,3 @@
-import { createHash, createHmac, pbkdf2Sync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { buildScramSha256Verifier } from "@/main/scram-verifier";
 
@@ -15,32 +14,17 @@ describe("buildScramSha256Verifier", () => {
     expect(buildScramSha256Verifier("pencil", salt)).toBe(postgresVerifier);
   });
 
-  it("derives StoredKey and ServerKey per RFC 5802 with a random 16-byte salt", () => {
-    const verifier = buildScramSha256Verifier("correct horse");
-    const match = VERIFIER_PATTERN.exec(verifier);
-    expect(match).not.toBeNull();
+  it("uses a fresh random 16-byte salt for every verifier", () => {
+    // The derivation itself is pinned by the PostgreSQL-produced verifier
+    // above; this covers the salt the production path generates.
+    const first = VERIFIER_PATTERN.exec(buildScramSha256Verifier("same"));
+    const second = VERIFIER_PATTERN.exec(buildScramSha256Verifier("same"));
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
 
-    const salt = Buffer.from(match![1]!, "base64");
-    expect(salt).toHaveLength(16);
-
-    const saltedPassword = pbkdf2Sync(
-      "correct horse",
-      salt,
-      4096,
-      32,
-      "sha256",
-    );
-    const clientKey = createHmac("sha256", saltedPassword)
-      .update("Client Key")
-      .digest();
-    const expectedStoredKey = createHash("sha256")
-      .update(clientKey)
-      .digest("base64");
-    const expectedServerKey = createHmac("sha256", saltedPassword)
-      .update("Server Key")
-      .digest("base64");
-    expect(match![2]).toBe(expectedStoredKey);
-    expect(match![3]).toBe(expectedServerKey);
+    expect(Buffer.from(first![1]!, "base64")).toHaveLength(16);
+    expect(first![1]).not.toBe(second![1]);
+    expect(first![2]).not.toBe(second![2]);
   });
 
   it("applies SASLprep like PostgreSQL so non-ASCII passwords still log in", () => {

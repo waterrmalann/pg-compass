@@ -222,7 +222,10 @@ test("delete confirmation dialog contains wide table previews", async ({
       });
 
     expect(headerOffsets.scrollTop).toBeGreaterThan(0);
-    expect(headerOffsets.offsetAfter).toBeCloseTo(headerOffsets.offsetBefore, 0);
+    expect(headerOffsets.offsetAfter).toBeCloseTo(
+      headerOffsets.offsetBefore,
+      0,
+    );
   } finally {
     await app.close();
   }

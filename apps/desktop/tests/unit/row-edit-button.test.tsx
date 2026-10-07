@@ -6,16 +6,8 @@ import { registerDefaultEditors } from "@/components/workspace/renderers/edit-re
 import type { ColumnInfo } from "@/shared/types/table-data";
 
 beforeAll(() => {
-  try {
-    registerDefaultRenderers();
-  } catch {
-    /* idempotent */
-  }
-  try {
-    registerDefaultEditors();
-  } catch {
-    /* idempotent */
-  }
+  registerDefaultRenderers();
+  registerDefaultEditors();
 });
 
 const columns: ColumnInfo[] = [

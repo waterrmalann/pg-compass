@@ -38,6 +38,9 @@ export function createProgressThrottle(
 ) {
   let lastSent = 0;
   let pending: ReturnType<typeof setTimeout> | null = null;
+  // The trailing send reports the newest count, not the one that started
+  // the wait.
+  let latestRowCount = 0;
 
   function sendToRenderer(rowCount: number): void {
     if (sender.isDestroyed?.()) return;
@@ -49,6 +52,7 @@ export function createProgressThrottle(
   }
 
   function send(rowCount: number) {
+    latestRowCount = rowCount;
     const now = Date.now();
     if (now - lastSent >= intervalMs) {
       lastSent = now;
@@ -58,7 +62,7 @@ export function createProgressThrottle(
         () => {
           pending = null;
           lastSent = Date.now();
-          sendToRenderer(rowCount);
+          sendToRenderer(latestRowCount);
         },
         intervalMs - (now - lastSent),
       );

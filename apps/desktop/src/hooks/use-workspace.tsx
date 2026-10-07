@@ -189,11 +189,13 @@ export function WorkspaceProvider({
             ...tab.view,
             path: { ...tab.view.path, ...patch },
           } as WorkspaceTabView;
-          const updatedTitle =
-            tab.view.type === "schema-list" && patch.connectionLabel
-              ? patch.connectionLabel
-              : tab.title;
-          return { ...tab, title: updatedTitle, view: updatedView };
+          // Titles are derived from the view, so a renamed connection
+          // retitles every tab that shows its label (database, Users, Shell).
+          return {
+            ...tab,
+            title: buildTabTitle(updatedView),
+            view: updatedView,
+          };
         }),
       );
     },

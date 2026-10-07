@@ -79,6 +79,35 @@ describe("useWorkspace", () => {
     expect(result.current.schemaCache["conn-1"]).toHaveLength(1);
   });
 
+  it("retitles every tab that shows a renamed connection's label", async () => {
+    const { result } = renderHook(() => useWorkspace(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.tabs).toHaveLength(0));
+    const path = { connectionId: "conn-1", connectionLabel: "Old" };
+
+    await act(async () => {
+      await result.current.openTab({ type: "schema-list", path });
+      await result.current.openTab({ type: "users", path });
+      await result.current.forceOpenTab({ type: "shell", path });
+      await result.current.openTab({
+        type: "schema",
+        path: { ...path, schemaName: "app" },
+      });
+    });
+    act(() => result.current.refreshTabs("conn-1", { connectionLabel: "New" }));
+
+    expect(result.current.tabs.map((tab) => tab.title)).toEqual([
+      "New",
+      "New · Users",
+      "New · Shell",
+      "app",
+    ]);
+    const shellTab = result.current.tabs[2]!;
+    expect(shellTab.view).toMatchObject({
+      type: "shell",
+      path: { connectionLabel: "New" },
+    });
+  });
+
   it("produces distinct tab IDs across view types and paths", async () => {
     const { result } = renderHook(() => useWorkspace(), { wrapper: Wrapper });
     await waitFor(() => expect(result.current.tabs).toHaveLength(0));
@@ -126,7 +155,9 @@ describe("useWorkspace", () => {
     });
 
     const ids = result.current.tabs.map((t) => t.id);
-    expect(new Set(ids).size).toBe(ids.length);
+    // Five views opened as five tabs: none was merged into another.
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(5);
     // schema-list and schema share a prefix but differ by schemaName suffix.
     expect(ids[0]).not.toBe(ids[1]);
     // table-list vs table-details differ only by the type segment.

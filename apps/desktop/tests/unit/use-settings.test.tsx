@@ -41,7 +41,7 @@ describe("useSettings", () => {
     });
   });
 
-  it("loads settings and updates the theme", async () => {
+  it("loads settings, saves a theme change and applies it to the page", async () => {
     const { result } = renderHook(() => useSettings(), {
       wrapper: SettingsProvider,
     });
@@ -49,12 +49,17 @@ describe("useSettings", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.settings.appearance.theme).toBe("dark");
 
+    await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
+
     await act(async () => {
       await result.current.setTheme("light");
     });
 
+    expect(window.settingsApi.update).toHaveBeenCalledWith({
+      appearance: { theme: "light" },
+    });
     await waitFor(() =>
-      expect(result.current.settings.appearance.theme).toBe("light"),
+      expect(document.documentElement).not.toHaveClass("dark"),
     );
   });
 

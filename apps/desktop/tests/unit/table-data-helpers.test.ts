@@ -9,12 +9,6 @@ import { assertSafePgCast } from "@/main/table-data-write";
 import { ensureArray } from "@/main/table-data-utils";
 
 describe("table-data query helpers", () => {
-  it("accepts read-only queries and rejects mutating ones", () => {
-    expect(isReadOnlyQuery("SELECT * FROM app.users")).toBe(true);
-    expect(isReadOnlyQuery(" with q as (select 1) select * from q")).toBe(true);
-    expect(isReadOnlyQuery("DELETE FROM app.users")).toBe(false);
-  });
-
   it.each([
     ["SELECT 1", true],
     ["   SELECT 1", true],
