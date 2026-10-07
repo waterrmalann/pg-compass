@@ -2,6 +2,7 @@ export * from "./backup";
 export * from "./connection";
 export * from "./ipc";
 export * from "./roles";
+export * from "./schema-diagram";
 export * from "./settings";
 export * from "./shell";
 export * from "./table-data";

@@ -20,9 +20,11 @@ import {
   validateConnectionId,
   validateConnectionInput,
   validateOpenDialogOptions,
+  validateSchemaDiagramParams,
   validateSchemaTreeOptions,
 } from "./ipc-validation";
 import { registerIpcHandler } from "./ipc-security";
+import { getSchemaDiagram } from "./schema-diagram";
 
 interface PgTableRow {
   schema_name: string;
@@ -306,6 +308,19 @@ export function registerConnectionHandlers(): void {
         const options = validateSchemaTreeOptions(rawOptions);
         const schemas = await getSchemaTree(id, options);
         return { success: true, data: schemas };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  registerIpcHandler(
+    ConnectionChannels.GET_SCHEMA_DIAGRAM,
+    async (_event, rawParams: unknown) => {
+      try {
+        const params = validateSchemaDiagramParams(rawParams);
+        const diagram = await getSchemaDiagram(params);
+        return { success: true, data: diagram };
       } catch (err) {
         return { success: false, error: (err as Error).message };
       }

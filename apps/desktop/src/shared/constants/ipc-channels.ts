@@ -7,6 +7,7 @@ export const ConnectionChannels = {
   TOGGLE_FAVOURITE: "connections:toggle-favourite",
   TEST: "connections:test",
   GET_SCHEMA_TREE: "connections:get-schema-tree",
+  GET_SCHEMA_DIAGRAM: "connections:get-schema-diagram",
   SHOW_OPEN_FILE_DIALOG: "connections:show-open-file-dialog",
 } as const;
 

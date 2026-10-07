@@ -13,6 +13,7 @@ import type {
   SetTriggerEnabledInput,
   TableRestrictionInput,
 } from "../shared/types/roles";
+import type { SchemaDiagramParams } from "../shared/types/schema-diagram";
 import type { AppSettingsPatch } from "../shared/types/settings";
 import type {
   BackupCancelInput,
@@ -347,6 +348,30 @@ export function validateSchemaTreeOptions(
     "schemaTreeOptions.includeInternalSchemas",
   );
   return value as SchemaTreeOptions;
+}
+
+/** Multi-tenant databases can have thousands of schemas. */
+const MAX_DIAGRAM_SCHEMAS = 10_000;
+
+export function validateSchemaDiagramParams(
+  value: unknown,
+): SchemaDiagramParams {
+  assertSerializedSize(value, "schemaDiagram");
+  const params = asRecord(value, "schemaDiagram");
+  assertAllowedKeys(params, "schemaDiagram", ["connectionId", "schemas"]);
+  asString(params.connectionId, "schemaDiagram.connectionId");
+  if (
+    !Array.isArray(params.schemas) ||
+    params.schemas.length > MAX_DIAGRAM_SCHEMAS
+  ) {
+    throw new TypeError(
+      `schemaDiagram.schemas must be an array of at most ${MAX_DIAGRAM_SCHEMAS} schema names.`,
+    );
+  }
+  params.schemas.forEach((schema, index) =>
+    asPgIdentifier(schema, `schemaDiagram.schemas[${index}]`),
+  );
+  return value as SchemaDiagramParams;
 }
 
 export function validateOpenDialogOptions(

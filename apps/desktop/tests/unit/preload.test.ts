@@ -31,6 +31,7 @@ describe("preload API contract", () => {
     ) as {
       connectionApi: {
         getAll: () => Promise<unknown>;
+        getSchemaDiagram: (params: unknown) => Promise<unknown>;
         showOpenFileDialog: (options: unknown) => Promise<unknown>;
       };
       tableDataApi: {
@@ -55,6 +56,15 @@ describe("preload API contract", () => {
 
     await exposed.connectionApi.getAll();
     expect(invoke).toHaveBeenCalledWith("connections:get-all");
+
+    await exposed.connectionApi.getSchemaDiagram({
+      connectionId: "c1",
+      schemas: ["public"],
+    });
+    expect(invoke).toHaveBeenCalledWith("connections:get-schema-diagram", {
+      connectionId: "c1",
+      schemas: ["public"],
+    });
 
     await exposed.connectionApi.showOpenFileDialog({ title: "Select file" });
     expect(invoke).toHaveBeenCalledWith("connections:show-open-file-dialog", {
