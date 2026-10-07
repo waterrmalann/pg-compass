@@ -1,0 +1,2793 @@
+<!doctype html>
+<!--
+  PG Compass: Query builder prototype (UX only, not wired to the app).
+
+  The idea: a SQL query is a pipeline of stages that follow SQL's logical order
+  (FROM → JOIN → WHERE → GROUP BY → HAVING → SELECT/window → ORDER BY → LIMIT).
+  Each stage previews the rows it produces, like Compass's aggregation panel.
+  Stages compile into one SELECT while they fit; when a stage can't fit the
+  current SELECT (filtering a window result, sorting after a limit…) the
+  stages above it become a CTE step automatically, and the SQL panel says why.
+
+  Everything runs in-memory on generated demo data for a fictional roastery.
+-->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Query builder prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-sans: "Geist", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --background: #ffffff;
+  --foreground: #262626;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: #262626;
+  --primary-foreground: #fafafa;
+  --muted: color-mix(in oklab, #000 4%, transparent);
+  --muted-foreground: color-mix(in srgb, #737373 90%, #000);
+  --subtle-foreground: color-mix(in srgb, var(--foreground) 72%, transparent);
+  --accent: color-mix(in oklab, #000 4%, transparent);
+  --border: color-mix(in oklab, #000 8%, transparent);
+  --input: color-mix(in oklab, #000 10%, transparent);
+  --ring: #a3a3a3;
+  --destructive: #fb2c36;
+  --destructive-foreground: #c10007;
+  --warning: #fe9a00;
+  --warning-foreground: #bb4d00;
+  --success-foreground: #007a55;
+  --info-foreground: #1447e6;
+  --sidebar: #fafafa;
+  --sidebar-foreground: color-mix(in srgb, #262626 64%, #fafafa);
+  --sidebar-accent: color-mix(in oklab, #000 4%, transparent);
+  --sidebar-border: color-mix(in oklab, #000 6%, transparent);
+  --code: #ffffff;
+  --code-highlight: color-mix(in oklab, #000 5%, transparent);
+  --chart-ink: #525252;
+  --conn-dot: #2a78d6;
+  --shadow-pop: 0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1);
+  --outline-bg: var(--background);
+  --outline-border: var(--border);
+  --edge: transparent;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --background: color-mix(in srgb, #0a0a0a 96%, #fff);
+  --foreground: #f5f5f5;
+  --card: color-mix(in srgb, var(--background) 98%, #fff);
+  --popover: color-mix(in srgb, var(--background) 98%, #fff);
+  --primary: #f5f5f5;
+  --primary-foreground: #262626;
+  --muted: color-mix(in oklab, #fff 4%, transparent);
+  --muted-foreground: color-mix(in srgb, #737373 90%, #fff);
+  --accent: color-mix(in oklab, #fff 4%, transparent);
+  --border: color-mix(in oklab, #fff 6%, transparent);
+  --input: color-mix(in oklab, #fff 8%, transparent);
+  --ring: #737373;
+  --destructive: color-mix(in srgb, #fb2c36 90%, #fff);
+  --destructive-foreground: #ff6467;
+  --warning-foreground: #ffb900;
+  --success-foreground: #00d492;
+  --info-foreground: #51a2ff;
+  --sidebar: color-mix(in srgb, #0a0a0a 97%, #fff);
+  --sidebar-foreground: color-mix(in srgb, #f5f5f5 64%, var(--sidebar));
+  --sidebar-accent: color-mix(in oklab, #fff 4%, transparent);
+  --sidebar-border: color-mix(in oklab, #fff 5%, transparent);
+  --code: color-mix(in srgb, var(--background) 98%, #fff);
+  --code-highlight: color-mix(in oklab, #fff 5%, transparent);
+  --chart-ink: #a3a3a3;
+  --conn-dot: #3987e5;
+  --shadow-pop: 0 12px 28px -8px rgb(0 0 0 / .6), 0 4px 8px -4px rgb(0 0 0 / .4);
+  --outline-bg: color-mix(in oklab, #fff 2.5%, transparent);
+  --outline-border: color-mix(in oklab, #fff 8%, transparent);
+  --edge: color-mix(in oklab, #fff 6%, transparent);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--background); color: var(--foreground);
+  font: 14px/1.43 var(--font-sans); -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+code, .mono { font-family: var(--font-mono); }
+.i { flex: none; display: block; }
+.sp { flex: 1; }
+.muted { color: var(--muted-foreground); }
+
+/* ---------- Shell ---------- */
+.app { display: grid; grid-template-columns: 248px minmax(0, 1fr); height: 100vh; }
+.sidebar {
+  background: var(--sidebar); border-right: 1px solid var(--sidebar-border);
+  padding: 8px; overflow: auto; display: flex; flex-direction: column; gap: 8px;
+}
+.brand { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px; font-weight: 600; font-size: 14px; }
+.conn-card {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 1px solid var(--sidebar-border); background: color-mix(in oklab, var(--background) 40%, transparent);
+  border-radius: 10px; padding: 8px; color: var(--muted-foreground);
+}
+.conn-card .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--conn-dot); flex: none; }
+.cc-t { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.cc-n { font: 500 13px var(--font-mono); color: var(--foreground); }
+.cc-s { font-size: 11px; color: var(--subtle-foreground); }
+.sb-search {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 10px;
+  border: 1px solid var(--input); border-radius: 10px; color: var(--muted-foreground); font-size: 13px;
+}
+.sb-label { margin: 8px 8px 0; font-size: 12px; color: var(--muted-foreground); display: flex; }
+.tree { display: flex; flex-direction: column; gap: 1px; }
+.tr {
+  display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px 0 12px; border-radius: 8px;
+  font: 12.5px var(--font-mono); color: var(--sidebar-foreground); text-align: left;
+}
+.tr:hover { background: var(--sidebar-accent); color: var(--foreground); }
+.tr.on { background: var(--sidebar-accent); color: var(--foreground); }
+.tr .tn { flex: 1; }
+.tr .tc { font-size: 11px; color: var(--subtle-foreground); }
+.sb-foot { margin-top: auto; padding: 8px; font-size: 11px; color: var(--subtle-foreground); }
+
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.tabstrip {
+  height: 40px; flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px;
+  background: var(--sidebar); border-bottom: 1px solid var(--border);
+}
+.tab {
+  display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; font: 12.5px var(--font-mono);
+  color: var(--muted-foreground); border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0;
+}
+.tab.on { background: var(--background); border-color: var(--border); color: var(--foreground); margin-bottom: -1px; height: 33px; }
+.topbar {
+  height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  border-bottom: 1px solid var(--border); background: color-mix(in oklab, var(--background) 85%, transparent);
+}
+.bc { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted-foreground); min-width: 0; }
+.bc .sep { opacity: .7; }
+.bc .cur { color: var(--foreground); font-weight: 500; }
+.content { flex: 1; overflow: auto; padding: 16px; }
+
+/* ---------- Primitives ---------- */
+.btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  white-space: nowrap; border-radius: 10px; border: 1px solid transparent;
+  height: 32px; padding: 0 10px; font-size: 14px; font-weight: 500; line-height: 20px;
+  transition: background-color .15s, color .15s, box-shadow .15s, transform .16s cubic-bezier(.23, 1, .32, 1);
+}
+.btn:active { transform: scale(.98); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+.btn.xs { height: 24px; padding: 0 8px; font-size: 12px; border-radius: 8px; gap: 4px; }
+.btn.primary {
+  background: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 16%, transparent), 0 1px 2px rgb(0 0 0 / .05);
+}
+.btn.primary:hover { background: color-mix(in oklab, var(--primary) 90%, transparent); }
+.btn.outline { background: var(--outline-bg); border-color: var(--outline-border); box-shadow: inset 0 1px 0 var(--edge), 0 1px 2px rgb(0 0 0 / .05); }
+.btn.outline:hover { background: color-mix(in oklab, var(--accent) 50%, var(--outline-bg)); }
+.btn.ghost { color: var(--muted-foreground); }
+.btn.ghost:hover { background: var(--accent); color: var(--foreground); }
+.btn:focus-visible, .tok:focus-visible, .ibtn:focus-visible, .seg button:focus-visible, .tr:focus-visible, .flow-row:focus-visible, .rel:focus-visible, .joiner:focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 2px;
+}
+.ibtn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px;
+  color: var(--muted-foreground); transition: background-color .15s, color .15s;
+}
+.ibtn:hover { background: var(--accent); color: var(--foreground); }
+.ibtn.xs { width: 24px; height: 24px; }
+.ibtn[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.ibtn:disabled { opacity: .64; pointer-events: none; }
+.kbd {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--muted); font: 11px var(--font-mono); color: var(--subtle-foreground);
+}
+.btn.primary .kbd { height: 18px; background: transparent; border-color: color-mix(in oklab, var(--primary-foreground) 25%, transparent); color: inherit; opacity: .8; }
+
+.seg {
+  display: inline-flex; align-items: center; gap: 2px; height: 32px; padding: 2px; border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent); background: var(--background);
+}
+.seg button {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 8px;
+  font-size: 12px; font-weight: 500; color: var(--muted-foreground); transition: background-color .15s, color .15s;
+}
+.seg button:hover { background: color-mix(in oklab, var(--accent) 60%, transparent); color: var(--foreground); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
+.seg.sm { height: 26px; border-radius: 8px; }
+.seg.sm button { height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11.5px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 4px; flex: none;
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  background: color-mix(in oklab, var(--muted) 55%, transparent);
+  font-size: 11px; color: var(--subtle-foreground); white-space: nowrap;
+}
+.chip.mono { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0; }
+.chip.warn { background: color-mix(in oklab, var(--warning) 10%, transparent); border-color: transparent; color: var(--warning-foreground); font-weight: 500; }
+.chip.bad { background: color-mix(in oklab, var(--destructive) 10%, transparent); border-color: transparent; color: var(--destructive-foreground); font-weight: 500; }
+.count { border-radius: 8px; background: var(--muted); padding: 1px 6px; font-size: 12px; font-weight: 500; color: var(--subtle-foreground); }
+
+.panel { border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / .05); overflow: hidden; }
+.panel-h { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); }
+.panel-t { font-size: 14px; font-weight: 500; color: var(--foreground); }
+.panel-note { font-size: 12px; color: var(--muted-foreground); }
+.panel-f { padding: 10px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); display: flex; flex-direction: column; gap: 6px; }
+.panel-f p { margin: 0; display: flex; gap: 6px; align-items: flex-start; }
+.panel-f p .i { margin-top: 2px; }
+
+/* ---------- Query tab ---------- */
+.subnav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.qbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.qbar .lbl2 { font-size: 12px; color: var(--muted-foreground); margin-left: 4px; }
+.q-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
+@media (max-width: 1180px) { .q-grid { grid-template-columns: minmax(0, 1fr); } .side { position: static !important; max-height: none !important; } }
+.pipeline { container-type: inline-size; min-width: 0; }
+.side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 124px); min-height: 0; }
+.side .sql-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+/* Stage card */
+.st {
+  border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .05); transition: border-color .3s ease-out, opacity .15s;
+}
+.st.hl { border-color: color-mix(in oklab, var(--ring) 75%, transparent); }
+.st.dragging { opacity: .4; }
+.st.drop-before { box-shadow: 0 -3px 0 -1px var(--foreground); }
+.st.drop-after { box-shadow: 0 3px 0 -1px var(--foreground); }
+.st-h { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px 0 4px; }
+.st:not(.collapsed):not(.off) .st-h { border-bottom: 1px solid var(--border); }
+.st.off .st-h > :not(.st-actions) { opacity: .5; }
+.st.off .st-body, .st.collapsed .st-body { display: none; }
+.grip { display: flex; align-items: center; justify-content: center; width: 16px; height: 28px; color: var(--muted-foreground); cursor: grab; opacity: 0; transition: opacity .15s; }
+.st:hover .grip { opacity: 1; }
+.st-n { font: 500 11px var(--font-mono); color: var(--subtle-foreground); min-width: 14px; text-align: center; }
+.st-ic { color: var(--muted-foreground); }
+.st-title { font-size: 14px; font-weight: 500; white-space: nowrap; }
+.st-clause { display: flex; gap: 4px; }
+.st-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); color: var(--muted-foreground); }
+.st-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-meta .delta { font: 11px var(--font-mono); color: var(--subtle-foreground); }
+.st-actions { display: flex; align-items: center; gap: 1px; }
+.st-b { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+@container (max-width: 780px) {
+  .st-b { grid-template-columns: minmax(0, 1fr); }
+  .st-b .pv { border-left: 0; border-top: 1px solid var(--border); }
+}
+.conn { position: relative; height: 22px; }
+.conn::before { content: ""; position: absolute; left: 27px; top: 0; bottom: 0; border-left: 1px solid var(--border); }
+.conn-add { position: absolute; left: 16px; top: 0; width: 22px; height: 22px; border-radius: 6px; opacity: 0; background: var(--background); border: 1px solid var(--border); }
+.conn:hover .conn-add, .conn-add:focus-visible { opacity: 1; }
+.add-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.add-hint { font-size: 12px; color: var(--muted-foreground); }
+
+/* Editor */
+.ed { padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.sub { font-size: 12px; color: var(--muted-foreground); }
+.sub + .row, .row + .sub { margin-top: 0; }
+.kw { font-size: 12px; color: var(--muted-foreground); }
+.hint { margin: 0; font-size: 12px; color: var(--muted-foreground); line-height: 16px; }
+.hint code { font-size: 11.5px; color: var(--foreground); }
+.tok {
+  display: inline-flex; align-items: center; gap: 4px; height: 26px; max-width: 100%; padding: 0 5px 0 8px;
+  border: 1px solid var(--input); border-radius: 6px; background: transparent;
+  font: 12.5px var(--font-mono); color: var(--foreground); white-space: nowrap; transition: background-color .15s, border-color .15s;
+}
+.tok:hover { background: var(--accent); }
+.tok .i { color: var(--muted-foreground); }
+.tok .tl { overflow: hidden; text-overflow: ellipsis; }
+.rel { color: var(--muted-foreground); }
+.tok-op { font-family: var(--font-sans); color: var(--foreground); }
+.tok-fn { font-family: var(--font-sans); font-weight: 500; }
+.tok-empty { border-style: dashed; color: var(--muted-foreground); font-family: var(--font-sans); }
+.tok-bad { border-color: color-mix(in oklab, var(--destructive) 40%, transparent); color: var(--destructive-foreground); }
+.tin {
+  height: 26px; min-width: 0; width: 140px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--input);
+  background: color-mix(in oklab, var(--background) 60%, transparent); font: 12.5px var(--font-mono); color: var(--foreground);
+  box-shadow: inset 0 1px 0 var(--edge); outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.tin::placeholder { color: var(--muted-foreground); }
+.tin:focus { border-color: var(--ring); box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 40%, transparent); }
+.tin.num { width: 76px; font-variant-numeric: tabular-nums; }
+.tin.xs { width: 56px; }
+.tin.alias { width: 64px; }
+.tin.name { width: 150px; }
+.tin.grow { flex: 1 1 88px; width: auto; max-width: 180px; }
+.tin.wide, .tin.sqlin { flex: 1; min-width: 160px; width: auto; }
+.tin[type="date"] { width: 136px; font-size: 12px; }
+textarea.tin { height: auto; min-height: 84px; width: 100%; padding: 8px; line-height: 20px; resize: vertical; background: var(--code); }
+
+.fgroup { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fgroup.nested { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: color-mix(in oklab, var(--muted) 40%, transparent); flex: 1; }
+.frow { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.fbody { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.joiner { flex: none; width: 44px; height: 26px; display: inline-flex; align-items: center; font-size: 12px; color: var(--muted-foreground); }
+button.joiner { justify-content: center; border-radius: 6px; border: 1px solid color-mix(in oklab, var(--border) 80%, transparent); font-family: var(--font-mono); font-size: 11.5px; color: var(--foreground); }
+button.joiner:hover { background: var(--accent); }
+.ffoot { display: flex; gap: 2px; margin-left: 44px; flex-wrap: wrap; }
+.fgroup.nested .ffoot { margin-left: 44px; }
+.del { opacity: .7; }
+.frow:hover > .del, .row:hover > .del, .del:focus-visible { opacity: 1; }
+.crow { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+.crow:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.cexpr { font: 11px var(--font-mono); color: var(--subtle-foreground); padding-left: 2px; overflow-wrap: anywhere; }
+.cexpr:empty { display: none; }
+.prow { display: grid; grid-template-columns: 20px minmax(0, 1fr) 120px 52px; align-items: center; gap: 6px; height: 30px; }
+.prow .pname { font: 12.5px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .ptype { font-size: 11px; color: var(--subtle-foreground); margin-left: 6px; }
+.prow.gone .pname { color: var(--destructive-foreground); text-decoration: line-through; }
+.prow .tin { width: 100%; }
+.prow input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--primary); }
+.plist { display: flex; flex-direction: column; max-height: 264px; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+.rel-list { display: flex; flex-direction: column; gap: 4px; }
+.rel-btn {
+  display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 8px; text-align: left;
+  font-size: 12.5px; color: var(--muted-foreground); transition: background-color .15s, color .15s;
+}
+.rel-btn:hover { background: var(--accent); color: var(--foreground); }
+.rel-btn .rt { font-family: var(--font-mono); color: var(--foreground); }
+.rel-btn .rh { font-size: 11px; color: var(--subtle-foreground); }
+.rel-btn .ra { margin-left: auto; font-size: 12px; opacity: 0; transition: opacity .15s; }
+.rel-btn:hover .ra, .rel-btn:focus-visible .ra { opacity: 1; }
+
+/* Preview grids */
+.pv { border-left: 1px solid var(--border); min-width: 0; display: flex; flex-direction: column; }
+.pv-scroll { overflow: auto; max-height: 236px; flex: 1; }
+.pv-foot { padding: 7px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--subtle-foreground); display: flex; gap: 8px; }
+.pv-empty { padding: 20px 16px; font-size: 12px; color: var(--muted-foreground); display: flex; gap: 8px; align-items: flex-start; }
+.grid { border-collapse: collapse; font: 12.5px/20px var(--font-mono); width: max-content; min-width: 100%; }
+.grid th {
+  position: sticky; top: 0; z-index: 1; background: var(--card); text-align: left; font-weight: 400;
+  padding: 6px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: bottom;
+}
+.grid th .tn { color: var(--foreground); font-size: 12.5px; }
+.grid th .tt { color: var(--subtle-foreground); font-size: 11px; line-height: 14px; }
+.grid td { padding: 0 12px; height: 30px; border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.grid tr:last-child td { border-bottom: 0; }
+.grid tbody tr:hover td { background: color-mix(in oklab, var(--muted) 40%, transparent); }
+.grid .r { text-align: right; font-variant-numeric: tabular-nums; }
+.grid .new { background: var(--accent); }
+.grid th.new { background: color-mix(in srgb, var(--card) 100%, transparent); background-image: linear-gradient(var(--accent), var(--accent)); }
+.grid .nd { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--foreground); opacity: .55; margin-right: 6px; vertical-align: 1px; }
+.null { color: var(--muted-foreground); font-size: 11.5px; }
+.np { color: var(--subtle-foreground); }
+[data-density="dense"] .grid td { height: 28px; }
+
+.st-msg:empty, .st-code:empty { display: none; }
+.msg { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 16px; padding: 9px 12px; border-top: 1px solid var(--border); color: var(--muted-foreground); }
+.msg .i { margin-top: 1px; }
+.msg.err { color: var(--destructive-foreground); background: color-mix(in oklab, var(--destructive) 6%, transparent); }
+.msg.warn { color: var(--warning-foreground); background: color-mix(in oklab, var(--warning) 6%, transparent); }
+.st-code { border-top: 1px solid var(--border); background: var(--code); padding: 8px 0; border-radius: 0 0 14px 14px; }
+
+/* SQL */
+.sql { font: 12.5px/20px var(--font-mono); padding: 8px 0; overflow: auto; background: var(--code); flex: 1; min-height: 120px; }
+.ln { display: flex; white-space: pre; padding-right: 14px; min-width: max-content; transition: background-color .15s; }
+.ln.hl { background: var(--code-highlight); }
+.ln.hl .gut { color: var(--foreground); }
+.gut { width: 30px; flex: none; text-align: right; padding-right: 12px; color: var(--subtle-foreground); font-size: 10.5px; user-select: none; }
+.sql .k { color: var(--foreground); font-weight: 500; }
+.sql .i2 { color: color-mix(in oklab, var(--foreground) 85%, transparent); }
+.sql .s { color: var(--success-foreground); }
+.sql .n { color: var(--info-foreground); }
+.sql .c, .sql .p { color: var(--muted-foreground); }
+.sqltext {
+  display: block; width: 100%; min-height: 420px; border: 0; outline: none; resize: vertical; padding: 14px 16px;
+  background: var(--code); font: 12.5px/20px var(--font-mono); color: var(--foreground); tab-size: 2;
+}
+
+/* Row flow */
+.flow { padding: 6px 0; }
+.flow-row {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) 96px 52px; align-items: center; gap: 10px;
+  width: 100%; height: 28px; padding: 0 14px; text-align: left; font-size: 12.5px; transition: background-color .15s;
+}
+.flow-row:hover, .flow-row.hl { background: color-mix(in oklab, var(--muted) 70%, transparent); }
+.flow-row .fn { font: 11px var(--font-mono); color: var(--subtle-foreground); text-align: center; }
+.flow-row .fl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
+.flow-row .fl b { font-weight: 500; color: var(--foreground); }
+.flow-row .fb { height: 4px; border-radius: 2px; background: var(--muted); overflow: hidden; }
+.flow-row .fb span { display: block; height: 100%; background: var(--chart-ink); border-radius: 2px; }
+.flow-row .fc { text-align: right; font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+.flow-row .fs { font-family: var(--font-sans); font-size: 11px; color: var(--subtle-foreground); }
+
+/* Results */
+#results { margin-top: 16px; }
+.res-scroll { overflow: auto; max-height: 520px; }
+.empty { padding: 36px 16px; text-align: center; font-size: 13px; color: var(--muted-foreground); }
+.empty p { margin: 4px 0; }
+.empty .t { color: var(--foreground); font-weight: 500; font-size: 14px; }
+.res-foot { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
+
+/* Menu */
+.menu {
+  position: fixed; z-index: 100; width: 280px; max-height: 380px; display: flex; flex-direction: column;
+  background: var(--popover); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-pop); outline: none;
+}
+.menu-search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); flex: none; }
+.menu-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; font-size: 13px; color: var(--foreground); }
+.menu-list { overflow: auto; padding: 4px; }
+.mg { padding: 8px 8px 4px; font-size: 12px; color: var(--muted-foreground); }
+.mi { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.mi.on { background: var(--accent); }
+.mi.dis { opacity: .5; pointer-events: none; }
+.mi .i { color: var(--muted-foreground); }
+.mi .mt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.mi .ml { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi .ml.mono { font-size: 12.5px; }
+.mi .md { font-size: 11px; color: var(--subtle-foreground); line-height: 14px; }
+.mi .mh { margin-left: auto; font: 11px var(--font-mono); color: var(--subtle-foreground); white-space: nowrap; }
+.mi .ck { width: 14px; flex: none; color: var(--foreground); }
+.menu-empty { padding: 14px 10px; font-size: 12px; color: var(--muted-foreground); }
+
+.toast {
+  position: fixed; right: 16px; bottom: 16px; z-index: 200; padding: 8px 12px; border-radius: 10px; font-size: 13px;
+  background: var(--popover); border: 1px solid var(--border); box-shadow: var(--shadow-pop); transition: opacity .15s;
+}
+.toast.out { opacity: 0; }
+
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition-duration: 0s !important; } .btn:active { transform: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="tabstrip" id="tabstrip"></div>
+    <header class="topbar" id="topbar"></header>
+    <div class="content" id="content">
+      <div class="subnav" id="subnav"></div>
+      <div class="qbar" id="qbar"></div>
+      <div class="q-grid" id="builder">
+        <div class="pipeline" id="pipeline"></div>
+        <aside class="side" id="side"></aside>
+      </div>
+      <div id="sqlmode" hidden></div>
+      <section id="results"></section>
+    </div>
+  </main>
+</div>
+<div id="menu-root"></div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   Utilities
+   ===================================================================== */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let uidN = 0;
+const uid = p => `${p}${++uidN}`;
+const DAY = 864e5;
+const TODAY = Date.UTC(2026, 8, 30, 12);
+const IS_MAC = /Mac/.test(navigator.platform);
+const MOD = IS_MAC ? '⌘' : 'Ctrl';
+const fmtInt = n => n.toLocaleString('en-US');
+const NAME_RE = /^[a-z_][a-z0-9_]*$/i;
+
+let seedV = 20260930;
+function rnd() { seedV = (seedV * 1664525 + 1013904223) >>> 0; return seedV / 4294967296; }
+const pick = a => a[Math.floor(rnd() * a.length)];
+const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+function wpick(pairs) {
+  const total = pairs.reduce((s, p) => s + p[1], 0);
+  let r = rnd() * total;
+  for (const [v, w] of pairs) { r -= w; if (r < 0) return v; }
+  return pairs[0][0];
+}
+
+function getPath(obj, path) { return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj); }
+function setPath(obj, path, val) {
+  const keys = path.split('.');
+  const last = keys.pop();
+  const parent = keys.reduce((o, k) => o[k], obj);
+  parent[last] = val;
+}
+
+const ICONS = {
+  table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+  join: '<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>',
+  filter: '<path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z"/>',
+  group: '<path d="M18 7V4H6l6 8-6 8h12v-3"/>',
+  fx: '<path d="M9 20c2 0 2.6-2 3.1-5l1.4-8c.5-2.6 1.1-4 3.5-4"/><path d="M8 10h8"/>',
+  columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/>',
+  sort: '<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/>',
+  limit: '<path d="M4 6h16M4 12h16M4 18h7"/>',
+  code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  chevr: '<path d="m9 18 6-6-6-6"/>',
+  chevl: '<path d="m15 18-6-6 6-6"/>',
+  up: '<path d="m18 15-6-6-6 6"/>',
+  grip: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff: '<path d="m3 3 18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  play: '<path d="M7 4v16l13-8z"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  db: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>',
+  alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+  refresh: '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
+  trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  dup: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V4h12"/>',
+  compass: '<circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
+  rows: '<path d="M3 5h18M3 12h18M3 19h18"/>',
+  steps: '<path d="M4 4v6a2 2 0 0 0 2 2h14"/><path d="m16 8 4 4-4 4"/>',
+};
+function icon(name, size = 14) {
+  return `<svg class="i" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+}
+
+/* =====================================================================
+   Schema + demo data (a fictional coffee roastery, "Ember & Oak")
+   ===================================================================== */
+function kindOf(type, opts) {
+  if (opts.enum) return 'enum';
+  if (/^(int|numeric)/.test(type)) return 'number';
+  if (type === 'timestamptz') return 'time';
+  if (type === 'bool') return 'bool';
+  if (type === 'jsonb') return 'json';
+  if (type.endsWith('[]')) return 'array';
+  return 'text';
+}
+function C(name, type, opts = {}) { return { name, type, kind: kindOf(type, opts), ...opts }; }
+
+const TABLES = {
+  categories: { alias: 'cat', columns: [C('id', 'int8', { pk: true }), C('name', 'text'), C('slug', 'text')] },
+  customers: { alias: 'c', columns: [
+    C('id', 'int8', { pk: true }), C('email', 'text'), C('full_name', 'text'), C('country', 'text'),
+    C('marketing_opt_in', 'bool'), C('created_at', 'timestamptz'),
+  ] },
+  order_items: { alias: 'oi', columns: [
+    C('id', 'int8', { pk: true }), C('order_id', 'int8', { fk: ['orders', 'id'] }), C('product_id', 'int8', { fk: ['products', 'id'] }),
+    C('quantity', 'int4'), C('unit_price_cents', 'int4'),
+  ] },
+  orders: { alias: 'o', columns: [
+    C('id', 'int8', { pk: true }), C('customer_id', 'int8', { fk: ['customers', 'id'] }),
+    C('status', 'order_status', { enum: ['pending', 'paid', 'shipped', 'delivered', 'refunded', 'cancelled'] }),
+    C('total_cents', 'int4'), C('currency', 'text'), C('created_at', 'timestamptz'),
+    C('shipped_at', 'timestamptz', { nullable: true }), C('metadata', 'jsonb', { keys: ['channel', 'coupon', 'gift'] }),
+  ] },
+  products: { alias: 'p', columns: [
+    C('id', 'int8', { pk: true }), C('sku', 'text'), C('name', 'text'), C('category_id', 'int8', { fk: ['categories', 'id'] }),
+    C('price_cents', 'int4'), C('roast', 'roast_level', { enum: ['light', 'medium', 'dark'], nullable: true }),
+    C('tags', 'text[]'), C('is_active', 'bool'),
+  ] },
+  subscriptions: { alias: 's', columns: [
+    C('id', 'int8', { pk: true }), C('customer_id', 'int8', { fk: ['customers', 'id'] }),
+    C('cadence', 'sub_cadence', { enum: ['weekly', 'fortnightly', 'monthly'] }),
+    C('started_at', 'timestamptz'), C('cancelled_at', 'timestamptz', { nullable: true }),
+  ] },
+};
+const TABLE_ORDER = Object.keys(TABLES);
+
+function genData() {
+  const cats = [['Coffee', 'coffee'], ['Brewing gear', 'brewing-gear'], ['Merch', 'merch'], ['Gift cards', 'gift-cards']];
+  TABLES.categories.data = cats.map(([name, slug], i) => ({ id: i + 1, name, slug }));
+
+  const prods = [
+    ['Kiln espresso', 1, 1800, 'dark', ['espresso', 'bestseller']],
+    ['Morning fog blend', 1, 1600, 'medium', ['filter']],
+    ['Ridgeline Ethiopia', 1, 2100, 'light', ['single-origin', 'filter']],
+    ['Night shift decaf', 1, 1700, 'dark', ['decaf']],
+    ['Harbour house blend', 1, 1500, 'medium', ['espresso', 'filter']],
+    ['Copper kettle', 2, 6400, null, ['kettle']],
+    ['Pour-over dripper', 2, 2800, null, ['filter']],
+    ['Burr grinder', 2, 14900, null, ['grinder', 'bestseller']],
+    ['Paper filters (100)', 2, 700, null, ['filter']],
+    ['Enamel mug', 3, 2200, null, ['mug']],
+    ['Canvas tote', 3, 1900, null, []],
+    ['Roaster cap', 3, 2500, null, []],
+    ['Gift card 25', 4, 2500, null, ['gift']],
+    ['Gift card 50', 4, 5000, null, ['gift']],
+  ];
+  TABLES.products.data = prods.map((p, i) => ({
+    id: i + 1, sku: `EO-${1000 + i * 7}`, name: p[0], category_id: p[1], price_cents: p[2], roast: p[3], tags: p[4], is_active: i !== 11,
+  }));
+
+  const first = ['Aarav', 'Maya', 'Noah', 'Priya', 'Liam', 'Hana', 'Oliver', 'Zara', 'Kenji', 'Ava', 'Mateo', 'Isla', 'Ravi', 'Sofia', 'Finn', 'Leila', 'Arjun', 'Nora', 'Theo', 'Mei', 'Jonas', 'Elif', 'Diego', 'Amara'];
+  const last = ['Shah', 'Okafor', 'Müller', 'Tanaka', 'Walsh', 'Iyer', 'Bennett', 'Novak', 'Costa', 'Lindqvist', 'Reyes', 'Haddad', 'Kim', 'Fischer', 'Nair', 'Brooks', 'Sato', 'Moreau', 'Kapoor', 'Evans'];
+  const countries = [['US', 30], ['IN', 18], ['GB', 14], ['DE', 10], ['JP', 8], ['AU', 7], ['CA', 7], ['NL', 6]];
+  const currency = { US: 'USD', IN: 'INR', GB: 'GBP', DE: 'EUR', JP: 'JPY', AU: 'AUD', CA: 'CAD', NL: 'EUR' };
+  const ascii = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+  const customers = [];
+  for (let i = 0; i < 140; i++) {
+    const f = pick(first), l = pick(last);
+    customers.push({
+      id: i + 1, email: `${ascii(f)}.${ascii(l)}${i + 1}@example.com`, full_name: `${f} ${l}`, country: wpick(countries),
+      marketing_opt_in: rnd() < 0.55, created_at: TODAY - ri(30, 900) * DAY - ri(0, 86399) * 1000,
+    });
+  }
+  TABLES.customers.data = customers;
+
+  const prodWeights = TABLES.products.data.map(p => [p, [0, 6, 1.6, 1, 0.6][p.category_id]]);
+  const raw = [];
+  for (let i = 0; i < 900; i++) {
+    const cust = customers[Math.min(139, Math.floor(Math.pow(rnd(), 1.7) * 140))];
+    const age = Math.floor(Math.pow(rnd(), 1.3) * 540);
+    const created = TODAY - age * DAY - ri(0, 11 * 3600) * 1000;
+    let status;
+    if (age < 2) status = wpick([['pending', 1], ['paid', 2]]);
+    else if (age < 10) status = wpick([['paid', 1], ['shipped', 3], ['delivered', 2], ['cancelled', 0.3]]);
+    else status = wpick([['delivered', 84], ['refunded', 5], ['cancelled', 7], ['shipped', 1]]);
+    const items = [];
+    const n = wpick([[1, 45], [2, 30], [3, 17], [4, 8]]);
+    for (let k = 0; k < n; k++) {
+      const p = wpick(prodWeights);
+      items.push({ product_id: p.id, quantity: wpick([[1, 70], [2, 22], [3, 8]]), unit_price_cents: rnd() < 0.1 ? Math.round(p.price_cents * 0.9) : p.price_cents });
+    }
+    const total = items.reduce((s, it) => s + it.quantity * it.unit_price_cents, 0);
+    let shipped = (status === 'shipped' || status === 'delivered') ? created + ri(1, 4) * DAY + ri(0, 20) * 3600e3 : null;
+    if (shipped && shipped > TODAY) shipped = TODAY - 3600e3;
+    raw.push({
+      cust, created, status, items, total, shipped,
+      meta: { channel: wpick([['web', 60], ['app', 30], ['wholesale', 10]]), coupon: rnd() < 0.18 ? pick(['BREW10', 'FIRSTCUP', 'WINTER25']) : null, gift: rnd() < 0.08 },
+    });
+  }
+  raw.sort((a, b) => a.created - b.created);
+  const orders = [], orderItems = [];
+  raw.forEach((r, i) => {
+    const id = i + 1;
+    orders.push({ id, customer_id: r.cust.id, status: r.status, total_cents: r.total, currency: currency[r.cust.country], created_at: r.created, shipped_at: r.shipped, metadata: r.meta });
+    r.items.forEach(it => orderItems.push({ id: orderItems.length + 1, order_id: id, ...it }));
+  });
+  TABLES.orders.data = orders;
+  TABLES.order_items.data = orderItems;
+
+  const subs = [], used = new Set();
+  while (subs.length < 56) {
+    const c = pick(customers);
+    if (used.has(c.id)) continue;
+    used.add(c.id);
+    const start = TODAY - ri(10, 600) * DAY;
+    const cancelled = rnd() < 0.3 ? Math.min(TODAY - DAY, start + ri(20, 300) * DAY) : null;
+    subs.push({ id: subs.length + 1, customer_id: c.id, cadence: wpick([['weekly', 2], ['fortnightly', 3], ['monthly', 5]]), started_at: start, cancelled_at: cancelled });
+  }
+  TABLES.subscriptions.data = subs;
+}
+
+const rowCache = new Map();
+function baseRows(table, alias) {
+  const key = `${table}:${alias}`;
+  if (!rowCache.has(key)) {
+    const cols = TABLES[table].columns;
+    rowCache.set(key, TABLES[table].data.map(r => {
+      const o = {};
+      for (const c of cols) o[`${alias}.${c.name}`] = r[c.name];
+      return o;
+    }));
+  }
+  return rowCache.get(key);
+}
+
+/* A field is one column flowing through the pipeline. Rows are keyed by field id;
+   `sql` is how the current SELECT refers to it (it changes when a CTE step wraps). */
+function tableFields(table, alias, origin) {
+  return TABLES[table].columns.map(c => ({
+    id: `${alias}.${c.name}`, name: c.name, rel: alias, table, kind: c.kind, pgType: c.type,
+    enumVals: c.enum, keys: c.keys, fk: c.fk, pk: c.pk, sql: `${alias}.${c.name}`, origin, base: true,
+  }));
+}
+const displayName = f => (f.rel && !f.renamed ? `${f.rel}.${f.name}` : f.name);
+const fieldHtml = f => (f.rel && !f.renamed ? `<span class="rel">${esc(f.rel)}.</span>${esc(f.name)}` : esc(f.name));
+
+/* =====================================================================
+   Values, formatting, comparison
+   ===================================================================== */
+const pad2 = n => String(n).padStart(2, '0');
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+function fmtPlain(v, kind) {
+  if (v == null) return 'NULL';
+  if (kind === 'time') return fmtTime(v);
+  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+function cellHtml(v, f) {
+  if (v === undefined) return '<span class="np" title="Not evaluated in the prototype">·</span>';
+  if (v === null) return '<span class="null">NULL</span>';
+  if (f.kind === 'array') return esc(`{${v.map(x => fmtPlain(x, f.elemKind)).join(',')}}`);
+  return esc(fmtPlain(v, f.kind));
+}
+function truncTime(ms, unit) {
+  if (ms == null) return null;
+  const d = new Date(ms);
+  const y = d.getUTCFullYear(), m = d.getUTCMonth(), day = d.getUTCDate();
+  if (unit === 'day') return Date.UTC(y, m, day);
+  if (unit === 'week') return Date.UTC(y, m, day - ((d.getUTCDay() + 6) % 7));
+  if (unit === 'month') return Date.UTC(y, m, 1);
+  return Date.UTC(y, 0, 1);
+}
+function datePart(ms, part) {
+  const d = new Date(ms);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(), dow: d.getUTCDay(), hour: d.getUTCHours() }[part];
+}
+function cmpVals(a, b) {
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  if (typeof a === 'boolean') return a === b ? 0 : (a ? 1 : -1);
+  return String(fmtPlain(a)).localeCompare(String(fmtPlain(b)));
+}
+// Postgres default: ASC puts NULLs last, DESC puts them first.
+function cmpNulls(a, b, dir, nulls = 'default') {
+  const an = a == null, bn = b == null;
+  if (an && bn) return 0;
+  if (an || bn) {
+    const nullsFirst = nulls === 'first' || (nulls === 'default' && dir === -1);
+    if (an) return nullsFirst ? -1 : 1;
+    return nullsFirst ? 1 : -1;
+  }
+  return cmpVals(a, b) * dir;
+}
+
+const RESERVED = new Set(['all', 'and', 'as', 'asc', 'case', 'check', 'column', 'default', 'desc', 'distinct', 'else', 'end', 'false', 'from', 'group', 'having', 'in', 'is', 'join', 'left', 'limit', 'not', 'null', 'offset', 'on', 'or', 'order', 'select', 'table', 'then', 'true', 'user', 'when', 'where', 'window', 'with']);
+const qi = name => (/^[a-z_][a-z0-9_]*$/.test(name) && !RESERVED.has(name) ? name : `"${name.replace(/"/g, '""')}"`);
+const lit = v => `'${String(v).replace(/'/g, "''")}'`;
+const numLit = v => (Number.isFinite(Number(v)) ? String(Number(v)) : 'NULL');
+
+/* =====================================================================
+   Filter operators (per column kind)
+   ===================================================================== */
+const UNITS = { days: DAY, weeks: 7 * DAY, months: 30.44 * DAY, years: 365.25 * DAY };
+const lc = s => String(s).toLowerCase();
+const dateMs = s => Date.parse(`${s}T00:00:00Z`);
+const op = (id, label, v, sql, test) => ({ id, label, v, sql, test });
+const NULL_OPS = [
+  op('null', 'is null', 'none', f => `${f} IS NULL`, x => x == null),
+  op('notnull', 'is not null', 'none', f => `${f} IS NOT NULL`, x => x != null),
+];
+const OPS = {
+  number: [
+    op('eq', '=', 'number', (f, v) => `${f} = ${numLit(v)}`, (x, v) => x != null && x === Number(v)),
+    op('neq', '≠', 'number', (f, v) => `${f} <> ${numLit(v)}`, (x, v) => x != null && x !== Number(v)),
+    op('gt', '>', 'number', (f, v) => `${f} > ${numLit(v)}`, (x, v) => x != null && x > Number(v)),
+    op('gte', '≥', 'number', (f, v) => `${f} >= ${numLit(v)}`, (x, v) => x != null && x >= Number(v)),
+    op('lt', '<', 'number', (f, v) => `${f} < ${numLit(v)}`, (x, v) => x != null && x < Number(v)),
+    op('lte', '≤', 'number', (f, v) => `${f} <= ${numLit(v)}`, (x, v) => x != null && x <= Number(v)),
+    op('between', 'between', 'range', (f, v) => `${f} BETWEEN ${numLit(v.a)} AND ${numLit(v.b)}`, (x, v) => x != null && x >= Number(v.a) && x <= Number(v.b)),
+    ...NULL_OPS,
+  ],
+  text: [
+    op('contains', 'contains', 'text', (f, v) => `${f} ILIKE ${lit(`%${v}%`)}`, (x, v) => x != null && lc(x).includes(lc(v))),
+    op('ncontains', 'does not contain', 'text', (f, v) => `${f} NOT ILIKE ${lit(`%${v}%`)}`, (x, v) => x != null && !lc(x).includes(lc(v))),
+    op('eq', 'is', 'text', (f, v) => `${f} = ${lit(v)}`, (x, v) => x === v),
+    op('neq', 'is not', 'text', (f, v) => `${f} <> ${lit(v)}`, (x, v) => x != null && x !== v),
+    op('starts', 'starts with', 'text', (f, v) => `${f} ILIKE ${lit(`${v}%`)}`, (x, v) => x != null && lc(x).startsWith(lc(v))),
+    op('ends', 'ends with', 'text', (f, v) => `${f} ILIKE ${lit(`%${v}`)}`, (x, v) => x != null && lc(x).endsWith(lc(v))),
+    op('in', 'is any of', 'list', (f, v) => `${f} IN (${v.map(lit).join(', ')})`, (x, v) => v.includes(x)),
+    ...NULL_OPS,
+  ],
+  enum: [
+    op('in', 'is any of', 'enum', (f, v) => `${f} IN (${v.map(lit).join(', ')})`, (x, v) => v.includes(x)),
+    op('nin', 'is none of', 'enum', (f, v) => `${f} NOT IN (${v.map(lit).join(', ')})`, (x, v) => x != null && !v.includes(x)),
+    ...NULL_OPS,
+  ],
+  time: [
+    op('last', 'in the last', 'duration', (f, v) => `${f} >= now() - interval '${v.n} ${v.unit}'`, (x, v) => x != null && x >= TODAY - v.n * UNITS[v.unit]),
+    op('after', 'is after', 'date', (f, v) => `${f} >= ${lit(v)}`, (x, v) => x != null && x >= dateMs(v)),
+    op('before', 'is before', 'date', (f, v) => `${f} < ${lit(v)}`, (x, v) => x != null && x < dateMs(v)),
+    op('between', 'between', 'daterange', (f, v) => `${f} >= ${lit(v.a)} AND ${f} < ${lit(v.b)}`, (x, v) => x != null && x >= dateMs(v.a) && x < dateMs(v.b)),
+    ...NULL_OPS,
+  ],
+  bool: [
+    op('true', 'is true', 'none', f => `${f}`, x => x === true),
+    op('false', 'is false', 'none', f => `NOT ${f}`, x => x === false),
+    ...NULL_OPS,
+  ],
+  json: [
+    op('keyeq', 'key equals', 'jsonkv', (f, v) => `${f} ->> ${lit(v.key)} = ${lit(v.val)}`, (x, v) => x != null && x[v.key] != null && String(x[v.key]) === v.val),
+    op('keyset', 'key is set', 'jsonkey', (f, v) => `${f} ->> ${lit(v)} IS NOT NULL`, (x, v) => x != null && x[v] != null),
+    ...NULL_OPS,
+  ],
+  array: [
+    op('has', 'contains', 'text', (f, v) => `${f} @> ARRAY[${lit(v)}]`, (x, v) => x != null && x.includes(v)),
+    op('empty', 'is empty', 'none', f => `cardinality(${f}) = 0`, x => x != null && x.length === 0),
+    ...NULL_OPS,
+  ],
+};
+const DEFAULT_OP = { number: 'eq', text: 'contains', enum: 'in', time: 'last', bool: 'true', json: 'keyeq', array: 'has' };
+const opOf = (f, id) => (OPS[f.kind] || OPS.text).find(o => o.id === id);
+function defaultValue(v, f) {
+  switch (v) {
+    case 'range': case 'daterange': return { a: '', b: '' };
+    case 'list': case 'enum': return [];
+    case 'duration': return { n: 30, unit: 'days' };
+    case 'jsonkv': return { key: (f.keys && f.keys[0]) || '', val: '' };
+    case 'jsonkey': return (f.keys && f.keys[0]) || '';
+    case 'none': return null;
+    default: return '';
+  }
+}
+function valueOk(v, val) {
+  switch (v) {
+    case 'none': return true;
+    case 'number': return val !== '' && val != null && Number.isFinite(Number(val));
+    case 'range': return !!val && val.a !== '' && val.b !== '' && Number.isFinite(Number(val.a)) && Number.isFinite(Number(val.b));
+    case 'list': case 'enum': return Array.isArray(val) && val.length > 0;
+    case 'duration': return !!val && Number.isFinite(val.n) && val.n > 0;
+    case 'daterange': return !!val && !!val.a && !!val.b;
+    case 'jsonkv': return !!val && !!val.key && val.val !== '';
+    default: return val != null && val !== '';
+  }
+}
+
+/* =====================================================================
+   Aggregates and column functions
+   ===================================================================== */
+const AGGS = {
+  count: { label: 'Count rows', hint: 'count(*)', noField: true, sql: () => 'count(*)', kind: () => 'number', pg: () => 'int8', ev: (vals, rows) => rows.length },
+  count_distinct: { label: 'Count distinct', hint: 'count(DISTINCT a)', sql: s => `count(DISTINCT ${s})`, kind: () => 'number', pg: () => 'int8', ev: vals => new Set(vals.filter(v => v != null).map(v => JSON.stringify(v))).size },
+  sum: { label: 'Sum', hint: 'sum(a)', kinds: ['number'], sql: s => `sum(${s})`, kind: () => 'number', pg: () => 'numeric', ev: vals => { const n = vals.filter(v => v != null); return n.length ? n.reduce((a, b) => a + b, 0) : null; } },
+  avg: { label: 'Average', hint: 'avg(a)', kinds: ['number'], sql: s => `avg(${s})`, kind: () => 'number', pg: () => 'numeric', ev: vals => { const n = vals.filter(v => v != null); return n.length ? n.reduce((a, b) => a + b, 0) / n.length : null; } },
+  min: { label: 'Min', hint: 'min(a)', sql: s => `min(${s})`, kind: f => f.kind, pg: f => f.pgType, ev: vals => vals.filter(v => v != null).reduce((a, b) => (a == null || cmpVals(b, a) < 0 ? b : a), null) },
+  max: { label: 'Max', hint: 'max(a)', sql: s => `max(${s})`, kind: f => f.kind, pg: f => f.pgType, ev: vals => vals.filter(v => v != null).reduce((a, b) => (a == null || cmpVals(b, a) > 0 ? b : a), null) },
+  array_agg: { label: 'List of values', hint: 'array_agg(a)', sql: s => `array_agg(${s})`, kind: () => 'array', pg: f => `${f.pgType}[]`, ev: vals => vals },
+};
+function defaultAggName(a, f) {
+  const n = f ? f.name : 'value';
+  return { count: 'count', count_distinct: `distinct_${n}`, sum: `sum_${n}`, avg: `avg_${n}`, min: `min_${n}`, max: `max_${n}`, array_agg: `${n}_list` }[a.fn];
+}
+
+function over(x) {
+  const part = x.part ? `PARTITION BY ${x.part} ` : '';
+  return `${part}ORDER BY ${x.order}${x.dir === 'desc' ? ' DESC' : ''}`;
+}
+// Window helpers: split row indices into partitions, each sorted by the window's ORDER BY.
+function winGroups(rows, g) {
+  const parts = new Map();
+  rows.forEach((r, i) => {
+    const k = g.part ? JSON.stringify(g.part(r) ?? null) : '';
+    if (!parts.has(k)) parts.set(k, []);
+    parts.get(k).push(i);
+  });
+  const dir = g.dir && g.dir() === 'desc' ? -1 : 1;
+  return [...parts.values()].map(idx => (g.order ? idx.sort((i, j) => cmpNulls(g.order(rows[i]), g.order(rows[j]), dir)) : idx));
+}
+const WIN_ARGS = [{ k: 'part', t: 'field?', label: 'per' }, { k: 'order', t: 'field', label: 'by' }];
+
+const FUNCS = {
+  arith: {
+    g: 'Math', label: 'Arithmetic', desc: 'a + b, a − b, a × b, a ÷ b', name: 'value', paren: true,
+    args: [{ k: 'a', t: 'field', kinds: ['number'] }, { k: 'op', t: 'choice', choices: ['+', '-', '*', '/'] }, { k: 'b', t: 'operand', kinds: ['number'] }],
+    out: 'number', sql: x => (x.op === '/' ? `${x.a}::numeric / ${x.b}` : `${x.a} ${x.op} ${x.b}`),
+    ev: x => {
+      if (x.a == null || x.b == null) return null;
+      if (x.op === '+') return x.a + x.b;
+      if (x.op === '-') return x.a - x.b;
+      if (x.op === '*') return x.a * x.b;
+      return x.b === 0 ? null : x.a / x.b;
+    },
+  },
+  round: {
+    g: 'Math', label: 'Round', desc: 'round(a, digits)', name: 'rounded',
+    args: [{ k: 'a', t: 'field', kinds: ['number'] }, { k: 'd', t: 'choice', label: 'to', choices: ['0', '1', '2'], suffix: 'digits' }],
+    out: 'number', sql: x => `round(${x.a}::numeric, ${x.d})`, ev: x => (x.a == null ? null : Number(x.a.toFixed(Number(x.d)))),
+  },
+  lower: { g: 'Text', label: 'Lowercase', desc: 'lower(a)', name: 'lowered', args: [{ k: 'a', t: 'field', kinds: ['text', 'enum'] }], out: 'text', sql: x => `lower(${x.a})`, ev: x => (x.a == null ? null : lc(x.a)) },
+  upper: { g: 'Text', label: 'Uppercase', desc: 'upper(a)', name: 'uppered', args: [{ k: 'a', t: 'field', kinds: ['text', 'enum'] }], out: 'text', sql: x => `upper(${x.a})`, ev: x => (x.a == null ? null : String(x.a).toUpperCase()) },
+  length: { g: 'Text', label: 'Length', desc: 'length(a)', name: 'length', args: [{ k: 'a', t: 'field', kinds: ['text'] }], out: 'number', sql: x => `length(${x.a})`, ev: x => (x.a == null ? null : String(x.a).length) },
+  concat: {
+    g: 'Text', label: 'Join text', desc: "concat_ws(' ', a, b)", name: 'label',
+    args: [{ k: 'a', t: 'field' }, { k: 'sep', t: 'text', label: 'joined by', def: ' · ' }, { k: 'b', t: 'field', label: 'and' }],
+    out: 'text', sql: x => `concat_ws(${lit(x.sep)}, ${x.a}, ${x.b})`,
+    ev: (x, kinds) => [[x.a, kinds.a], [x.b, kinds.b]].filter(([v]) => v != null).map(([v, k]) => fmtPlain(v, k)).join(x.sep),
+  },
+  trunc: {
+    g: 'Date', label: 'Truncate date', desc: "date_trunc('month', a)", name: 'period',
+    args: [{ k: 'a', t: 'field', kinds: ['time'] }, { k: 'unit', t: 'choice', label: 'to', choices: ['day', 'week', 'month', 'year'], def: 'month' }],
+    out: 'time', sql: x => `date_trunc('${x.unit}', ${x.a})`, ev: x => truncTime(x.a, x.unit),
+  },
+  extract: {
+    g: 'Date', label: 'Date part', desc: 'extract(dow FROM a)', name: 'part',
+    args: [{ k: 'part', t: 'choice', choices: ['year', 'month', 'day', 'dow', 'hour'] }, { k: 'a', t: 'field', label: 'of', kinds: ['time'] }],
+    out: 'number', sql: x => `extract(${x.part} FROM ${x.a})`, ev: x => (x.a == null ? null : datePart(x.a, x.part)),
+  },
+  age: {
+    g: 'Date', label: 'Days since', desc: 'current_date - a::date', name: 'days_since', paren: true,
+    args: [{ k: 'a', t: 'field', kinds: ['time'] }], out: 'number',
+    sql: x => `current_date - ${x.a}::date`, ev: x => (x.a == null ? null : Math.floor((truncTime(TODAY, 'day') - truncTime(x.a, 'day')) / DAY)),
+  },
+  json: {
+    g: 'JSON', label: 'JSON value', desc: "a ->> 'key'", name: 'value', paren: true,
+    args: [{ k: 'a', t: 'field', kinds: ['json'] }, { k: 'key', t: 'jsonkey', label: 'key' }],
+    out: 'text', sql: x => `${x.a} ->> ${lit(x.key)}`, ev: x => (x.a == null || x.a[x.key] == null ? null : String(x.a[x.key])),
+  },
+  coalesce: {
+    g: 'Other', label: 'First non-null', desc: 'coalesce(a, fallback)', name: 'value',
+    args: [{ k: 'a', t: 'field' }, { k: 'b', t: 'operand', label: 'or' }],
+    out: kinds => kinds.a, sql: x => `coalesce(${x.a}, ${x.b})`, ev: x => x.a ?? x.b,
+  },
+  row_number: {
+    g: 'Window', win: true, label: 'Row number', desc: 'row_number() OVER (…)', name: 'row_number',
+    args: [...WIN_ARGS, { k: 'dir', t: 'choice', choices: ['desc', 'asc'] }], out: 'number',
+    sql: x => `row_number() OVER (${over(x)})`,
+    all: (rows, g) => { const out = []; winGroups(rows, g).forEach(idx => idx.forEach((i, n) => { out[i] = n + 1; })); return out; },
+  },
+  rank: {
+    g: 'Window', win: true, label: 'Rank', desc: 'rank() OVER (…), ties share a rank', name: 'rank',
+    args: [...WIN_ARGS, { k: 'dir', t: 'choice', choices: ['desc', 'asc'] }], out: 'number',
+    sql: x => `rank() OVER (${over(x)})`,
+    all: (rows, g) => {
+      const out = [];
+      winGroups(rows, g).forEach(idx => {
+        let rank = 1;
+        idx.forEach((i, n) => {
+          if (n > 0 && cmpNulls(g.order(rows[idx[n - 1]]), g.order(rows[i]), 1) !== 0) rank = n + 1;
+          out[i] = rank;
+        });
+      });
+      return out;
+    },
+  },
+  running: {
+    g: 'Window', win: true, label: 'Running total', desc: 'sum(a) OVER (… ORDER BY …)', name: 'running_total',
+    args: [{ k: 'a', t: 'field', kinds: ['number'] }, ...WIN_ARGS, { k: 'dir', t: 'choice', choices: ['asc', 'desc'] }], out: 'number',
+    sql: x => `sum(${x.a}) OVER (${over(x)})`,
+    all: (rows, g) => {
+      const out = [];
+      winGroups(rows, g).forEach(idx => { let s = 0; idx.forEach(i => { const v = g.a(rows[i]); if (v != null) s += v; out[i] = s; }); });
+      return out;
+    },
+  },
+  lag: {
+    g: 'Window', win: true, label: 'Previous value', desc: 'lag(a) OVER (…)', name: 'previous',
+    args: [{ k: 'a', t: 'field' }, ...WIN_ARGS, { k: 'dir', t: 'choice', choices: ['asc', 'desc'] }], out: kinds => kinds.a,
+    sql: x => `lag(${x.a}) OVER (${over(x)})`,
+    all: (rows, g) => { const out = []; winGroups(rows, g).forEach(idx => idx.forEach((i, n) => { out[i] = n > 0 ? (g.a(rows[idx[n - 1]]) ?? null) : null; })); return out; },
+  },
+  pct: {
+    g: 'Window', win: true, label: 'Share of total', desc: 'a as a % of its partition', name: 'pct_of_total',
+    args: [{ k: 'a', t: 'field', kinds: ['number'] }, { k: 'part', t: 'field?', label: 'within' }], out: 'number',
+    sql: x => `round(100.0 * ${x.a} / sum(${x.a}) OVER (${x.part ? `PARTITION BY ${x.part}` : ''}), 1)`,
+    all: (rows, g) => {
+      const out = [];
+      winGroups(rows, g).forEach(idx => {
+        const total = idx.reduce((s, i) => s + (g.a(rows[i]) ?? 0), 0);
+        idx.forEach(i => { const v = g.a(rows[i]); out[i] = v == null || !total ? null : Math.round((1000 * v) / total) / 10; });
+      });
+      return out;
+    },
+  },
+  raw: { g: 'SQL', label: 'SQL expression', desc: 'Write the expression yourself', name: 'expr', paren: true, args: [{ k: 'expr', t: 'sql' }], out: 'text', sql: x => x.expr, ev: null },
+};
+
+// Resolve a computed column against the fields it can see.
+function computeCol(c, F) {
+  const fn = FUNCS[c.fn];
+  if (!fn) return { incomplete: true };
+  if (!NAME_RE.test(c.as || '')) return { error: `"${c.as}" isn't a valid column name. Use letters, numbers and underscores.` };
+  const sx = {}, get = {}, kinds = {};
+  let win = !!fn.win;
+  for (const a of fn.args) {
+    const v = c.args[a.k];
+    if (a.t === 'field' || a.t === 'field?') {
+      if (!v) {
+        if (a.t === 'field') return { incomplete: true };
+        sx[a.k] = null; get[a.k] = null;
+        continue;
+      }
+      const f = F.get(v);
+      sx[a.k] = f.sql; get[a.k] = r => r[f.id]; kinds[a.k] = f.kind;
+      if (f.win) win = true;
+    } else if (a.t === 'operand') {
+      if (!v) return { incomplete: true };
+      if (v.f) {
+        const f = F.get(v.f);
+        sx[a.k] = f.sql; get[a.k] = r => r[f.id]; kinds[a.k] = f.kind;
+        if (f.win) win = true;
+      } else {
+        const val = v.n ?? v.s;
+        sx[a.k] = v.n != null ? String(v.n) : lit(v.s);
+        get[a.k] = () => val;
+        kinds[a.k] = v.n != null ? 'number' : 'text';
+      }
+    } else {
+      if (v == null || v === '') return { incomplete: true };
+      sx[a.k] = v; get[a.k] = () => v;
+    }
+  }
+  const kind = typeof fn.out === 'function' ? (fn.out(kinds) || 'text') : fn.out;
+  return { fn, sql: fn.sql(sx), win, kind, get, kinds };
+}
+const pgOf = kind => ({ number: 'numeric', text: 'text', time: 'timestamptz', bool: 'bool', json: 'jsonb', array: 'array', enum: 'text' }[kind] || 'text');
+
+/* =====================================================================
+   Stages
+   ===================================================================== */
+const STAGES = {
+  join: { label: 'Join', icon: 'join', desc: 'Bring in columns from a related table' },
+  filter: { label: 'Filter', icon: 'filter', desc: 'Keep rows that match conditions' },
+  group: { label: 'Group', icon: 'group', desc: 'Collapse rows into groups with totals' },
+  compute: { label: 'Add columns', icon: 'fx', desc: 'Calculate new columns, window functions included' },
+  project: { label: 'Pick columns', icon: 'columns', desc: 'Choose, rename and reorder columns' },
+  sort: { label: 'Sort', icon: 'sort', desc: 'Order rows by one or more columns' },
+  limit: { label: 'Limit', icon: 'limit', desc: 'Keep the first n rows' },
+  sql: { label: 'Custom SQL', icon: 'code', desc: 'Write SQL over the rows above' },
+};
+const emptyCond = () => ({ k: 'cond', field: null, op: null, value: null });
+const mkStage = (type, cfg) => ({ id: uid('s'), type, enabled: true, collapsed: false, showSql: false, ...cfg });
+
+function uniqueAlias(table, fields) {
+  const used = new Set(fields.map(f => f.rel).filter(Boolean));
+  const base = TABLES[table].alias;
+  let alias = base, n = 2;
+  while (used.has(alias)) alias = `${base}${n++}`;
+  return alias;
+}
+
+function newStage(type, inFields, extra) {
+  switch (type) {
+    case 'join': {
+      const s = extra || null;
+      return mkStage('join', { table: s ? s.table : null, alias: s ? uniqueAlias(s.table, inFields) : '', how: 'inner', on: [{ l: s ? s.l : null, r: s ? s.r : null }] });
+    }
+    case 'filter': return mkStage('filter', { where: { k: 'group', op: 'and', items: [emptyCond()] } });
+    case 'group': return mkStage('group', { keys: [{ id: uid('k'), field: null, bucket: null }], aggs: [{ id: uid('a'), fn: 'count', field: null, as: 'count', asAuto: true }] });
+    case 'compute': return mkStage('compute', { cols: [{ id: uid('x'), as: 'new_column', asAuto: true, fn: null, args: {} }] });
+    case 'project': return mkStage('project', { cols: inFields.map(f => ({ field: f.id, as: '', on: true })) });
+    case 'sort': return mkStage('sort', { keys: [{ field: null, dir: 'asc', nulls: 'default' }] });
+    case 'limit': return mkStage('limit', { limit: 50, offset: 0 });
+    case 'sql': return mkStage('sql', { sql: 'SELECT *\nFROM prev' });
+  }
+}
+
+function exampleStages() {
+  if (state.table !== 'orders') return [];
+  const kMonth = uid('k'), aOrders = uid('a'), aRev = uid('a'), aCust = uid('a'), xRank = uid('x');
+  return [
+    mkStage('join', { table: 'customers', alias: 'c', how: 'inner', on: [{ l: 'o.customer_id', r: 'id' }] }),
+    mkStage('filter', { where: { k: 'group', op: 'and', items: [
+      { k: 'cond', field: 'o.status', op: 'in', value: ['paid', 'shipped', 'delivered'] },
+      { k: 'cond', field: 'o.created_at', op: 'last', value: { n: 12, unit: 'months' } },
+    ] } }),
+    mkStage('group', {
+      keys: [{ id: uid('k'), field: 'c.country', bucket: null }, { id: kMonth, field: 'o.created_at', bucket: 'month' }],
+      aggs: [
+        { id: aOrders, fn: 'count', field: null, as: 'orders' },
+        { id: aRev, fn: 'sum', field: 'o.total_cents', as: 'revenue_cents' },
+        { id: aCust, fn: 'count_distinct', field: 'c.id', as: 'customers' },
+      ],
+    }),
+    mkStage('filter', { where: { k: 'group', op: 'and', items: [{ k: 'cond', field: aOrders, op: 'gte', value: '3' }] } }),
+    mkStage('compute', { cols: [{ id: xRank, as: 'rank_in_month', fn: 'rank', args: { part: kMonth, order: aRev, dir: 'desc' } }] }),
+    mkStage('filter', { where: { k: 'group', op: 'and', items: [{ k: 'cond', field: xRank, op: 'lte', value: '3' }] } }),
+    mkStage('sort', { keys: [{ field: kMonth, dir: 'desc', nulls: 'default' }, { field: xRank, dir: 'asc', nulls: 'default' }] }),
+  ];
+}
+
+function walk(node, fn) { fn(node); if (node.k === 'group') node.items.forEach(n => walk(n, fn)); }
+
+function refsOf(st) {
+  const ids = [];
+  const add = v => { if (v) ids.push(v); };
+  switch (st.type) {
+    case 'join': st.on.forEach(p => add(p.l)); break;
+    case 'filter': walk(st.where, n => { if (n.k === 'cond') add(n.field); }); break;
+    case 'group': st.keys.forEach(k => add(k.field)); st.aggs.forEach(a => add(a.field)); break;
+    case 'compute':
+      st.cols.forEach(c => {
+        const fn = FUNCS[c.fn];
+        if (!fn) return;
+        fn.args.forEach(a => {
+          const v = c.args[a.k];
+          if (a.t === 'field' || a.t === 'field?') add(v);
+          if (a.t === 'operand' && v && v.f) add(v.f);
+        });
+      });
+      break;
+    case 'sort': st.keys.forEach(k => add(k.field)); break;
+  }
+  return ids;
+}
+
+/* ---------- Filter trees ---------- */
+function condComplete(n, F) {
+  const f = F.get(n.field);
+  const o = f && opOf(f, n.op);
+  return !!o && valueOk(o.v, n.value);
+}
+function isWrapped(s) {
+  if (s[0] !== '(') return false;
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    if (s[i] === ')') depth--;
+    if (depth === 0 && i < s.length - 1) return false;
+  }
+  return true;
+}
+const wrapIfLogic = s => (/\s(AND|OR)\s/i.test(s) && !isWrapped(s) ? `(${s})` : s);
+function condSql(n, F) {
+  if (n.k === 'raw') return n.sql.trim() || null;
+  if (n.k === 'cond') {
+    if (!condComplete(n, F)) return null;
+    const f = F.get(n.field);
+    return opOf(f, n.op).sql(f.sql, n.value);
+  }
+  const parts = n.items.map(x => condSql(x, F)).filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length === 1) return parts[0];
+  return parts.map(wrapIfLogic).join(n.op === 'and' ? ' AND ' : ' OR ');
+}
+// Top-level AND conditions become separate WHERE lines, so each reads on its own.
+function filterEntries(root, F) {
+  if (root.op === 'and') return root.items.map(n => condSql(n, F)).filter(Boolean);
+  const s = condSql(root, F);
+  return s ? [s] : [];
+}
+function condTest(n, F) {
+  if (n.k === 'raw') return null;
+  if (n.k === 'cond') {
+    if (!condComplete(n, F)) return null;
+    const f = F.get(n.field), o = opOf(f, n.op);
+    return r => o.test(r[f.id], n.value);
+  }
+  const fns = n.items.map(x => condTest(x, F)).filter(Boolean);
+  if (!fns.length) return null;
+  return n.op === 'and' ? r => fns.every(fn => fn(r)) : r => fns.some(fn => fn(r));
+}
+function filterHasContent(root, F) {
+  let ok = false;
+  walk(root, n => {
+    if (n.k === 'raw' && n.sql.trim()) ok = true;
+    if (n.k === 'cond' && condComplete(n, F)) ok = true;
+  });
+  return ok;
+}
+function valText(v, val) {
+  switch (v) {
+    case 'none': return '';
+    case 'list': case 'enum': return ` ${val.join(', ')}`;
+    case 'duration': return ` ${val.n} ${val.unit}`;
+    case 'range': case 'daterange': return ` ${val.a} and ${val.b}`;
+    case 'jsonkv': return ` ${val.key} = ${val.val}`;
+    default: return ` ${val}`;
+  }
+}
+function condText(n, F, top) {
+  if (n.k === 'raw') return n.sql.trim();
+  if (n.k === 'cond') {
+    if (!condComplete(n, F)) return '';
+    const f = F.get(n.field), o = opOf(f, n.op);
+    return `${f.name} ${o.label}${valText(o.v, n.value)}`;
+  }
+  const parts = n.items.map(x => condText(x, F, false)).filter(Boolean);
+  const s = parts.join(` ${n.op} `);
+  return !top && parts.length > 1 ? `(${s})` : s;
+}
+
+function incompleteReason(st, F) {
+  switch (st.type) {
+    case 'join':
+      if (!st.table) return 'Choose a table to join.';
+      if (!st.on[0].l || !st.on[0].r) return 'Choose the columns to match on.';
+      return null;
+    case 'filter': return filterHasContent(st.where, F) ? null : 'Add a condition to filter rows.';
+    case 'group': return st.keys.some(k => k.field) || st.aggs.some(a => AGGS[a.fn].noField || a.field) ? null : 'Choose a column to group by.';
+    case 'compute': return st.cols.some(c => !computeCol(c, F).incomplete) ? null : 'Choose a function for the new column.';
+    case 'project': return st.cols.some(c => c.on && F.has(c.field)) ? null : 'Pick at least one column.';
+    case 'sort': return st.keys.some(k => k.field) ? null : 'Choose a column to sort by.';
+    case 'limit': return Number.isInteger(st.limit) && st.limit >= 0 ? null : 'Enter how many rows to keep.';
+    case 'sql': return st.sql.trim() ? null : 'Write a query. Use prev for the rows above.';
+  }
+  return null;
+}
+
+/* =====================================================================
+   Evaluate one stage against the rows flowing into it
+   ===================================================================== */
+function evalStage(st, fields, rows, F) {
+  switch (st.type) {
+    case 'join': {
+      const T = TABLES[st.table];
+      const alias = st.alias;
+      if (!NAME_RE.test(alias)) return { error: 'The alias must be a simple name, like c or cust.' };
+      if (fields.some(f => f.rel === alias)) return { error: `The alias ${alias} is already used above. Pick another one.` };
+      const p = st.on[0];
+      const right = baseRows(st.table, alias);
+      const rkey = `${alias}.${p.r}`;
+      const index = new Map();
+      for (const r of right) {
+        const k = r[rkey];
+        if (k == null) continue;
+        if (!index.has(k)) index.set(k, []);
+        index.get(k).push(r);
+      }
+      const nullRow = Object.fromEntries(T.columns.map(c => [`${alias}.${c.name}`, null]));
+      const out = [];
+      let unmatched = 0;
+      for (const l of rows) {
+        const matches = index.get(l[p.l]);
+        if (matches) { for (const r of matches) out.push({ ...l, ...r }); continue; }
+        unmatched++;
+        if (st.how === 'left') out.push({ ...l, ...nullRow });
+      }
+      let warn = null, note = null;
+      if (out.length > rows.length) {
+        warn = `Rows repeat: each input row matched about ${(out.length / Math.max(1, rows.length - unmatched)).toFixed(1)} ${st.table} rows. Sums over earlier columns will count them more than once.`;
+      }
+      if (unmatched && st.how === 'inner') note = `${fmtInt(unmatched)} rows had no matching ${st.table} row and were dropped. Switch to Left to keep them.`;
+      return { fields: [...fields, ...tableFields(st.table, alias, st.id)], rows: out, warn, note };
+    }
+    case 'filter': {
+      const test = condTest(st.where, F);
+      let hasRaw = false;
+      walk(st.where, n => { if (n.k === 'raw' && n.sql.trim()) hasRaw = true; });
+      return { fields, rows: test ? rows.filter(test) : rows, note: hasRaw ? 'SQL conditions aren’t applied to previews in this prototype. The app would run them in Postgres.' : null };
+    }
+    case 'group': {
+      const keys = st.keys.filter(k => k.field);
+      const aggs = st.aggs.filter(a => AGGS[a.fn].noField || a.field);
+      for (const a of aggs) if (!NAME_RE.test(a.as || '')) return { error: `"${a.as}" isn't a valid column name. Use letters, numbers and underscores.` };
+      const keyFields = keys.map(k => {
+        const f = F.get(k.field);
+        if (!k.bucket) return { ...f, origin: st.id };
+        return { id: k.id, name: `${f.name}_${k.bucket}`, rel: null, kind: 'time', pgType: 'timestamptz', sql: `date_trunc('${k.bucket}', ${f.sql})`, origin: st.id };
+      });
+      const aggFields = aggs.map(a => {
+        const f = a.field ? F.get(a.field) : null;
+        const def = AGGS[a.fn];
+        return { id: a.id, name: a.as, rel: null, kind: def.kind(f), elemKind: f && f.kind, pgType: def.pg(f), sql: def.sql(f && f.sql), agg: true, origin: st.id };
+      });
+      const groups = new Map();
+      for (const r of rows) {
+        const kv = keys.map(k => (k.bucket ? truncTime(r[k.field], k.bucket) : r[k.field]));
+        const key = JSON.stringify(kv);
+        if (!groups.has(key)) groups.set(key, { kv, rows: [] });
+        groups.get(key).rows.push(r);
+      }
+      if (!keys.length && !groups.size) groups.set('[]', { kv: [], rows: [] });
+      const out = [...groups.values()].map(g => {
+        const row = {};
+        keyFields.forEach((f, i) => { row[f.id] = g.kv[i]; });
+        aggs.forEach(a => { row[a.id] = AGGS[a.fn].ev(g.rows.map(r => r[a.field]), g.rows); });
+        return row;
+      });
+      return { fields: [...keyFields, ...aggFields], rows: out };
+    }
+    case 'compute': {
+      const added = [];
+      const exprs = {};
+      let unevaluated = false;
+      for (const c of st.cols) {
+        const r = computeCol(c, F);
+        if (r.error) return { error: r.error };
+        if (r.incomplete) continue;
+        let vals = null;
+        if (r.fn.all) vals = r.fn.all(rows, r.get);
+        else if (r.fn.ev) {
+          vals = rows.map(row => {
+            const x = {};
+            for (const k in r.get) x[k] = r.get[k] ? r.get[k](row) : null;
+            return r.fn.ev(x, r.kinds);
+          });
+        } else unevaluated = true;
+        exprs[c.id] = r.sql;
+        const f = { id: c.id, name: c.as, rel: null, kind: r.kind, pgType: r.fn.win && r.fn.out === 'number' && c.fn !== 'pct' && c.fn !== 'running' ? 'int8' : pgOf(r.kind), sql: r.fn.paren ? `(${r.sql})` : r.sql, win: r.win, origin: st.id };
+        added.push({ f, vals });
+      }
+      const out = rows.map((row, i) => {
+        const o = { ...row };
+        for (const a of added) o[a.f.id] = a.vals ? a.vals[i] : undefined;
+        return o;
+      });
+      return { fields: [...fields, ...added.map(a => a.f)], rows: out, exprs, note: unevaluated ? 'SQL expressions aren’t evaluated in this prototype. The app would compute them in Postgres.' : null };
+    }
+    case 'project': {
+      const out = [];
+      let missing = 0;
+      for (const c of st.cols) {
+        if (!c.on) continue;
+        const f = F.get(c.field);
+        if (!f) { missing++; continue; }
+        const as = (c.as || '').trim();
+        if (as && !NAME_RE.test(as)) return { error: `"${as}" isn't a valid column name. Use letters, numbers and underscores.` };
+        out.push(as && as !== f.name ? { ...f, name: as, out: undefined, renamed: true, selStage: st.id } : f);
+      }
+      return { fields: out, rows, warn: missing ? `${missing} picked ${missing === 1 ? 'column is' : 'columns are'} no longer available above.` : null };
+    }
+    case 'sort': {
+      const keys = st.keys.filter(k => k.field).map(k => ({ id: k.field, dir: k.dir === 'desc' ? -1 : 1, nulls: k.nulls }));
+      const out = rows.slice().sort((a, b) => {
+        for (const k of keys) {
+          const c = cmpNulls(a[k.id], b[k.id], k.dir, k.nulls);
+          if (c) return c;
+        }
+        return 0;
+      });
+      return { fields, rows: out };
+    }
+    case 'limit': {
+      const off = Number(st.offset) || 0;
+      return { fields, rows: rows.slice(off, off + st.limit) };
+    }
+  }
+  return { fields, rows };
+}
+
+/* =====================================================================
+   SQL compiler: stages fill one SELECT until one can't fit, then the
+   stages above become a CTE step and a new SELECT starts from it.
+   ===================================================================== */
+function newBlock(from, fromStage, start, fromCte) {
+  return { from, fromStage, start, fromCte, joins: [], where: [], groupBy: null, having: [], orderBy: null, limit: null,
+    grouped: false, win: false, projected: false, sorted: false, limited: false, touched: false };
+}
+
+function breakReason(b, st, F) {
+  const usesWin = refsOf(st).some(id => F.get(id) && F.get(id).win);
+  const winStage = st.type === 'compute' && st.cols.some(c => FUNCS[c.fn] && FUNCS[c.fn].win);
+  switch (st.type) {
+    case 'join':
+      if (b.limited) return 'it joins after a limit';
+      if (b.grouped) return 'it joins after grouping';
+      if (b.win) return 'it joins after a window function';
+      if (b.projected) return 'it joins after columns were picked';
+      if (b.sorted) return 'it joins after a sort';
+      return null;
+    case 'filter':
+      if (b.limited) return 'it filters after a limit';
+      if (usesWin) return 'SQL can’t filter on a window function in the same SELECT';
+      return null;
+    case 'group':
+      if (b.limited) return 'it groups after a limit';
+      if (b.grouped) return 'it groups rows that were already grouped';
+      if (b.win || usesWin) return 'it groups after a window function';
+      if (b.sorted) return 'it groups after a sort';
+      return null;
+    case 'compute':
+      if (winStage && b.limited) return 'a window function after a limit needs the limited rows first';
+      if (winStage && usesWin) return 'a window function can’t use another window function’s result';
+      return null;
+    case 'sort': return b.limited ? 'it sorts after a limit' : null;
+    case 'limit': return b.limited ? 'it limits rows that were already limited' : null;
+  }
+  return null;
+}
+
+function emitStage(b, st, F) {
+  b.touched = true;
+  switch (st.type) {
+    case 'join': {
+      const p = st.on[0];
+      b.joins.push({ s: st.id, t: `${st.how === 'left' ? 'LEFT JOIN' : 'JOIN'} public.${st.table} ${st.alias} ON ${st.alias}.${p.r} = ${F.get(p.l).sql}` });
+      return st.how === 'left' ? 'LEFT JOIN' : 'JOIN';
+    }
+    case 'filter': {
+      const target = b.grouped ? b.having : b.where;
+      filterEntries(st.where, F).forEach(t => target.push({ s: st.id, t }));
+      return b.grouped ? 'HAVING' : 'WHERE';
+    }
+    case 'group': {
+      b.grouped = true;
+      const keys = st.keys.filter(k => k.field).map(k => (k.bucket ? `date_trunc('${k.bucket}', ${F.get(k.field).sql})` : F.get(k.field).sql));
+      if (keys.length) b.groupBy = { s: st.id, t: `GROUP BY ${keys.join(', ')}` };
+      return 'GROUP BY';
+    }
+    case 'compute': {
+      const win = st.cols.some(c => FUNCS[c.fn] && FUNCS[c.fn].win);
+      if (win) b.win = true;
+      return win ? 'OVER' : 'SELECT';
+    }
+    case 'project': b.projected = true; return 'SELECT';
+    case 'sort': {
+      // A later sort wins; earlier keys stay as tie-breakers, which is what a stable re-sort does.
+      const keys = st.keys.filter(k => k.field).map(k => ({ field: F.get(k.field), dir: k.dir, nulls: k.nulls }));
+      const kept = b.orderBy ? b.orderBy.keys.filter(o => !keys.some(k => k.field.id === o.field.id)) : [];
+      b.orderBy = { s: st.id, keys: [...keys, ...kept] };
+      b.sorted = true;
+      return 'ORDER BY';
+    }
+    case 'limit':
+      b.limit = { s: st.id, n: st.limit, off: Number(st.offset) || 0 };
+      b.limited = true;
+      return 'LIMIT';
+  }
+  return '';
+}
+
+function outNames(fields, dedupe) {
+  const used = new Set(), names = new Map();
+  for (const f of fields) {
+    let n = f.out || f.name;
+    if (dedupe && used.has(n)) {
+      n = f.rel ? `${f.rel}_${f.name}` : `${f.name}_2`;
+      let k = 2;
+      while (used.has(n)) n = `${f.name}_${++k}`;
+    }
+    used.add(n);
+    names.set(f.id, n);
+  }
+  return names;
+}
+
+function selectItems(fields, names) {
+  const items = [];
+  let i = 0;
+  while (i < fields.length) {
+    const f = fields[i];
+    // Collapse a complete, untouched run of a table's columns into alias.*
+    if (f.base && !f.renamed && !f.cte) {
+      const cols = TABLES[f.table].columns;
+      const run = fields.slice(i, i + cols.length);
+      const full = run.length === cols.length && run.every((g, j) => g.base && !g.renamed && !g.cte && g.rel === f.rel && g.name === cols[j].name && names.get(g.id) === g.name);
+      if (full) { items.push({ t: `${f.rel}.*`, s: f.origin }); i += cols.length; continue; }
+    }
+    const out = names.get(f.id);
+    const plain = f.sql === qi(out) || f.sql.endsWith(`.${qi(out)}`);
+    items.push({ t: plain ? f.sql : `${f.sql} AS ${qi(out)}`, s: f.selStage || (f.cte ? null : f.origin) });
+    i++;
+  }
+  return items;
+}
+
+function renderBlock(b, fields, names) {
+  const L = [];
+  const items = selectItems(fields, names);
+  const flat = items.map(it => it.t).join(', ');
+  if (items.length === 1 || flat.length <= 64) L.push({ t: `SELECT ${flat}`, s: items.length === 1 ? items[0].s : null });
+  else {
+    L.push({ t: 'SELECT', s: null });
+    items.forEach((it, i) => L.push({ t: `  ${it.t}${i < items.length - 1 ? ',' : ''}`, s: it.s }));
+  }
+  L.push({ t: `FROM ${b.from}`, s: b.fromStage });
+  b.joins.forEach(j => L.push(j));
+  const pushList = (kw, list) => list.forEach((e, i) => {
+    const t = list.length > 1 && /\sOR\s/i.test(e.t) && !isWrapped(e.t) ? `(${e.t})` : e.t;
+    L.push({ t: `${i === 0 ? kw : '  AND'} ${t}`, s: e.s });
+  });
+  pushList('WHERE', b.where);
+  if (b.groupBy) L.push(b.groupBy);
+  pushList('HAVING', b.having);
+  if (b.orderBy) {
+    const keys = b.orderBy.keys.map(k => {
+      const f = fields.find(x => x.id === k.field.id);
+      const useAlias = f && !f.base && !f.cte && (f.agg || f.origin);
+      const ref = useAlias ? qi(names.get(f.id)) : k.field.sql;
+      const nulls = k.nulls === 'first' ? ' NULLS FIRST' : k.nulls === 'last' ? ' NULLS LAST' : '';
+      return `${ref}${k.dir === 'desc' ? ' DESC' : ''}${nulls}`;
+    });
+    L.push({ t: `ORDER BY ${keys.join(', ')}`, s: b.orderBy.s });
+  }
+  if (b.limit) L.push({ t: `LIMIT ${b.limit.n}${b.limit.off ? ` OFFSET ${b.limit.off}` : ''}`, s: b.limit.s });
+  return L;
+}
+
+/* =====================================================================
+   Analyze: evaluate + compile the whole pipeline in one pass
+   ===================================================================== */
+function analyze() {
+  const T = TABLES[state.table];
+  const alias = T.alias;
+  const res = { st: {}, ctes: [], notes: [], known: new Map() };
+  let fields = tableFields(state.table, alias, 'source');
+  let rows = baseRows(state.table, alias);
+  fields.forEach(f => res.known.set(f.id, f));
+  res.st.source = { id: 'source', inFields: [], outFields: fields, rows, count: rows.length };
+
+  let block = newBlock(`public.${state.table} ${alias}`, 'source', 1, false);
+  let steps = 0;
+  const rangeText = (a, z) => (a >= z ? `stage ${z}` : `stages ${a}–${z}`);
+  const closeBlock = (n, reason) => {
+    steps++;
+    const name = `step_${steps}`;
+    const names = outNames(fields, true);
+    res.ctes.push({ name, lines: renderBlock(block, fields, names) });
+    if (reason) res.notes.push({ stage: n, text: `Stage ${n}: ${reason}, so ${rangeText(block.start, n - 1)} run first as ${name}.` });
+    fields = fields.map(f => ({ ...f, sql: qi(names.get(f.id)), out: names.get(f.id), agg: false, win: false, cte: name, renamed: false, selStage: null }));
+    block = newBlock(name, null, n, true);
+    return name;
+  };
+
+  state.stages.forEach((st, i) => {
+    const n = i + 1;
+    const info = { id: st.id, n, inFields: fields, inCount: rows.length };
+    res.st[st.id] = info;
+    const passThrough = extra => Object.assign(info, { outFields: fields, rows, count: rows.length }, extra);
+    if (!st.enabled) return passThrough({ skipped: true });
+
+    let F = new Map(fields.map(f => [f.id, f]));
+    const missing = refsOf(st).filter(id => !F.has(id));
+    if (missing.length) {
+      const m = res.known.get(missing[0]);
+      const label = m ? displayName(m) : missing[0].includes('.') ? missing[0] : 'A column this stage uses';
+      return passThrough({ error: `${label} isn't available here. Move this stage below the one that provides it, or pick another column.` });
+    }
+    const inc = incompleteReason(st, F);
+    if (inc) return passThrough({ incomplete: inc });
+
+    if (st.type === 'sql') {
+      const pristine = !block.touched && !block.fromCte;
+      const prev = pristine ? `public.${state.table}` : closeBlock(n, null);
+      steps++;
+      const name = `step_${steps}`;
+      res.ctes.push({ name, lines: st.sql.replace(/\bprev\b/g, prev).split('\n').map(t => ({ t, s: st.id })) });
+      const names = outNames(fields, true);
+      fields = fields.map(f => ({ ...f, sql: qi(names.get(f.id)), out: names.get(f.id), agg: false, win: false, cte: name, renamed: false, selStage: null }));
+      block = newBlock(name, null, n + 1, true);
+      return Object.assign(info, {
+        inFields: fields, outFields: fields, rows, count: rows.length, clause: 'CTE', newStep: name,
+        note: 'Previews can’t run custom SQL in this prototype, so rows pass through unchanged. The app would run it against the database and read the columns back.',
+      });
+    }
+
+    const reason = breakReason(block, st, F);
+    if (reason) {
+      closeBlock(n, reason);
+      info.newStep = `step_${steps}`;
+      info.stepReason = reason;
+    }
+    if (st.type === 'join' && block.fromCte) {
+      // Qualify CTE columns once a join brings in names that could clash.
+      fields = fields.map(f => (f.cte === block.from && !f.sql.includes('.') ? { ...f, sql: `${block.from}.${f.sql}` } : f));
+    }
+    F = new Map(fields.map(f => [f.id, f]));
+    info.inFields = fields;
+
+    const r = evalStage(st, fields, rows, F);
+    if (r.error) return passThrough({ error: r.error });
+    info.clause = emitStage(block, st, F);
+    fields = r.fields;
+    rows = r.rows;
+    fields.forEach(f => res.known.set(f.id, f));
+    Object.assign(info, { outFields: fields, rows, count: rows.length, warn: r.warn, note: r.note, exprs: r.exprs });
+  });
+
+  res.final = { fields, rows };
+  const lines = [];
+  res.ctes.forEach((c, i) => {
+    lines.push({ t: i === 0 ? `WITH ${c.name} AS (` : `), ${c.name} AS (`, s: null });
+    c.lines.forEach(l => lines.push({ t: `  ${l.t}`, s: l.s }));
+  });
+  if (res.ctes.length) lines.push({ t: ')', s: null });
+  lines.push(...renderBlock(block, fields, outNames(fields, false)));
+  res.lines = lines;
+  res.sql = lines.map(l => l.t).join('\n');
+  return res;
+}
+
+function joinSuggestions(fields) {
+  const out = [], seen = new Set();
+  const push = s => {
+    const k = `${s.table}|${s.l}|${s.r}`;
+    if (!seen.has(k)) { seen.add(k); out.push(s); }
+  };
+  for (const f of fields) {
+    if (f.fk) push({ table: f.fk[0], l: f.id, r: f.fk[1], card: 'Many-to-one', hint: displayName(f) });
+    if (f.pk && f.table) {
+      for (const t of TABLE_ORDER) {
+        for (const c of TABLES[t].columns) {
+          if (c.fk && c.fk[0] === f.table && c.fk[1] === f.name) push({ table: t, l: f.id, r: c.name, card: 'One-to-many', hint: `${t}.${c.name}` });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/* =====================================================================
+   State
+   ===================================================================== */
+const state = {
+  table: 'orders', stages: [], mode: 'builder', sqlDraft: '', sqlDirty: false, sample: 5,
+  theme: 'dark', run: null, runSig: null, running: false, page: 0, hl: null, sourceCollapsed: false,
+};
+let A = null;
+const stageById = id => state.stages.find(s => s.id === id) || null;
+const sig = () => JSON.stringify([state.table, state.stages]);
+function lookupField(st, fid) {
+  const info = A.st[st.id];
+  return info ? info.inFields.find(f => f.id === fid) : null;
+}
+function fieldsBefore(index) {
+  if (index === 0) return A.st.source.outFields;
+  return A.st[state.stages[index - 1].id].outFields;
+}
+
+function commit(structural = true) {
+  A = analyze();
+  if (structural) renderPipeline();
+  else renderDerived();
+  renderResults();
+}
+
+/* =====================================================================
+   Rendering: chrome
+   ===================================================================== */
+function renderChrome() {
+  $('#sidebar').innerHTML = `
+    <div class="brand">${icon('compass', 18)}<span>PG Compass</span></div>
+    <button class="conn-card" type="button"><span class="dot"></span><span class="cc-t"><span class="cc-n">local-dev</span><span class="cc-s">ember_oak · PostgreSQL 17</span></span>${icon('chev')}</button>
+    <div class="sb-search">${icon('search')}<span class="sp">Search</span><span class="kbd">${MOD} K</span></div>
+    <div class="sb-label"><span class="sp">public</span><span>${TABLE_ORDER.length} tables</span></div>
+    <nav class="tree">${TABLE_ORDER.map(t => `
+      <button class="tr ${t === state.table ? 'on' : ''}" data-act="pick-table" data-value="${t}">${icon('table', 14)}<span class="tn">${t}</span><span class="tc">${fmtInt(TABLES[t].data.length)}</span></button>`).join('')}
+    </nav>
+    <div class="sb-foot">Prototype. Demo data, nothing leaves this page.</div>`;
+  $('#tabstrip').innerHTML = `
+    <div class="tab">${icon('db', 13)}public</div>
+    <div class="tab on">${icon('table', 13)}${state.table}</div>`;
+  $('#topbar').innerHTML = `
+    <div class="bc"><span class="mono">local-dev</span><span class="sep">/</span><span class="mono">ember_oak</span><span class="sep">/</span><span>public</span><span class="sep">/</span><span class="cur mono">${state.table}</span></div>
+    <span class="sp"></span>
+    <button class="ibtn" data-act="theme" title="Toggle theme" aria-label="Toggle theme">${icon(state.theme === 'dark' ? 'sun' : 'moon', 16)}</button>
+    <button class="btn sm outline" data-act="noop">${icon('terminal')} Open shell</button>
+    <button class="btn sm outline" data-act="noop">${icon('refresh')} Refresh</button>`;
+  $('#subnav').innerHTML = `
+    <div class="seg" role="group" aria-label="Table views">
+      ${['Data', 'Structure', 'Indexes', 'Constraints'].map(v => `<button data-act="noop" aria-pressed="false">${v}</button>`).join('')}
+      <button aria-pressed="true">Query</button>
+    </div>`;
+}
+
+function renderQbar() {
+  $('#qbar').innerHTML = `
+    <div class="seg" role="group" aria-label="Editor mode">
+      <button data-act="mode" data-value="builder" aria-pressed="${state.mode === 'builder'}">${icon('steps', 13)} Builder</button>
+      <button data-act="mode" data-value="sql" aria-pressed="${state.mode === 'sql'}">${icon('code', 13)} SQL</button>
+    </div>
+    ${state.mode === 'builder' ? `
+      <span class="lbl2">Sample</span>
+      <div class="seg sm" role="group" aria-label="Preview rows per stage">
+        ${[5, 10, 20].map(n => `<button data-act="sample" data-value="${n}" aria-pressed="${state.sample === n}">${n}</button>`).join('')}
+      </div>` : ''}
+    <span class="sp"></span>
+    ${state.mode === 'builder' ? `
+      <button class="btn sm ghost" data-act="load-example" ${state.table === 'orders' ? '' : 'hidden'}>Load example</button>
+      <button class="btn sm ghost" data-act="clear">Clear</button>` : ''}
+    <button class="btn sm outline" data-act="copy-sql">${icon('copy')} Copy SQL</button>
+    <button class="btn sm primary" data-act="run">${icon('play', 12)} Run <span class="kbd">${MOD} ↵</span></button>`;
+}
+
+/* =====================================================================
+   Rendering: pipeline
+   ===================================================================== */
+const chev = icon('chev', 12);
+
+function tokField(st, path, fid, opts = {}) {
+  const f = fid ? lookupField(st, fid) : null;
+  const cls = !fid ? 'tok tok-empty' : f ? 'tok' : 'tok tok-bad';
+  const label = !fid ? esc(opts.placeholder || 'column') : f ? fieldHtml(f) : esc(fid);
+  return `<button class="${cls}" data-act="pick-field" data-path="${path}" data-fid="${fid || ''}" data-kinds="${(opts.kinds || []).join(',')}" ${opts.optional ? 'data-optional="1"' : ''}><span class="tl">${label}</span>${chev}</button>`;
+}
+function choiceTok(path, value, choices, opts = {}) {
+  const pairs = choices.map(c => (Array.isArray(c) ? c : [c, c]));
+  const cur = pairs.find(([v]) => v === (value ?? ''));
+  const enc = pairs.map(([v, l]) => `${v}:${l}`).join('|');
+  return `<button class="tok tok-op" data-act="pick-choice" data-path="${path}" data-choices="${esc(enc)}" ${opts.free ? 'data-free="1"' : ''}>${esc(cur ? cur[1] : (value || opts.placeholder || 'choose'))}${chev}</button>`;
+}
+function delBtn(path, title = 'Remove') {
+  return `<button class="ibtn xs del" data-act="del" data-path="${path}" title="${title}" aria-label="${title}">${icon('x', 12)}</button>`;
+}
+function segHtml(path, value, opts) {
+  return `<div class="seg sm" role="group">${opts.map(([v, l]) => `<button data-act="set" data-path="${path}" data-value="${v}" aria-pressed="${v === value}">${l}</button>`).join('')}</div>`;
+}
+
+function valueHtml(f, o, c, p) {
+  const v = c.value;
+  switch (o.v) {
+    case 'none': return '';
+    case 'number': return `<input class="tin num" data-bind="${p}.value" value="${esc(v ?? '')}" placeholder="0" inputmode="decimal" aria-label="Value">`;
+    case 'text': return `<input class="tin" data-bind="${p}.value" value="${esc(v ?? '')}" placeholder="value" aria-label="Value">`;
+    case 'list': return `<input class="tin wide" data-bind="${p}.value" data-type="csv" value="${esc((v || []).join(', '))}" placeholder="a, b, c" aria-label="Values">`;
+    case 'range':
+      return `<input class="tin num" data-bind="${p}.value.a" value="${esc(v.a)}" placeholder="from" aria-label="From"><span class="kw">and</span><input class="tin num" data-bind="${p}.value.b" value="${esc(v.b)}" placeholder="to" aria-label="To">`;
+    case 'enum': {
+      const vals = v || [];
+      return `<button class="tok ${vals.length ? '' : 'tok-empty'}" data-act="pick-enum" data-path="${p}"><span class="tl">${vals.length ? esc(vals.join(', ')) : 'choose values'}</span>${chev}</button>`;
+    }
+    case 'duration':
+      return `<input class="tin xs" data-bind="${p}.value.n" data-type="num" value="${esc(v.n)}" aria-label="Amount">${choiceTok(`${p}.value.unit`, v.unit, ['days', 'weeks', 'months', 'years'])}`;
+    case 'date': return `<input class="tin" type="date" data-bind="${p}.value" value="${esc(v || '')}" aria-label="Date">`;
+    case 'daterange':
+      return `<input class="tin" type="date" data-bind="${p}.value.a" value="${esc(v.a)}" aria-label="From"><span class="kw">and</span><input class="tin" type="date" data-bind="${p}.value.b" value="${esc(v.b)}" aria-label="To">`;
+    case 'jsonkv':
+      return `${choiceTok(`${p}.value.key`, v.key, f.keys || [], { free: true, placeholder: 'key' })}<span class="kw">=</span><input class="tin" data-bind="${p}.value.val" value="${esc(v.val)}" placeholder="value" aria-label="Value">`;
+    case 'jsonkey': return choiceTok(`${p}.value`, v, f.keys || [], { free: true, placeholder: 'key' });
+  }
+  return '';
+}
+
+function condHtml(st, c, p) {
+  const f = c.field ? lookupField(st, c.field) : null;
+  const o = f ? opOf(f, c.op) : null;
+  let h = tokField(st, `${p}.field`, c.field);
+  if (f) h += `<button class="tok tok-op" data-act="pick-op" data-path="${p}">${esc(o ? o.label : 'operator')}${chev}</button>`;
+  if (f && o) h += valueHtml(f, o, c, p);
+  return h;
+}
+
+function groupRows(st, g, path, depth) {
+  const rows = g.items.map((it, i) => {
+    const p = `${path}.items.${i}`;
+    const joiner = i === 0
+      ? `<span class="joiner">${depth === 0 ? 'where' : ''}</span>`
+      : `<button class="joiner" data-act="toggle-andor" data-path="${path}" title="Switch between and / or">${g.op}</button>`;
+    let body;
+    if (it.k === 'group') body = `<div class="fgroup nested">${groupRows(st, it, p, depth + 1)}</div>`;
+    else if (it.k === 'raw') body = `<span class="chip mono">SQL</span><input class="tin sqlin" data-bind="${p}.sql" value="${esc(it.sql)}" placeholder="o.total_cents > 5000" spellcheck="false" aria-label="SQL condition">`;
+    else body = condHtml(st, it, p);
+    return `<div class="frow">${joiner}<div class="fbody">${body}</div>${delBtn(p)}</div>`;
+  }).join('');
+  const foot = `<div class="ffoot">
+      <button class="btn xs ghost" data-act="add-cond" data-path="${path}">${icon('plus', 12)} Condition</button>
+      ${depth === 0 ? `<button class="btn xs ghost" data-act="add-group" data-path="${path}">${icon('plus', 12)} Group</button>` : ''}
+      <button class="btn xs ghost" data-act="add-raw" data-path="${path}">${icon('code', 12)} SQL</button>
+    </div>`;
+  return rows + foot;
+}
+
+function joinRelHint(st) {
+  const p = st.on[0];
+  const lf = p.l ? lookupField(st, p.l) : null;
+  if (!lf || !st.table || !p.r) return '';
+  if (lf.fk && lf.fk[0] === st.table && lf.fk[1] === p.r) return `Many-to-one via a foreign key. Each row matches at most one ${st.table} row.`;
+  const rc = TABLES[st.table].columns.find(c => c.name === p.r);
+  if (rc && rc.fk && rc.fk[0] === lf.table && rc.fk[1] === lf.name) return `One-to-many via a foreign key. A row can match several ${st.table} rows, so rows repeat.`;
+  return 'No foreign key links these columns. Check the match is the one you want.';
+}
+
+function argHtml(st, c, a, p) {
+  const v = c.args[a.k];
+  const ap = `${p}.args.${a.k}`;
+  const lab = a.label ? `<span class="kw">${a.label}</span>` : '';
+  const suffix = a.suffix ? `<span class="kw">${a.suffix}</span>` : '';
+  switch (a.t) {
+    case 'field': case 'field?':
+      return lab + tokField(st, ap, v, { kinds: a.kinds, optional: a.t === 'field?', placeholder: a.t === 'field?' ? 'all rows' : 'column' }) + suffix;
+    case 'operand': {
+      let label = 'column or value', cls = 'tok tok-empty', fid = '';
+      if (v && v.f) {
+        const f = lookupField(st, v.f);
+        label = f ? fieldHtml(f) : esc(v.f); cls = f ? 'tok' : 'tok tok-bad'; fid = v.f;
+      } else if (v) { label = esc(v.n != null ? String(v.n) : lit(v.s)); cls = 'tok'; }
+      return `${lab}<button class="${cls}" data-act="pick-operand" data-path="${ap}" data-kinds="${(a.kinds || []).join(',')}" data-fid="${fid}"><span class="tl">${label}</span>${chev}</button>${suffix}`;
+    }
+    case 'choice': return lab + choiceTok(ap, v, a.choices) + suffix;
+    case 'text': return `${lab}<input class="tin xs" data-bind="${ap}" value="${esc(v ?? '')}" aria-label="${a.label || a.k}">${suffix}`;
+    case 'jsonkey': {
+      const af = c.args.a ? lookupField(st, c.args.a) : null;
+      return lab + choiceTok(ap, v, (af && af.keys) || [], { free: true, placeholder: 'key' });
+    }
+    case 'sql': return `<input class="tin sqlin" data-bind="${ap}" value="${esc(v ?? '')}" placeholder="coalesce(o.shipped_at, now()) - o.created_at" spellcheck="false" aria-label="SQL expression">`;
+  }
+  return '';
+}
+
+function editorHtml(st) {
+  switch (st.type) {
+    case 'join': {
+      const p = st.on[0];
+      return `
+        <div class="row"><span class="kw">Table</span>
+          <button class="tok ${st.table ? '' : 'tok-empty'}" data-act="pick-join-table">${st.table ? `<span class="rel">public.</span>${st.table}` : 'choose table'}${chev}</button>
+          <span class="kw">as</span><input class="tin alias" data-bind="alias" value="${esc(st.alias)}" spellcheck="false" aria-label="Alias">
+          ${segHtml('how', st.how, [['inner', 'Inner'], ['left', 'Left']])}
+        </div>
+        ${st.table ? `<div class="row"><span class="kw">Match</span>
+          <button class="tok ${p.r ? '' : 'tok-empty'}" data-act="pick-join-col">${p.r ? `<span class="rel">${esc(st.alias)}.</span>${p.r}` : 'column'}${chev}</button>
+          <span class="kw">=</span>${tokField(st, 'on.0.l', p.l)}
+        </div>` : ''}
+        <p class="hint">${esc(joinRelHint(st)) || 'Pick a related table. Foreign keys are suggested first.'}</p>`;
+    }
+    case 'filter': return `<div class="fgroup">${groupRows(st, st.where, 'where', 0)}</div>`;
+    case 'group': {
+      const keys = st.keys.map((k, i) => {
+        const f = k.field ? lookupField(st, k.field) : null;
+        const bucket = f && f.kind === 'time'
+          ? choiceTok(`keys.${i}.bucket`, k.bucket || '', [['', 'exact value'], ['day', 'by day'], ['week', 'by week'], ['month', 'by month'], ['year', 'by year']])
+          : '';
+        return `<div class="row">${tokField(st, `keys.${i}.field`, k.field)}${bucket}${delBtn(`keys.${i}`)}</div>`;
+      }).join('');
+      const aggs = st.aggs.map((a, i) => {
+        const def = AGGS[a.fn];
+        return `<div class="row">
+          <button class="tok tok-fn" data-act="pick-aggfn" data-path="aggs.${i}">${esc(def.label)}${chev}</button>
+          ${def.noField ? '' : `<span class="kw">of</span>${tokField(st, `aggs.${i}.field`, a.field, { kinds: def.kinds })}`}
+          <span class="kw">as</span><input class="tin grow" data-bind="aggs.${i}.as" value="${esc(a.as)}" spellcheck="false" aria-label="Column name">
+          ${delBtn(`aggs.${i}`)}</div>`;
+      }).join('');
+      return `
+        <div class="sub">Group by</div>${keys}
+        <div><button class="btn xs ghost" data-act="add-key">${icon('plus', 12)} Key</button></div>
+        <div class="sub">Aggregates</div>${aggs}
+        <div><button class="btn xs ghost" data-act="add-agg">${icon('plus', 12)} Aggregate</button></div>
+        ${st.keys.some(k => k.field) ? '' : '<p class="hint">No keys: every row collapses into one.</p>'}`;
+    }
+    case 'compute': {
+      const cols = st.cols.map((c, i) => {
+        const fn = FUNCS[c.fn];
+        const p = `cols.${i}`;
+        return `<div class="crow">
+          <div class="row">
+            <input class="tin name" data-bind="${p}.as" value="${esc(c.as)}" spellcheck="false" aria-label="Column name">
+            <span class="kw">=</span>
+            <button class="tok tok-fn ${fn ? '' : 'tok-empty'}" data-act="pick-fn" data-path="${p}">${fn ? esc(fn.label) : 'choose function'}${chev}</button>
+            ${fn ? fn.args.map(a => argHtml(st, c, a, p)).join('') : ''}
+            ${delBtn(p)}
+          </div>
+          <div class="cexpr" data-expr="${c.id}"></div>
+        </div>`;
+      }).join('');
+      return `${cols}<div><button class="btn xs ghost" data-act="add-col">${icon('plus', 12)} Column</button></div>`;
+    }
+    case 'project': {
+      const inF = A.st[st.id] ? A.st[st.id].inFields : [];
+      const listed = new Set(st.cols.map(c => c.field));
+      const list = [
+        ...st.cols.map((c, idx) => ({ c, idx, f: inF.find(f => f.id === c.field), id: c.field })),
+        ...inF.filter(f => !listed.has(f.id)).map(f => ({ c: null, idx: -1, f, id: f.id })),
+      ];
+      const on = st.cols.filter(c => c.on && inF.some(f => f.id === c.field)).length;
+      return `
+        <div class="row"><span class="sub sp">${on} of ${inF.length} columns</span>
+          <button class="btn xs ghost" data-act="proj-all">All</button><button class="btn xs ghost" data-act="proj-none">None</button></div>
+        <div class="plist">${list.map(({ c, idx, f, id }) => `
+          <div class="prow ${f ? '' : 'gone'}">
+            <input type="checkbox" data-act="proj-toggle" data-fid="${esc(id)}" ${c && c.on && f ? 'checked' : ''} ${f ? '' : 'disabled'} aria-label="Include column">
+            <span class="pname" data-fid="${esc(id)}"><span class="tl">${f ? fieldHtml(f) : esc(id)}</span><span class="ptype">${f ? esc(f.pgType) : 'removed'}</span></span>
+            <input class="tin" data-bind="cols.${idx}.as" value="${esc(c ? c.as : '')}" placeholder="rename" ${c && c.on && f ? '' : 'disabled'} spellcheck="false" aria-label="Rename">
+            <span class="row" style="gap:0;flex-wrap:nowrap">
+              <button class="ibtn xs" data-act="proj-move" data-fid="${esc(id)}" data-dir="-1" title="Move up" aria-label="Move up">${icon('up', 12)}</button>
+              <button class="ibtn xs" data-act="proj-move" data-fid="${esc(id)}" data-dir="1" title="Move down" aria-label="Move down">${icon('chev', 12)}</button>
+            </span>
+          </div>`).join('')}
+        </div>`;
+    }
+    case 'sort':
+      return st.keys.map((k, i) => `
+        <div class="row">${tokField(st, `keys.${i}.field`, k.field)}
+          ${segHtml(`keys.${i}.dir`, k.dir, [['asc', 'Asc'], ['desc', 'Desc']])}
+          ${choiceTok(`keys.${i}.nulls`, k.nulls, [['default', 'nulls default'], ['first', 'nulls first'], ['last', 'nulls last']])}
+          ${delBtn(`keys.${i}`)}
+        </div>`).join('') + `<div><button class="btn xs ghost" data-act="add-sort">${icon('plus', 12)} Sort key</button></div>`;
+    case 'limit':
+      return `<div class="row"><span class="kw">Keep</span><input class="tin num" data-bind="limit" data-type="int" value="${esc(st.limit)}" aria-label="Rows to keep">
+        <span class="kw">rows, skipping the first</span><input class="tin num" data-bind="offset" data-type="int" value="${esc(st.offset)}" aria-label="Rows to skip"></div>`;
+    case 'sql':
+      return `<textarea class="tin" data-bind="sql" spellcheck="false" aria-label="SQL">${esc(st.sql)}</textarea>
+        <p class="hint"><code>prev</code> is the output of the stage above. The next stage reads this query's result.</p>`;
+  }
+  return '';
+}
+
+function sourceCardHtml() {
+  const sugg = joinSuggestions(A.st.source.outFields);
+  return `
+  <section class="st ${state.sourceCollapsed ? 'collapsed' : ''}" data-stage="source">
+    <header class="st-h">
+      <span class="grip" style="visibility:hidden"></span>
+      <span class="st-n">${icon('table', 13)}</span>
+      <span class="st-title">From</span>
+      <span class="chip mono">public.${state.table}</span>
+      <span class="st-sum"></span>
+      <span class="st-meta"></span>
+      <div class="st-actions">
+        <button class="ibtn xs" data-act="stage-collapse" title="Collapse" aria-label="Collapse">${icon(state.sourceCollapsed ? 'chevr' : 'chev')}</button>
+      </div>
+    </header>
+    <div class="st-body"><div class="st-b">
+      <div class="ed">
+        <p class="hint">This tab starts from <code>${state.table}</code>. Tables linked by a foreign key:</p>
+        <div class="rel-list">${sugg.length ? sugg.map(s => `
+          <button class="rel-btn" data-act="quick-join" data-value="${esc(JSON.stringify(s))}">${icon('link', 13)}<span class="rt">${s.table}</span><span class="rh">${s.card.toLowerCase()} · ${esc(s.hint)}</span><span class="ra">Join ${icon('plus', 12)}</span></button>`).join('') : '<p class="hint">None.</p>'}
+        </div>
+      </div>
+      <div class="pv st-pv"></div>
+    </div></div>
+  </section>`;
+}
+
+function stageCardHtml(st, i) {
+  const S = STAGES[st.type];
+  return `
+  <section class="st ${st.enabled ? '' : 'off'} ${st.collapsed ? 'collapsed' : ''}" data-stage="${st.id}">
+    <header class="st-h">
+      <span class="grip" data-drag title="Drag to reorder">${icon('grip', 13)}</span>
+      <span class="st-n">${i + 1}</span>
+      <span class="st-ic">${icon(S.icon)}</span>
+      <span class="st-title">${S.label}</span>
+      <span class="st-clause"></span>
+      <span class="st-sum"></span>
+      <span class="st-meta"></span>
+      <div class="st-actions">
+        <button class="ibtn xs" data-act="stage-sql" aria-pressed="${!!st.showSql}" title="Show this stage's SQL" aria-label="Show this stage's SQL">${icon('code')}</button>
+        <button class="ibtn xs" data-act="stage-toggle" aria-pressed="${!st.enabled}" title="${st.enabled ? 'Skip stage' : 'Include stage'}" aria-label="${st.enabled ? 'Skip stage' : 'Include stage'}">${icon(st.enabled ? 'eye' : 'eyeoff')}</button>
+        <button class="ibtn xs" data-act="stage-menu" title="More" aria-label="More">${icon('more')}</button>
+        <button class="ibtn xs" data-act="stage-collapse" title="${st.collapsed ? 'Expand' : 'Collapse'}" aria-label="${st.collapsed ? 'Expand' : 'Collapse'}">${icon(st.collapsed ? 'chevr' : 'chev')}</button>
+      </div>
+    </header>
+    <div class="st-body">
+      <div class="st-b"><div class="ed st-ed">${editorHtml(st)}</div><div class="pv st-pv"></div></div>
+      <div class="st-msg"></div>
+      <div class="st-code"></div>
+    </div>
+  </section>`;
+}
+
+function renderPipeline() {
+  const parts = [sourceCardHtml()];
+  state.stages.forEach((st, i) => {
+    parts.push(`<div class="conn"><button class="ibtn conn-add" data-act="insert-at" data-index="${i}" title="Insert a stage here" aria-label="Insert a stage here">${icon('plus', 12)}</button></div>`);
+    parts.push(stageCardHtml(st, i));
+  });
+  parts.push(`<div class="conn"></div>
+    <div class="add-row">
+      <button class="btn sm outline" data-act="add-stage">${icon('plus')} Add stage <span class="kbd">/</span></button>
+      <span class="add-hint">${state.stages.length ? 'Rows flow top to bottom. Each stage previews what comes out of it.' : 'Start with a join, a filter or a group. Each stage previews what comes out of it.'}</span>
+    </div>`);
+  $('#pipeline').innerHTML = parts.join('');
+  renderDerived();
+}
+
+function gridHtml(fields, rows, newOf) {
+  const head = fields.map(f => {
+    const isNew = newOf && newOf !== 'source' && (f.origin === newOf || f.selStage === newOf);
+    const r = f.kind === 'number' ? ' r' : '';
+    return `<th class="${isNew ? 'new' : ''}${r}"><div class="tn">${isNew ? '<span class="nd" title="Added by this stage"></span>' : ''}${fieldHtml(f)}</div><div class="tt">${esc(f.pgType || '')}</div></th>`;
+  }).join('');
+  const body = rows.map(row => `<tr>${fields.map(f => {
+    const isNew = newOf && newOf !== 'source' && (f.origin === newOf || f.selStage === newOf);
+    return `<td class="${f.kind === 'number' ? 'r' : ''}${isNew ? ' new' : ''}" title="${esc(row[f.id] === undefined ? '' : fmtPlain(row[f.id], f.kind))}">${cellHtml(row[f.id], f)}</td>`;
+  }).join('')}</tr>`).join('');
+  return `<table class="grid"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function previewHtml(info, id) {
+  if (info.skipped) return '';
+  if (info.error) return `<div class="pv-empty">${icon('alert')}<span>No preview until the stage is fixed.</span></div>`;
+  if (info.incomplete) return `<div class="pv-empty">${icon('info')}<span>${esc(info.incomplete)} Rows pass through unchanged until then.</span></div>`;
+  const rows = info.rows.slice(0, state.sample);
+  if (!rows.length) return `<div class="pv-empty">${icon('info')}<span>No rows come out of this stage.</span></div>`;
+  return `<div class="pv-scroll">${gridHtml(info.outFields, rows, id)}</div>
+    <div class="pv-foot"><span>Showing ${rows.length} of ${fmtInt(info.count)} rows</span><span class="sp"></span><span>${info.outFields.length} columns</span></div>`;
+}
+
+function metaHtml(info) {
+  if (info.skipped) return '<span class="chip">Skipped</span>';
+  if (info.error) return `<span class="chip bad">${icon('alert', 12)} Error</span>`;
+  if (info.incomplete) return '<span class="chip">Incomplete</span>';
+  const delta = info.inCount != null ? info.count - info.inCount : 0;
+  const d = delta ? `<span class="delta">${delta > 0 ? '+' : '−'}${fmtInt(Math.abs(delta))}</span>` : '';
+  return `${d}<span>${fmtInt(info.count)} rows</span>`;
+}
+
+function summarize(st, info) {
+  const F = new Map(info.inFields.map(f => [f.id, f]));
+  const nm = id => { const f = F.get(id) || A.known.get(id); return f ? displayName(f) : '?'; };
+  switch (st.type) {
+    case 'join': {
+      if (!st.table) return '';
+      const p = st.on[0];
+      return `${st.table} ${st.alias}${p.l && p.r ? ` on ${st.alias}.${p.r} = ${nm(p.l)}` : ''}`;
+    }
+    case 'filter': return condText(st.where, F, true);
+    case 'group': {
+      const keys = st.keys.filter(k => k.field).map(k => (k.bucket ? `${nm(k.field)} by ${k.bucket}` : nm(k.field)));
+      const aggs = st.aggs.filter(a => AGGS[a.fn].noField || a.field).map(a => a.as);
+      return `${keys.length ? keys.join(', ') : 'all rows'}${aggs.length ? ` · ${aggs.join(', ')}` : ''}`;
+    }
+    case 'compute': return st.cols.filter(c => c.fn).map(c => c.as).join(', ');
+    case 'project': return `${info.outFields.length} of ${info.inFields.length} columns`;
+    case 'sort': return st.keys.filter(k => k.field).map(k => `${nm(k.field)}${k.dir === 'desc' ? ' desc' : ''}`).join(', ');
+    case 'limit': return `${st.limit} rows${Number(st.offset) ? `, skip ${st.offset}` : ''}`;
+    case 'sql': return (st.sql.split('\n').find(l => l.trim()) || '').trim();
+  }
+  return '';
+}
+
+function msgHtml(info) {
+  const out = [];
+  if (info.error) out.push(`<div class="msg err">${icon('alert')}<span>${esc(info.error)}</span></div>`);
+  if (info.newStep && info.stepReason) out.push(`<div class="msg">${icon('steps')}<span>Starts a new step: ${esc(info.stepReason)}. The stages above run first as <code>${info.newStep}</code>.</span></div>`);
+  if (info.warn) out.push(`<div class="msg warn">${icon('alert')}<span>${esc(info.warn)}</span></div>`);
+  if (info.note) out.push(`<div class="msg">${icon('info')}<span>${esc(info.note)}</span></div>`);
+  return out.join('');
+}
+
+function sqlLinesHtml(lines) {
+  let prev;
+  const no = s => { const i = state.stages.findIndex(x => x.id === s); return i >= 0 ? String(i + 1) : ''; };
+  return lines.map(l => {
+    const num = l.s && l.s !== prev ? no(l.s) : '';
+    prev = l.s;
+    return `<div class="ln" data-s="${l.s || ''}"><span class="gut">${num}</span><span>${hlSql(l.t)}</span></div>`;
+  }).join('');
+}
+
+function renderDerived() {
+  for (const id of ['source', ...state.stages.map(s => s.id)]) {
+    const card = $(`.st[data-stage="${id}"]`);
+    if (!card) continue;
+    const info = A.st[id];
+    const st = stageById(id);
+    card.querySelector('.st-meta').innerHTML = metaHtml(info);
+    card.querySelector('.st-pv').innerHTML = previewHtml(info, id);
+    if (!st) { card.querySelector('.st-sum').textContent = `${state.table} ${TABLES[state.table].alias}`; continue; }
+    card.querySelector('.st-sum').textContent = summarize(st, info);
+    const clause = info.clause && !info.skipped && !info.error && !info.incomplete
+      ? `<span class="chip mono">${info.clause}</span>${info.newStep ? `<span class="chip mono" title="${esc(info.stepReason || 'Custom SQL runs as its own step')}">${icon('steps', 11)} ${info.newStep}</span>` : ''}`
+      : '';
+    card.querySelector('.st-clause').innerHTML = clause;
+    card.querySelector('.st-msg').innerHTML = msgHtml(info);
+    const lines = st.showSql ? A.lines.filter(l => l.s === id) : [];
+    card.querySelector('.st-code').innerHTML = st.showSql
+      ? (lines.length ? `<div class="sql" style="padding:0;background:none">${sqlLinesHtml(lines.map(l => ({ t: l.t.trim(), s: null })))}</div>` : '<div class="hint" style="padding:0 12px">This stage adds no SQL of its own yet.</div>')
+      : '';
+    for (const el of card.querySelectorAll('.cexpr')) {
+      const expr = info.exprs && info.exprs[el.dataset.expr];
+      el.textContent = expr || '';
+    }
+  }
+  refreshChipLabels();
+  renderSide();
+}
+
+// Labels of chosen columns can change while typing (a renamed aggregate), without a full re-render.
+function refreshChipLabels() {
+  for (const el of $$('#pipeline [data-fid]')) {
+    const fid = el.dataset.fid;
+    if (!fid) continue;
+    const card = el.closest('[data-stage]');
+    const info = A.st[card.dataset.stage];
+    const tl = el.querySelector('.tl');
+    if (!info || !tl) continue;
+    const f = info.inFields.find(x => x.id === fid);
+    tl.innerHTML = f ? fieldHtml(f) : esc((A.known.get(fid) && displayName(A.known.get(fid))) || 'removed');
+    if (el.classList.contains('tok')) el.classList.toggle('tok-bad', !f);
+  }
+}
+
+/* ---------- Side panel ---------- */
+const KW = new Set('SELECT FROM WHERE AND OR NOT IN IS NULL JOIN LEFT INNER ON GROUP BY HAVING ORDER ASC DESC NULLS FIRST LAST LIMIT OFFSET WITH AS BETWEEN ILIKE LIKE OVER PARTITION DISTINCT CASE WHEN THEN ELSE END ARRAY FILTER'.split(' '));
+function hlSql(s) {
+  return s.replace(/('(?:[^']|'')*')|(--.*$)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|([^\sA-Za-z0-9_'])/g, (m, str, com, num, word, punct) => {
+    if (str) return `<span class="s">${esc(str)}</span>`;
+    if (com) return `<span class="c">${esc(com)}</span>`;
+    if (num) return `<span class="n">${num}</span>`;
+    if (word) {
+      if (/^(NULL|TRUE|FALSE)$/.test(word)) return `<span class="n">${word}</span>`;
+      if (KW.has(word) ) return `<span class="k">${word}</span>`;
+      return `<span class="i2">${word}</span>`;
+    }
+    return `<span class="p">${esc(punct)}</span>`;
+  });
+}
+
+function renderSide() {
+  const side = $('#side');
+  const sqlEl = side.querySelector('.sql');
+  const scroll = sqlEl ? sqlEl.scrollTop : 0;
+  const flow = [{ id: 'source', n: '', label: `<b>From</b> ${state.table}`, count: A.st.source.count }].concat(state.stages.map((st, i) => {
+    const info = A.st[st.id];
+    const bad = info.skipped ? 'Skipped' : info.error ? 'Error' : info.incomplete ? 'Incomplete' : null;
+    return { id: st.id, n: i + 1, label: `<b>${STAGES[st.type].label}</b> ${esc(summarize(st, info))}`, count: bad ? null : info.count, bad };
+  }));
+  const max = Math.max(1, ...flow.map(f => f.count || 0));
+  const notes = A.notes.length
+    ? A.notes.map(n => `<p>${icon('steps', 12)}<span>${esc(n.text)}</span></p>`).join('')
+    : `<p>${icon('info', 12)}<span>Each stage becomes a clause. Hover a stage to find its lines.</span></p>`;
+  side.innerHTML = `
+    <section class="panel">
+      <header class="panel-h">${icon('rows')}<span class="panel-t">Row flow</span><span class="sp"></span><span class="panel-note">Rows out of each stage</span></header>
+      <div class="flow">${flow.map(f => `
+        <button class="flow-row" data-act="flow-go" data-value="${f.id}"><span class="fn">${f.n}</span><span class="fl">${f.label}</span>
+          <span class="fb">${f.count != null ? `<span style="width:${Math.max(1.5, (f.count / max) * 100)}%"></span>` : ''}</span>
+          <span class="fc">${f.count != null ? fmtInt(f.count) : `<span class="fs">${f.bad}</span>`}</span></button>`).join('')}
+      </div>
+    </section>
+    <section class="panel sql-panel">
+      <header class="panel-h">${icon('code')}<span class="panel-t">SQL</span>${A.ctes.length ? `<span class="count">${A.ctes.length + 1} steps</span>` : ''}<span class="sp"></span>
+        <button class="ibtn xs" data-act="copy-sql" title="Copy SQL" aria-label="Copy SQL">${icon('copy')}</button>
+        <button class="btn xs ghost" data-act="mode" data-value="sql">Edit as SQL</button></header>
+      <div class="sql">${sqlLinesHtml(A.lines)}</div>
+      <footer class="panel-f">${notes}</footer>
+    </section>`;
+  side.querySelector('.sql').scrollTop = scroll;
+  applyHl();
+}
+
+function setHl(id) {
+  if (state.hl === id) return;
+  state.hl = id;
+  applyHl();
+}
+function applyHl() {
+  $$('.ln.hl, .st.hl, .flow-row.hl').forEach(e => e.classList.remove('hl'));
+  const id = state.hl;
+  if (!id) return;
+  $$(`#side .ln[data-s="${id}"]`).forEach(e => e.classList.add('hl'));
+  const card = $(`.st[data-stage="${id}"]`);
+  if (card) card.classList.add('hl');
+  const row = $(`.flow-row[data-value="${id}"]`);
+  if (row) row.classList.add('hl');
+}
+
+/* ---------- Results ---------- */
+function renderResults() {
+  const R = $('#results');
+  if (state.running) {
+    R.innerHTML = `<section class="panel"><header class="panel-h">${icon('rows')}<span class="panel-t">Results</span></header><div class="empty"><p>Running…</p></div></section>`;
+    return;
+  }
+  if (!state.run) {
+    R.innerHTML = `<section class="panel"><header class="panel-h">${icon('rows')}<span class="panel-t">Results</span></header>
+      <div class="empty"><p class="t">Run the query to see every row.</p><p>Stage previews above only show a ${state.sample}-row sample. <span class="kbd">${MOD} ↵</span></p></div></section>`;
+    return;
+  }
+  const { fields, rows, ms, fromSql } = state.run;
+  const per = 25;
+  const pages = Math.max(1, Math.ceil(rows.length / per));
+  state.page = Math.min(Math.max(0, state.page), pages - 1);
+  const from = state.page * per;
+  const slice = rows.slice(from, from + per);
+  const stale = state.mode === 'builder' && sig() !== state.runSig;
+  R.innerHTML = `
+    <section class="panel">
+      <header class="panel-h">${icon('rows')}<span class="panel-t">Results</span><span class="count">${fmtInt(rows.length)}</span>
+        ${stale ? `<span class="chip warn">${icon('alert', 12)} Query changed since this run</span>` : ''}
+        ${fromSql ? '<span class="chip">Showing the builder’s result. The app would run your edited SQL.</span>' : ''}
+        <span class="sp"></span><span class="panel-note mono">${ms} ms</span></header>
+      ${rows.length ? `<div class="res-scroll">${gridHtml(fields, slice, null)}</div>` : '<div class="empty"><p>No rows.</p></div>'}
+      <footer class="res-foot"><span>Rows ${rows.length ? from + 1 : 0}–${from + slice.length} of ${fmtInt(rows.length)}</span><span class="sp"></span>
+        <button class="ibtn xs" data-act="page" data-value="-1" ${state.page === 0 ? 'disabled' : ''} aria-label="Previous page">${icon('chevl', 14)}</button>
+        <span class="mono">${state.page + 1} / ${pages}</span>
+        <button class="ibtn xs" data-act="page" data-value="1" ${state.page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">${icon('chevr', 14)}</button>
+      </footer>
+    </section>`;
+}
+
+function run() {
+  state.running = true;
+  renderResults();
+  setTimeout(() => {
+    state.running = false;
+    state.run = {
+      fields: A.final.fields, rows: A.final.rows, fromSql: state.mode === 'sql' && state.sqlDirty,
+      ms: 3 + Math.round(A.final.rows.length / 30 + A.st.source.count / 80 + state.stages.length * 1.7),
+    };
+    state.runSig = sig();
+    state.page = 0;
+    renderResults();
+  }, 220);
+}
+
+/* ---------- SQL mode ---------- */
+function renderSqlMode() {
+  $('#sqlmode').innerHTML = `
+    <section class="panel">
+      <header class="panel-h">${icon('code')}<span class="panel-t">SQL</span><span class="chip">Detached from the builder</span><span class="sp"></span>
+        <button class="btn xs ghost" data-act="mode" data-value="builder">Back to builder</button></header>
+      <textarea id="sqltext" class="sqltext" spellcheck="false" aria-label="SQL">${esc(state.sqlDraft)}</textarea>
+      <footer class="panel-f"><p>${icon('info', 12)}<span>Edits here don't flow back into the stages. Going back to the builder discards them.</span></p></footer>
+    </section>`;
+}
+function setMode(mode) {
+  if (mode === state.mode) return;
+  if (mode === 'builder' && state.sqlDirty && !confirm('Discard your SQL edits and go back to the builder?')) return;
+  state.mode = mode;
+  if (mode === 'sql') { state.sqlDraft = A.sql; state.sqlDirty = false; }
+  $('#builder').hidden = mode !== 'builder';
+  $('#sqlmode').hidden = mode !== 'sql';
+  if (mode === 'sql') renderSqlMode();
+  renderQbar();
+  renderResults();
+  if (mode === 'sql') $('#sqltext').focus();
+}
+
+/* =====================================================================
+   Menus (single popover used for every picker)
+   ===================================================================== */
+let menu = null;
+function openMenu(anchor, cfg) {
+  closeMenu();
+  const el = document.createElement('div');
+  el.className = 'menu';
+  el.tabIndex = -1;
+  el.style.width = `${cfg.width || 280}px`;
+  el.innerHTML = `${cfg.search ? `<div class="menu-search">${icon('search')}<input placeholder="${esc(cfg.placeholder || 'Search')}" aria-label="Search"></div>` : ''}<div class="menu-list" role="listbox"></div>`;
+  $('#menu-root').appendChild(el);
+  menu = { el, cfg, anchor, q: '', active: Math.max(0, cfg.items.findIndex(it => it.selected)), items: [] };
+  renderMenuList();
+  positionMenu();
+  const input = el.querySelector('input');
+  (input || el).focus({ preventScroll: true });
+  if (input) input.addEventListener('input', () => { menu.q = input.value; menu.active = 0; renderMenuList(); });
+  el.addEventListener('keydown', menuKey);
+}
+function positionMenu() {
+  const { el, anchor } = menu;
+  const r = anchor.getBoundingClientRect();
+  const h = el.offsetHeight, w = el.offsetWidth;
+  let top = r.bottom + 4;
+  if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 4);
+  el.style.top = `${top}px`;
+  el.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+}
+function menuItems() {
+  const { cfg } = menu;
+  const q = menu.q.trim().toLowerCase();
+  let items = cfg.items.filter(it => !q || `${it.label} ${it.desc || ''} ${it.group || ''}`.toLowerCase().includes(q));
+  if (cfg.freeform) {
+    const extra = cfg.freeform(menu.q.trim());
+    if (extra) items = [extra, ...items];
+  }
+  return items;
+}
+function renderMenuList() {
+  const items = menuItems();
+  menu.items = items;
+  const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter(i => i >= 0);
+  if (!enabled.includes(menu.active)) menu.active = enabled[0] ?? -1;
+  let group;
+  const html = items.map((it, i) => {
+    let h = '';
+    if (it.group && it.group !== group) { group = it.group; h += `<div class="mg">${esc(group)}</div>`; }
+    const sel = menu.cfg.multi ? menu.cfg.isSelected(it) : it.selected;
+    h += `<div class="mi ${i === menu.active ? 'on' : ''} ${it.disabled ? 'dis' : ''}" data-i="${i}" role="option" aria-selected="${!!sel}">
+      ${menu.cfg.multi || menu.cfg.checks ? `<span class="ck">${sel ? icon('check', 14) : ''}</span>` : ''}
+      ${it.icon ? icon(it.icon) : ''}
+      <span class="mt"><span class="ml ${it.mono ? 'mono' : ''}">${it.html || esc(it.label)}</span>${it.desc ? `<span class="md">${esc(it.desc)}</span>` : ''}</span>
+      ${it.hint ? `<span class="mh">${esc(it.hint)}</span>` : ''}</div>`;
+    return h;
+  }).join('');
+  const list = menu.el.querySelector('.menu-list');
+  list.innerHTML = html || `<div class="menu-empty">${esc(menu.cfg.empty || 'Nothing matches.')}</div>`;
+  list.querySelectorAll('.mi').forEach(node => {
+    node.addEventListener('mousedown', e => e.preventDefault());
+    node.addEventListener('click', () => pickMenu(Number(node.dataset.i)));
+    node.addEventListener('mousemove', () => {
+      const i = Number(node.dataset.i);
+      if (menu.active !== i) { menu.active = i; list.querySelectorAll('.mi').forEach(n => n.classList.toggle('on', Number(n.dataset.i) === i)); }
+    });
+  });
+  const on = list.querySelector('.mi.on');
+  if (on) on.scrollIntoView({ block: 'nearest' });
+}
+function menuKey(e) {
+  const enabled = menu.items.map((it, i) => (it.disabled ? -1 : i)).filter(i => i >= 0);
+  const pos = enabled.indexOf(menu.active);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!enabled.length) return;
+    const next = e.key === 'ArrowDown' ? (pos + 1) % enabled.length : (pos - 1 + enabled.length) % enabled.length;
+    menu.active = enabled[next];
+    renderMenuList();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (menu.active >= 0) pickMenu(menu.active);
+  } else if (e.key === 'Escape' || e.key === 'Tab') {
+    e.preventDefault();
+    const anchor = menu.anchor;
+    closeMenu();
+    if (anchor && anchor.isConnected) anchor.focus();
+  }
+}
+function pickMenu(i) {
+  const it = menu.items[i];
+  if (!it || it.disabled) return;
+  const { cfg } = menu;
+  if (cfg.multi) { cfg.onPick(it); renderMenuList(); return; }
+  closeMenu();
+  cfg.onPick(it);
+}
+function closeMenu() {
+  if (!menu) return;
+  menu.el.remove();
+  menu = null;
+}
+document.addEventListener('mousedown', e => { if (menu && !menu.el.contains(e.target)) closeMenu(); });
+window.addEventListener('resize', closeMenu);
+// Menus follow their anchor while the workspace scrolls (e.g. a new stage scrolling into view).
+$('#content').addEventListener('scroll', () => {
+  if (!menu) return;
+  if (menu.anchor.isConnected) positionMenu(); else closeMenu();
+});
+
+const kindLabel = { number: 'number', text: 'text', enum: 'enum', time: 'date or time', bool: 'boolean', json: 'JSON', array: 'array' };
+function fieldGroup(f) {
+  if (f.cte) return `From ${f.cte}`;
+  if (f.agg) return 'Aggregates';
+  if (f.table && f.base) return `${f.table} ${f.rel}`;
+  return 'Calculated';
+}
+function fieldItem(f, value, selected) {
+  return { html: fieldHtml(f), label: displayName(f), mono: true, hint: f.pgType, value, group: fieldGroup(f), icon: f.pk ? 'key' : f.fk ? 'link' : null, selected };
+}
+function openFieldMenu(anchor, fields, kinds, optional, current, onPick) {
+  const items = [];
+  if (optional) items.push({ label: 'All rows', desc: 'No PARTITION BY', value: null, group: 'Partition' });
+  for (const f of fields) {
+    if (kinds && !kinds.includes(f.kind)) continue;
+    items.push(fieldItem(f, f.id, f.id === current));
+  }
+  openMenu(anchor, {
+    items, search: true, placeholder: 'Search columns', width: 300,
+    empty: kinds ? `No ${kinds.map(k => kindLabel[k]).join(' or ')} columns reach this stage.` : 'No columns.',
+    onPick: it => onPick(it.value),
+  });
+}
+function parseChoices(s) { return s.split('|').filter(Boolean).map(p => { const i = p.indexOf(':'); return [p.slice(0, i), p.slice(i + 1)]; }); }
+
+/* =====================================================================
+   Actions
+   ===================================================================== */
+function anchorSelector(el) {
+  const card = el.closest('[data-stage]');
+  let s = card ? `[data-stage="${card.dataset.stage}"] ` : '';
+  s += `[data-act="${el.dataset.act}"]`;
+  if (el.dataset.path) s += `[data-path="${el.dataset.path}"]`;
+  return s;
+}
+// Re-render, then put focus back on the equivalent control so keyboard flow continues.
+function commitFrom(el) {
+  const sel = anchorSelector(el);
+  commit(true);
+  const again = $(sel);
+  if (again) again.focus({ preventScroll: true });
+}
+function autoOpen(stId, path, act = 'pick-field') {
+  setTimeout(() => {
+    const el = $(`[data-stage="${stId}"] [data-act="${act}"]${path ? `[data-path="${path}"]` : ''}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'nearest' });
+    el.focus({ preventScroll: true });
+    el.click();
+  });
+}
+function autoOpenFor(st) {
+  switch (st.type) {
+    case 'join': if (!st.table) autoOpen(st.id, '', 'pick-join-table'); break;
+    case 'filter': autoOpen(st.id, 'where.items.0.field'); break;
+    case 'group': autoOpen(st.id, 'keys.0.field'); break;
+    case 'compute': autoOpen(st.id, 'cols.0', 'pick-fn'); break;
+    case 'sort': autoOpen(st.id, 'keys.0.field'); break;
+    case 'limit': setTimeout(() => { const i = $(`[data-stage="${st.id}"] [data-bind="limit"]`); if (i) { i.focus(); i.select(); } }); break;
+    case 'sql': setTimeout(() => { const t = $(`[data-stage="${st.id}"] textarea`); if (t) t.focus(); }); break;
+  }
+}
+function insertStage(index, st) {
+  state.stages.splice(index, 0, st);
+  commit(true);
+  const card = $(`.st[data-stage="${st.id}"]`);
+  if (card) card.scrollIntoView({ block: 'nearest' });
+  autoOpenFor(st);
+}
+function openAddMenu(anchor, index) {
+  const inF = fieldsBefore(index);
+  const joined = new Set(inF.filter(f => f.table).map(f => f.table));
+  const sugg = joinSuggestions(inF).filter(s => !joined.has(s.table)).slice(0, 4);
+  const items = [
+    ...sugg.map(s => ({ label: `Join ${s.table}`, desc: `${s.card} via ${s.hint}`, value: { type: 'join', s }, group: 'Suggested', icon: 'link' })),
+    ...Object.entries(STAGES).map(([k, v]) => ({ label: v.label, desc: v.desc, value: { type: k }, group: 'Stages', icon: v.icon })),
+  ];
+  openMenu(anchor, { items, search: true, placeholder: 'Add a stage', width: 320, onPick: it => insertStage(index, newStage(it.value.type, inF, it.value.s)) });
+}
+function cloneStage(st) {
+  const copy = JSON.parse(JSON.stringify(st));
+  copy.id = uid('s');
+  (copy.keys || []).forEach(k => { if (k.id) k.id = uid('k'); });
+  (copy.aggs || []).forEach(a => { a.id = uid('a'); });
+  if (copy.type === 'compute') copy.cols.forEach(c => { c.id = uid('x'); });
+  return copy;
+}
+function moveStage(from, to) {
+  const [st] = state.stages.splice(from, 1);
+  state.stages.splice(to, 0, st);
+}
+function copySql() {
+  const text = state.mode === 'sql' ? $('#sqltext').value : A.sql;
+  const done = () => toast('SQL copied');
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => toast('Couldn’t copy. Select the SQL and copy it instead.'));
+}
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.setAttribute('role', 'status');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('out'), 1600);
+  setTimeout(() => t.remove(), 1800);
+}
+
+function afterFieldPick(st, path, id, fields) {
+  const f = fields.find(x => x.id === id);
+  const parentPath = path.split('.').slice(0, -1).join('.');
+  const parent = parentPath ? getPath(st, parentPath) : st;
+  if (st.type === 'filter' && parent.k === 'cond' && f) {
+    parent.op = DEFAULT_OP[f.kind] || 'eq';
+    parent.value = defaultValue(opOf(f, parent.op).v, f);
+  }
+  if (st.type === 'group' && path.startsWith('keys.')) parent.bucket = f && f.kind === 'time' ? 'month' : null;
+  if (st.type === 'group' && path.startsWith('aggs.') && parent.asAuto) parent.as = defaultAggName(parent, f);
+}
+
+const ACT = {
+  'pick-field'(el, st) {
+    const info = A.st[st.id];
+    const kinds = el.dataset.kinds ? el.dataset.kinds.split(',') : null;
+    const path = el.dataset.path;
+    openFieldMenu(el, info.inFields, kinds, el.dataset.optional === '1', getPath(st, path), id => {
+      setPath(st, path, id);
+      afterFieldPick(st, path, id, info.inFields);
+      commitFrom(el);
+      if (st.type === 'filter' && id) {
+        const cond = getPath(st, path.split('.').slice(0, -1).join('.'));
+        const f = info.inFields.find(x => x.id === id);
+        const o = f && opOf(f, cond.op);
+        if (o && o.v === 'enum') autoOpen(st.id, path.replace(/\.field$/, ''), 'pick-enum');
+        else setTimeout(() => { const i = $(`[data-stage="${st.id}"] [data-bind^="${path.replace(/\.field$/, '.value')}"]`); if (i) i.focus(); });
+      }
+    });
+  },
+  'pick-operand'(el, st) {
+    const info = A.st[st.id];
+    const kinds = el.dataset.kinds ? el.dataset.kinds.split(',') : null;
+    const path = el.dataset.path;
+    const numeric = kinds && kinds.every(k => k === 'number');
+    openMenu(el, {
+      items: info.inFields.filter(f => !kinds || kinds.includes(f.kind)).map(f => fieldItem(f, { f: f.id })),
+      search: true, width: 300, placeholder: numeric ? 'Column, or type a number' : 'Column, or type a value',
+      freeform: q => {
+        if (!q) return null;
+        const n = Number(q);
+        if (Number.isFinite(n)) return { label: `Use ${n}`, value: { n }, group: 'Value', icon: 'plus' };
+        if (numeric) return null;
+        return { label: `Use '${q}'`, value: { s: q }, group: 'Value', icon: 'plus' };
+      },
+      onPick: it => { setPath(st, path, it.value); commitFrom(el); },
+    });
+  },
+  'pick-op'(el, st) {
+    const c = getPath(st, el.dataset.path);
+    const f = lookupField(st, c.field);
+    if (!f) return;
+    openMenu(el, {
+      items: (OPS[f.kind] || OPS.text).map(o => ({ label: o.label, value: o.id, selected: o.id === c.op })), checks: true, width: 200,
+      onPick: it => {
+        const prev = opOf(f, c.op);
+        c.op = it.value;
+        const o = opOf(f, c.op);
+        if (!prev || prev.v !== o.v) c.value = defaultValue(o.v, f);
+        commitFrom(el);
+      },
+    });
+  },
+  'pick-enum'(el, st) {
+    const c = getPath(st, el.dataset.path);
+    const f = lookupField(st, c.field);
+    const vals = (f && f.enumVals) || [];
+    openMenu(el, {
+      multi: true, width: 220, items: vals.map(v => ({ label: v, value: v, mono: true })),
+      isSelected: it => (c.value || []).includes(it.value),
+      onPick: it => {
+        const cur = new Set(c.value || []);
+        if (cur.has(it.value)) cur.delete(it.value); else cur.add(it.value);
+        c.value = vals.filter(v => cur.has(v));
+        commit(true);
+      },
+    });
+  },
+  'pick-choice'(el, st) {
+    const path = el.dataset.path;
+    const cur = getPath(st, path);
+    const free = el.dataset.free === '1';
+    openMenu(el, {
+      items: parseChoices(el.dataset.choices).map(([v, l]) => ({ label: l, value: v, selected: String(cur ?? '') === v })), checks: true,
+      search: free, placeholder: 'Type a key', width: 200,
+      freeform: free ? q => (q ? { label: `Use "${q}"`, value: q, icon: 'plus' } : null) : null,
+      onPick: it => { setPath(st, path, it.value === '' ? null : it.value); commitFrom(el); },
+    });
+  },
+  'toggle-andor'(el, st) { const g = getPath(st, el.dataset.path); g.op = g.op === 'and' ? 'or' : 'and'; commitFrom(el); },
+  'add-cond'(el, st) {
+    const g = getPath(st, el.dataset.path);
+    g.items.push(emptyCond());
+    commit(true);
+    autoOpen(st.id, `${el.dataset.path}.items.${g.items.length - 1}.field`);
+  },
+  'add-group'(el, st) {
+    const g = getPath(st, el.dataset.path);
+    g.items.push({ k: 'group', op: 'or', items: [emptyCond()] });
+    commit(true);
+    autoOpen(st.id, `${el.dataset.path}.items.${g.items.length - 1}.items.0.field`);
+  },
+  'add-raw'(el, st) {
+    const g = getPath(st, el.dataset.path);
+    g.items.push({ k: 'raw', sql: '' });
+    commit(true);
+    const input = $(`[data-stage="${st.id}"] [data-bind="${el.dataset.path}.items.${g.items.length - 1}.sql"]`);
+    if (input) input.focus();
+  },
+  del(el, st) {
+    const parts = el.dataset.path.split('.');
+    const idx = Number(parts.pop());
+    getPath(st, parts.join('.')).splice(idx, 1);
+    commit(true);
+  },
+  set(el, st) { setPath(st, el.dataset.path, el.dataset.value); commitFrom(el); },
+  'pick-join-table'(el, st) {
+    const inF = A.st[st.id].inFields;
+    const sugg = joinSuggestions(inF);
+    const items = [
+      ...sugg.map(s => ({ label: s.table, mono: true, desc: `${s.card} via ${s.hint}`, value: s, group: 'Related', icon: 'link' })),
+      ...TABLE_ORDER.map(t => ({ label: t, mono: true, hint: `${TABLES[t].columns.length} cols`, value: { table: t }, group: 'All tables', icon: 'table' })),
+    ];
+    openMenu(el, {
+      items, search: true, placeholder: 'Search tables', width: 320,
+      onPick: it => {
+        const s = it.value;
+        st.table = s.table;
+        st.alias = uniqueAlias(s.table, inF);
+        st.on = [{ l: s.l || null, r: s.r || null }];
+        commitFrom(el);
+        if (!s.r) autoOpen(st.id, '', 'pick-join-col');
+      },
+    });
+  },
+  'pick-join-col'(el, st) {
+    openMenu(el, {
+      items: TABLES[st.table].columns.map(c => ({ label: c.name, mono: true, hint: c.type, value: c.name, icon: c.pk ? 'key' : c.fk ? 'link' : null, selected: st.on[0].r === c.name })),
+      search: true, placeholder: `Columns of ${st.table}`, width: 280,
+      onPick: it => { st.on[0].r = it.value; commitFrom(el); if (!st.on[0].l) autoOpen(st.id, 'on.0.l'); },
+    });
+  },
+  'add-key'(el, st) { st.keys.push({ id: uid('k'), field: null, bucket: null }); commit(true); autoOpen(st.id, `keys.${st.keys.length - 1}.field`); },
+  'add-agg'(el, st) { st.aggs.push({ id: uid('a'), fn: 'count', field: null, as: 'count', asAuto: true }); commit(true); autoOpen(st.id, `aggs.${st.aggs.length - 1}`, 'pick-aggfn'); },
+  'pick-aggfn'(el, st) {
+    const a = getPath(st, el.dataset.path);
+    openMenu(el, {
+      items: Object.entries(AGGS).map(([k, v]) => ({ label: v.label, hint: v.hint, value: k, selected: a.fn === k })), checks: true, width: 260,
+      onPick: it => {
+        a.fn = it.value;
+        const def = AGGS[a.fn];
+        const f = a.field ? lookupField(st, a.field) : null;
+        if (def.noField) a.field = null;
+        else if (f && def.kinds && !def.kinds.includes(f.kind)) a.field = null;
+        if (a.asAuto) a.as = defaultAggName(a, a.field ? lookupField(st, a.field) : null);
+        commitFrom(el);
+        if (!def.noField && !a.field) autoOpen(st.id, `${el.dataset.path}.field`);
+      },
+    });
+  },
+  'add-col'(el, st) { st.cols.push({ id: uid('x'), as: 'new_column', asAuto: true, fn: null, args: {} }); commit(true); autoOpen(st.id, `cols.${st.cols.length - 1}`, 'pick-fn'); },
+  'pick-fn'(el, st) {
+    const c = getPath(st, el.dataset.path);
+    openMenu(el, {
+      items: Object.entries(FUNCS).map(([k, f]) => ({ label: f.label, desc: f.desc, value: k, group: f.g, selected: c.fn === k })), checks: true,
+      search: true, placeholder: 'Search functions', width: 320,
+      onPick: it => {
+        c.fn = it.value;
+        const fn = FUNCS[c.fn];
+        c.args = {};
+        fn.args.forEach(a => {
+          if (a.t === 'choice') c.args[a.k] = a.def ?? a.choices[0];
+          if (a.t === 'text') c.args[a.k] = a.def ?? '';
+        });
+        if (c.asAuto) c.as = fn.name;
+        commitFrom(el);
+        const first = fn.args.find(a => a.t === 'field');
+        if (first) autoOpen(st.id, `${el.dataset.path}.args.${first.k}`);
+        else if (c.fn === 'raw') setTimeout(() => { const i = $(`[data-stage="${st.id}"] [data-bind="${el.dataset.path}.args.expr"]`); if (i) i.focus(); });
+      },
+    });
+  },
+  'proj-toggle'(el, st) {
+    const c = st.cols.find(x => x.field === el.dataset.fid);
+    if (c) c.on = !c.on; else st.cols.push({ field: el.dataset.fid, as: '', on: true });
+    commit(true);
+  },
+  'proj-all'(el, st) {
+    A.st[st.id].inFields.forEach(f => {
+      const c = st.cols.find(x => x.field === f.id);
+      if (c) c.on = true; else st.cols.push({ field: f.id, as: '', on: true });
+    });
+    commit(true);
+  },
+  'proj-none'(el, st) { st.cols.forEach(c => { c.on = false; }); commit(true); },
+  'proj-move'(el, st) {
+    const fid = el.dataset.fid;
+    if (!st.cols.some(c => c.field === fid)) st.cols.push({ field: fid, as: '', on: false });
+    const i = st.cols.findIndex(c => c.field === fid);
+    const j = i + Number(el.dataset.dir);
+    if (j < 0 || j >= st.cols.length) return;
+    [st.cols[i], st.cols[j]] = [st.cols[j], st.cols[i]];
+    commit(true);
+  },
+  'add-sort'(el, st) { st.keys.push({ field: null, dir: 'asc', nulls: 'default' }); commit(true); autoOpen(st.id, `keys.${st.keys.length - 1}.field`); },
+  'stage-toggle'(el, st) { st.enabled = !st.enabled; commitFrom(el); },
+  'stage-collapse'(el, st) {
+    if (st) st.collapsed = !st.collapsed; else state.sourceCollapsed = !state.sourceCollapsed;
+    commitFrom(el);
+  },
+  'stage-sql'(el, st) { st.showSql = !st.showSql; commitFrom(el); },
+  'stage-menu'(el, st) {
+    const i = state.stages.indexOf(st);
+    openMenu(el, {
+      width: 200,
+      items: [
+        { label: 'Move up', value: 'up', icon: 'up', disabled: i === 0 },
+        { label: 'Move down', value: 'down', icon: 'chev', disabled: i === state.stages.length - 1 },
+        { label: 'Duplicate', value: 'dup', icon: 'dup' },
+        { label: 'Delete', value: 'del', icon: 'trash' },
+      ],
+      onPick: it => {
+        if (it.value === 'up') moveStage(i, i - 1);
+        if (it.value === 'down') moveStage(i, i + 1);
+        if (it.value === 'dup') state.stages.splice(i + 1, 0, cloneStage(st));
+        if (it.value === 'del') state.stages.splice(i, 1);
+        commit(true);
+      },
+    });
+  },
+  'insert-at'(el) { openAddMenu(el, Number(el.dataset.index)); },
+  'add-stage'(el) { openAddMenu(el, state.stages.length); },
+  'quick-join'(el) {
+    const s = JSON.parse(el.dataset.value);
+    let idx = 0;
+    while (idx < state.stages.length && state.stages[idx].type === 'join') idx++;
+    insertStage(idx, newStage('join', fieldsBefore(idx), s));
+  },
+  'flow-go'(el) {
+    const card = $(`.st[data-stage="${el.dataset.value}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
+  run() { run(); },
+  'copy-sql'() { copySql(); },
+  mode(el) { setMode(el.dataset.value); },
+  sample(el) { state.sample = Number(el.dataset.value); renderQbar(); renderDerived(); renderResults(); },
+  theme() {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = state.theme;
+    renderChrome();
+  },
+  'load-example'() { state.stages = exampleStages(); state.run = null; commit(true); },
+  clear() { state.stages = []; state.run = null; commit(true); },
+  'pick-table'(el) {
+    if (state.mode === 'sql') setMode('builder');
+    if (state.mode === 'sql') return;
+    state.table = el.dataset.value;
+    state.stages = exampleStages();
+    state.run = null;
+    renderChrome();
+    renderQbar();
+    commit(true);
+  },
+  page(el) { state.page += Number(el.dataset.value); renderResults(); },
+  noop() { toast('Only the Query tab is part of this prototype.'); },
+};
+
+/* ---------- Event wiring ---------- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.closest('.menu')) return;
+  const fn = ACT[el.dataset.act];
+  if (!fn) return;
+  const card = el.closest('[data-stage]');
+  const st = card ? stageById(card.dataset.stage) : null;
+  fn(el, st, e);
+});
+
+function readBind(el) {
+  const t = el.dataset.type;
+  if (t === 'csv') return el.value.split(',').map(s => s.trim()).filter(Boolean);
+  if (t === 'num') return el.value === '' ? '' : Number(el.value);
+  if (t === 'int') return el.value === '' ? '' : Math.max(0, Math.floor(Number(el.value)));
+  return el.value;
+}
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'sqltext') { state.sqlDraft = el.value; state.sqlDirty = el.value !== A.sql; return; }
+  if (el.dataset.bind == null) return;
+  const card = el.closest('[data-stage]');
+  const st = card && stageById(card.dataset.stage);
+  if (!st) return;
+  const path = el.dataset.bind;
+  setPath(st, path, readBind(el));
+  // A name typed by hand stops following the function or column it was generated from.
+  if (path.endsWith('.as')) {
+    const parent = getPath(st, path.slice(0, -3));
+    if (parent && 'asAuto' in parent) parent.asAuto = false;
+  }
+  commit(false);
+});
+
+const isTyping = el => el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); closeMenu(); run(); return; }
+  if (e.key === '/' && !menu && !isTyping(e.target) && state.mode === 'builder') {
+    e.preventDefault();
+    const btn = $('[data-act="add-stage"]');
+    btn.scrollIntoView({ block: 'nearest' });
+    openAddMenu(btn, state.stages.length);
+  }
+});
+
+// Hover sync between stage cards, SQL lines and the row flow.
+document.addEventListener('mouseover', e => {
+  const card = e.target.closest('.st[data-stage]');
+  if (card) return setHl(card.dataset.stage);
+  const line = e.target.closest('#side .ln');
+  if (line) return setHl(line.dataset.s || null);
+  const flow = e.target.closest('.flow-row');
+  if (flow) return setHl(flow.dataset.value);
+  setHl(null);
+});
+
+// Drag stages by their grip to reorder.
+let dragId = null;
+const pipeline = $('#pipeline');
+pipeline.addEventListener('mousedown', e => {
+  const grip = e.target.closest('[data-drag]');
+  if (grip) grip.closest('.st').draggable = true;
+});
+pipeline.addEventListener('dragstart', e => {
+  const card = e.target.closest('.st');
+  if (!card || !card.draggable) return;
+  dragId = card.dataset.stage;
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragId);
+});
+pipeline.addEventListener('dragover', e => {
+  if (!dragId) return;
+  const card = e.target.closest('.st');
+  $$('.drop-before, .drop-after').forEach(c => c.classList.remove('drop-before', 'drop-after'));
+  if (!card || card.dataset.stage === 'source' || card.dataset.stage === dragId) return;
+  e.preventDefault();
+  const r = card.getBoundingClientRect();
+  card.classList.add(e.clientY < r.top + r.height / 2 ? 'drop-before' : 'drop-after');
+});
+pipeline.addEventListener('drop', e => {
+  const card = e.target.closest('.st');
+  if (!dragId || !card || card.dataset.stage === 'source') return;
+  e.preventDefault();
+  const after = card.classList.contains('drop-after');
+  const from = state.stages.findIndex(s => s.id === dragId);
+  const [st] = state.stages.splice(from, 1);
+  let to = state.stages.findIndex(s => s.id === card.dataset.stage);
+  if (to < 0) to = from;
+  state.stages.splice(after ? to + 1 : to, 0, st);
+  commit(true);
+});
+pipeline.addEventListener('dragend', () => {
+  dragId = null;
+  $$('.st[draggable="true"]').forEach(c => { c.draggable = false; c.classList.remove('dragging'); });
+  $$('.drop-before, .drop-after').forEach(c => c.classList.remove('drop-before', 'drop-after'));
+});
+
+/* =====================================================================
+   Boot
+   ===================================================================== */
+genData();
+state.stages = exampleStages();
+renderChrome();
+renderQbar();
+commit(true);
+</script>
+</body>
+</html>
