@@ -1,41 +1,9 @@
 import fs from "node:fs";
-import path from "node:path";
 import {
   test,
   expect,
-  _electron as electron,
-  type TestInfo,
 } from "@playwright/test";
-
-function getRuntimeState(testInfo: TestInfo) {
-  const runtimeStatePath = String(testInfo.config.metadata.runtimeStatePath);
-  return JSON.parse(fs.readFileSync(runtimeStatePath, "utf8")) as {
-    storeDir: string;
-    exportDir: string;
-  };
-}
-
-function getExecutablePath(): string {
-  const appRoot = process.cwd();
-
-  if (process.platform === "win32") {
-    return path.join(appRoot, "out", "PG Compass-win32-x64", "pg-compass.exe");
-  }
-
-  if (process.platform === "darwin") {
-    return path.join(
-      appRoot,
-      "out",
-      "PG Compass-darwin-arm64",
-      "PG Compass.app",
-      "Contents",
-      "MacOS",
-      "PG Compass",
-    );
-  }
-
-  return path.join(appRoot, "out", "PG Compass-linux-x64", "pg-compass");
-}
+import { getRuntimeState, launchApp } from "./electron-app";
 
 test.skip(
   !process.env.PG_COMPASS_TEST_ADMIN_DATABASE_URL &&
@@ -54,13 +22,9 @@ test("explores, queries, exports, and updates settings in the real Electron app"
   );
 
   const runtime = getRuntimeState(testInfo);
-  const app = await electron.launch({
-    executablePath: getExecutablePath(),
-    env: {
-      ...process.env,
-      PG_COMPASS_STORE_DIR: runtime.storeDir,
-      PG_COMPASS_TEST_SAVE_DIALOG_DIR: runtime.exportDir,
-    },
+  const app = await launchApp({
+    PG_COMPASS_STORE_DIR: runtime.storeDir,
+    PG_COMPASS_TEST_SAVE_DIALOG_DIR: runtime.exportDir,
   });
 
   const page = await app.firstWindow();
@@ -69,15 +33,28 @@ test("explores, queries, exports, and updates settings in the real Electron app"
     page.getByRole("button", { name: "Open E2E Database" }),
   ).toBeVisible();
 
+  // Sidebar search only covers connected instances.
   const sidebarSearch = page.getByRole("textbox", { name: "Search sidebar" });
   await sidebarSearch.fill("users");
-  await expect(page.getByRole("button", { name: "Table users" })).toBeVisible();
+  await expect(page.getByText("No connected instances")).toBeVisible();
+  await sidebarSearch.press("Escape");
+
+  await page.getByRole("button", { name: "Open E2E Database" }).hover();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await sidebarSearch.fill("users");
+  await expect(
+    page.getByRole("button", { name: "Table users", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Table orders", exact: true }),
+  ).toHaveCount(0);
   await sidebarSearch.press("Escape");
   await expect(sidebarSearch).toHaveValue("");
 
   await page.getByRole("button", { name: "Open E2E Database" }).hover();
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Favourite" }).click();
+  await expect(page.getByText("Favourites", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Open E2E Database" }).click();
   await expect(page.getByText("Schema name")).toBeVisible();
@@ -90,20 +67,21 @@ test("explores, queries, exports, and updates settings in the real Electron app"
   await page
     .getByRole("button", { name: /refresh data and table metadata/i })
     .click();
-  await expect(page.getByText(/Updated \d/)).toBeVisible();
+  // The Rows panel stamps its own load; the top bar stamp appears on refresh.
+  await expect(page.getByText(/Updated \d/)).toHaveCount(2);
 
   await page.getByRole("button", { name: "Card view" }).click();
-  await expect(page.getByText("Document 1")).toBeVisible();
+  await expect(page.getByText("Document 1", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Structure" }).click();
   await page.getByRole("tab", { name: "Data" }).click();
-  await expect(page.getByText("Document 1")).toBeVisible();
+  await expect(page.getByText("Document 1", { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: "Types" }).click();
   await expect(page.getByRole("row", { name: /user_role/i })).toBeVisible();
   await page.getByRole("button", { name: /user_role/i }).click();
-  await expect(page.getByText("admin")).toBeVisible();
-  await expect(page.getByText("editor")).toBeVisible();
-  await expect(page.getByText("viewer")).toBeVisible();
+  await expect(page.getByText("admin", { exact: true })).toBeVisible();
+  await expect(page.getByText("editor", { exact: true })).toBeVisible();
+  await expect(page.getByText("viewer", { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: "Triggers" }).click();
   await expect(
@@ -112,11 +90,14 @@ test("explores, queries, exports, and updates settings in the real Electron app"
   await page
     .getByRole("switch", { name: "Disable trigger users_updated_trigger" })
     .click();
-  await expect(page.getByRole("row", { name: /Disabled/i })).toBeVisible();
-  await page
-    .getByRole("switch", { name: "Enable trigger users_updated_trigger" })
-    .click();
-  await expect(page.getByRole("row", { name: /Enabled/i })).toBeVisible();
+  const enableTriggerSwitch = page.getByRole("switch", {
+    name: "Enable trigger users_updated_trigger",
+  });
+  await expect(enableTriggerSwitch).not.toBeChecked();
+  await enableTriggerSwitch.click();
+  await expect(
+    page.getByRole("switch", { name: "Disable trigger users_updated_trigger" }),
+  ).toBeChecked();
 
   await page.getByRole("tab", { name: "Query" }).click();
   await page.getByRole("button", { name: "Run query" }).click();

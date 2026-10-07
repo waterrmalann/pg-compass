@@ -65,6 +65,20 @@ Recommendation:
 - use `pnpm test:integration` during local TDD loops
 - use `pnpm test:integration:postgres` for authoritative verification and CI
 
+## Electron E2E
+
+`pnpm --filter @pg-compass/desktop test:e2e` needs `PG_COMPASS_TEST_ADMIN_DATABASE_URL` (or `PG_COMPASS_TEST_DATABASE_URL`) in the environment, for example loaded from the repo `.env`. Without it, the database-backed specs skip.
+
+Global setup seeds a database, writes a temporary store, and runs `electron-forge package`, which builds both `out/` and `.vite/build/`.
+
+The packaged binary ships with the `EnableNodeCliInspectArguments` fuse disabled. Playwright's `_electron.launch()` needs the inspector, so it cannot attach to that binary. Specs therefore launch differently:
+- `smoke.e2e.spec.ts` spawns the packaged, fused binary directly and only checks that it starts.
+- Every other spec uses `launchApp()` from `tests/e2e/electron-app.ts`. It runs the same production bundle (`.vite/build/main.js`) with the unfused Electron from `node_modules`.
+
+Do not re-enable the inspect fuse to make tests attach. See [E2E_LAUNCH_ADR.md](./decisions/E2E_LAUNCH_ADR.md).
+
+Specs share one store directory, so Playwright runs them with a single worker.
+
 ## Coverage Policy
 
 Coverage is risk-based, not a single global percentage:

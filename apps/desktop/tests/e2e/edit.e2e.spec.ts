@@ -3,54 +3,19 @@ import path from "node:path";
 import {
   test,
   expect,
-  _electron as electron,
   type ElectronApplication,
   type Page,
-  type TestInfo,
 } from "@playwright/test";
+import { getRuntimeState, launchApp } from "./electron-app";
 import { DEFAULT_APP_SETTINGS } from "@/shared/types/settings";
-
-function getRuntimeState(testInfo: TestInfo) {
-  const runtimeStatePath = String(testInfo.config.metadata.runtimeStatePath);
-  return JSON.parse(fs.readFileSync(runtimeStatePath, "utf8")) as {
-    storeDir: string;
-    exportDir: string;
-  };
-}
-
-function getExecutablePath(): string {
-  const appRoot = process.cwd();
-
-  if (process.platform === "win32") {
-    return path.join(appRoot, "out", "PG Compass-win32-x64", "pg-compass.exe");
-  }
-
-  if (process.platform === "darwin") {
-    return path.join(
-      appRoot,
-      "out",
-      "PG Compass-darwin-arm64",
-      "PG Compass.app",
-      "Contents",
-      "MacOS",
-      "PG Compass",
-    );
-  }
-
-  return path.join(appRoot, "out", "PG Compass-linux-x64", "pg-compass");
-}
 
 async function launch(runtime: {
   storeDir: string;
   exportDir: string;
 }): Promise<{ app: ElectronApplication; page: Page }> {
-  const app = await electron.launch({
-    executablePath: getExecutablePath(),
-    env: {
-      ...process.env,
-      PG_COMPASS_STORE_DIR: runtime.storeDir,
-      PG_COMPASS_TEST_SAVE_DIALOG_DIR: runtime.exportDir,
-    },
+  const app = await launchApp({
+    PG_COMPASS_STORE_DIR: runtime.storeDir,
+    PG_COMPASS_TEST_SAVE_DIALOG_DIR: runtime.exportDir,
   });
   const page = await app.firstWindow();
   return { app, page };
@@ -238,6 +203,92 @@ test("delete confirmation dialog contains wide table previews", async ({
     );
     expect(previewMetrics.right).toBeLessThanOrEqual(
       previewMetrics.viewportWidth - 15,
+    );
+
+    // The preview box is the only scroll container, so the header sticks.
+    const headerOffsets = await page
+      .getByTestId("delete-preview-table-scroll")
+      .evaluate((element) => {
+        const header = element.querySelector("thead");
+        if (!header) throw new Error("Preview table has no header.");
+        const offsetBefore =
+          header.getBoundingClientRect().top -
+          element.getBoundingClientRect().top;
+        element.scrollTop = element.scrollHeight;
+        const offsetAfter =
+          header.getBoundingClientRect().top -
+          element.getBoundingClientRect().top;
+        return { offsetBefore, offsetAfter, scrollTop: element.scrollTop };
+      });
+
+    expect(headerOffsets.scrollTop).toBeGreaterThan(0);
+    expect(headerOffsets.offsetAfter).toBeCloseTo(headerOffsets.offsetBefore, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("Data tab grid scrolls in one box and keeps its header and gutter stuck", async ({
+  browserName,
+}, testInfo) => {
+  test.skip(
+    browserName !== "chromium",
+    "Electron tests only run with Chromium",
+  );
+  const runtime = getRuntimeState(testInfo);
+  writeSettings(runtime.storeDir, true);
+
+  const { app, page } = await launch(runtime);
+  try {
+    await page.setViewportSize({ width: 900, height: 700 });
+    await openUsersDataTab(page);
+
+    const scroll = page.locator('[data-testid="table-data-scroll"]:visible');
+    await expect(scroll.getByRole("row").nth(1)).toBeVisible();
+
+    // The grid's box is the only scroll container, so it takes both axes and
+    // the sticky header and gutter stick to it.
+    const metrics = await scroll.evaluate((element) => {
+      const header = element.querySelector("thead");
+      const gutter = element.querySelector("thead th");
+      const firstColumn = element.querySelector("thead th:nth-child(2)");
+      const rowGutter = element.querySelector("tbody tr:last-child td");
+      if (!header || !gutter || !firstColumn || !rowGutter) {
+        throw new Error("Data grid has no header or rows.");
+      }
+      const box = element.getBoundingClientRect();
+      const before = {
+        headerTop: header.getBoundingClientRect().top - box.top,
+        gutterLeft: gutter.getBoundingClientRect().left - box.left,
+        rowGutterLeft: rowGutter.getBoundingClientRect().left - box.left,
+        firstColumnLeft: firstColumn.getBoundingClientRect().left - box.left,
+      };
+      element.scrollTop = element.scrollHeight;
+      element.scrollLeft = element.scrollWidth;
+      const after = {
+        headerTop: header.getBoundingClientRect().top - box.top,
+        gutterLeft: gutter.getBoundingClientRect().left - box.left,
+        rowGutterLeft: rowGutter.getBoundingClientRect().left - box.left,
+        firstColumnLeft: firstColumn.getBoundingClientRect().left - box.left,
+      };
+      return {
+        before,
+        after,
+        scrollTop: element.scrollTop,
+        scrollLeft: element.scrollLeft,
+      };
+    });
+
+    expect(metrics.scrollTop).toBeGreaterThan(0);
+    expect(metrics.scrollLeft).toBeGreaterThan(0);
+    expect(metrics.after.headerTop).toBeCloseTo(metrics.before.headerTop, 0);
+    expect(metrics.after.gutterLeft).toBeCloseTo(metrics.before.gutterLeft, 0);
+    expect(metrics.after.rowGutterLeft).toBeCloseTo(
+      metrics.before.rowGutterLeft,
+      0,
+    );
+    expect(metrics.after.firstColumnLeft).toBeLessThan(
+      metrics.before.firstColumnLeft,
     );
   } finally {
     await app.close();

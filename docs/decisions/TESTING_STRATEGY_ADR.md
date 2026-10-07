@@ -35,5 +35,5 @@ The repository also needs a repeatable TDD rule for future desktop features.
 ## Consequences
 
 - Local setup now includes a no-install fast integration path plus optional PostgreSQL environment variables for authoritative runs.
-- Playwright runs package the desktop app before launching tests, which is slower but closer to shipped behavior.
+- Playwright runs package the desktop app before launching tests, which is slower but closer to shipped behavior. How the packaged build is launched is recorded in [E2E_LAUNCH_ADR.md](./E2E_LAUNCH_ADR.md).
 - Future feature work should begin with a failing low-level test and add higher-level coverage when the user flow changes.
