@@ -5,6 +5,7 @@ import type { TableDataFailure } from "../shared/types/table-data";
 import {
   cancelQuery,
   executeQuery,
+  getJsonKeys,
   getQueryColumns,
   getRows,
 } from "./table-data-rows";
@@ -31,6 +32,7 @@ import {
   validateDeleteRowsParams,
   validateExecuteQueryParams,
   validateExportDataParams,
+  validateGetJsonKeysParams,
   validateGetRowsParams,
   validateImportDataParams,
   validateImportOpenDialogOptions,
@@ -119,6 +121,19 @@ export function registerTableDataHandlers(): void {
       try {
         const params = validateTableMetaParams(rawParams);
         const data = await getQueryColumns(params);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  registerIpcHandler(
+    TableDataChannels.GET_JSON_KEYS,
+    async (_event, rawParams: unknown) => {
+      try {
+        const params = validateGetJsonKeysParams(rawParams);
+        const data = await getJsonKeys(params);
         return { success: true, data };
       } catch (err) {
         return { success: false, error: (err as Error).message };

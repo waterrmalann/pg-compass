@@ -34,6 +34,7 @@ import type {
   DeleteRowsParams,
   ExecuteQueryParams,
   ExportDataParams,
+  GetJsonKeysParams,
   GetRowsParams,
   ImportDataParams,
   InsertRowParams,
@@ -450,6 +451,44 @@ export function validateSettingsPatch(value: unknown): AppSettingsPatch {
 export function validateTableMetaParams(value: unknown): TableMetaParams {
   validateTableIdentity(value, "table");
   return value as TableMetaParams;
+}
+
+/** Mirrors the DSL's path limits: 16 segments, int4 indexes. */
+const MAX_JSON_PATH_SEGMENTS = 16;
+const MAX_JSON_PATH_INDEX = 2_147_483_647;
+
+export function validateGetJsonKeysParams(value: unknown): GetJsonKeysParams {
+  const params = validateTableIdentity(value, "getJsonKeys", [
+    "column",
+    "path",
+  ]);
+  asString(params.column, "getJsonKeys.column");
+  if (
+    !Array.isArray(params.path) ||
+    params.path.length > MAX_JSON_PATH_SEGMENTS
+  ) {
+    throw new TypeError(
+      `getJsonKeys.path must be an array of at most ${MAX_JSON_PATH_SEGMENTS} segments.`,
+    );
+  }
+  params.path.forEach((item: unknown, index: number) => {
+    const name = `getJsonKeys.path[${index}]`;
+    const segment = asRecord(item, name);
+    assertAllowedKeys(segment, name, ["kind", "value"]);
+    if (segment.kind === "key") {
+      asString(segment.value, `${name}.value`, {
+        maxLength: MAX_QUERY_DSL_LENGTH,
+        allowEmpty: true,
+      });
+      return;
+    }
+    if (segment.kind === "index") {
+      asInteger(segment.value, `${name}.value`, 0, MAX_JSON_PATH_INDEX);
+      return;
+    }
+    throw new TypeError(`${name}.kind must be "key" or "index".`);
+  });
+  return value as GetJsonKeysParams;
 }
 
 /**

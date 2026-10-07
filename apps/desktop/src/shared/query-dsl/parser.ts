@@ -6,6 +6,7 @@ import type {
   DataQueryResult,
   FilterExpression,
   IdentifierNode,
+  PathSegment,
   Projection,
   QueryDslError,
   QueryDslField,
@@ -18,6 +19,15 @@ import type {
 export const MAX_FILTER_NODES = 200;
 export const MAX_FILTER_DEPTH = 32;
 export const MAX_IN_VALUES = 1_000;
+export const MAX_PATH_SEGMENTS = 16;
+/** Largest array index in a path: PostgreSQL's `->` takes an int4. */
+export const MAX_PATH_INDEX = 2_147_483_647;
+
+/**
+ * Words that act as operators only right after a column or path, so
+ * columns named `contains` or `has` still work unquoted.
+ */
+export const JSON_OPERATOR_WORDS = new Set(["CONTAINS", "HAS"]);
 
 /** Unquoted words with grammar meaning. Quote them to use them as columns. */
 export const DSL_KEYWORDS = new Set([
@@ -92,6 +102,7 @@ class DslSyntaxError extends Error {
 
 function describeToken(token: Token): string {
   if (token.kind === "exclude") return '"-"';
+  if (token.kind === "dot") return '"."';
   if (token.kind === "string") return "a string";
   if (token.kind === "number") return `"${token.value}"`;
   if (token.kind === "quoted-identifier") return `"${token.value}"`;
@@ -210,6 +221,91 @@ function rejectFunctionCall(stream: TokenStream, column: IdentifierNode): void {
   }
 }
 
+/** A column, optionally followed by a JSON path: `payload.items.0.sku`. */
+interface Reference {
+  column: IdentifierNode;
+  path: PathSegment[];
+  range: SourceRange;
+}
+
+function parsePathSegment(stream: TokenStream): PathSegment {
+  const token = stream.next();
+  if (token?.kind === "word") {
+    return { kind: "key", value: token.raw, range: token.range };
+  }
+  if (token?.kind === "quoted-identifier") {
+    return { kind: "key", value: token.value, range: token.range };
+  }
+  if (token?.kind === "number") {
+    const index = Number(token.value);
+    if (index > MAX_PATH_INDEX) {
+      throw new DslSyntaxError(
+        "limit-exceeded",
+        `Array indexes can be at most ${MAX_PATH_INDEX.toLocaleString("en-US")}. Quote the segment to use it as a key: "${token.value}".`,
+        token.range,
+      );
+    }
+    return { kind: "index", value: index, range: token.range };
+  }
+  // The tokenizer only emits a dot before one of the tokens above.
+  throw new DslSyntaxError(
+    "unexpected-token",
+    'Expected a key or an index after ".".',
+    token?.range ?? stream.endRange(),
+  );
+}
+
+function parseReference(stream: TokenStream, expected: string): Reference {
+  const column = parseIdentifier(stream, expected);
+  const path: PathSegment[] = [];
+  while (stream.peek()?.kind === "dot") {
+    stream.next();
+    const segment = parsePathSegment(stream);
+    if (path.length >= MAX_PATH_SEGMENTS) {
+      throw new DslSyntaxError(
+        "limit-exceeded",
+        `Paths are limited to ${MAX_PATH_SEGMENTS} segments.`,
+        segment.range,
+      );
+    }
+    path.push(segment);
+  }
+  rejectFunctionCall(stream, column);
+  const end = path.at(-1)?.range.to ?? column.range.to;
+  return { column, path, range: { from: column.range.from, to: end } };
+}
+
+/** Spells a JSON key the way a path needs it typed. Keys never fold. */
+export function formatPathKey(key: string): string {
+  const isSimple = /^[A-Za-z_][A-Za-z0-9_$]*$/.test(key);
+  if (isSimple) return key;
+  return `"${key.replaceAll('"', '""')}"`;
+}
+
+/** Path segments as typed after the column: `.items.0."content-type"`. */
+export function formatPath(
+  path: readonly (
+    | { kind: "key"; value: string }
+    | { kind: "index"; value: number }
+  )[],
+): string {
+  return path
+    .map((segment) =>
+      segment.kind === "index"
+        ? `.${segment.value}`
+        : `.${formatPathKey(segment.value)}`,
+    )
+    .join("");
+}
+
+/**
+ * The reference as it would be retyped (folded column plus exact path).
+ * Used for messages, duplicate checks and default output names.
+ */
+function referenceText(reference: Reference): string {
+  return `${reference.column.value}${formatPath(reference.path)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Filter
 // ---------------------------------------------------------------------------
@@ -308,7 +404,7 @@ function parseScalar(stream: TokenStream, after: string): ScalarNode {
 
 function parseInList(
   stream: TokenStream,
-  column: IdentifierNode,
+  reference: Reference,
   negated: boolean,
 ): FilterExpression {
   const keyword = negated ? "NOT IN" : "IN";
@@ -366,22 +462,24 @@ function parseInList(
   const close = stream.previous()!;
   return {
     kind: "membership",
-    column,
+    column: reference.column,
+    path: reference.path,
     negated,
     values,
-    range: { from: column.range.from, to: close.range.to },
+    range: { from: reference.range.from, to: close.range.to },
   };
 }
 
 function parsePredicate(stream: TokenStream): FilterExpression {
-  const column = parseIdentifier(stream, "a column name");
-  rejectFunctionCall(stream, column);
+  const reference = parseReference(stream, "a column name");
+  const { column, path } = reference;
+  const from = reference.range.from;
 
   const token = stream.peek();
   if (!token) {
     throw new DslSyntaxError(
       "unexpected-token",
-      `Expected an operator after "${column.value}", such as =, IN, or IS NULL.`,
+      `Expected an operator after "${referenceText(reference)}", such as =, IN, or IS NULL.`,
       stream.endRange(),
     );
   }
@@ -392,33 +490,39 @@ function parsePredicate(stream: TokenStream): FilterExpression {
     return {
       kind: "comparison",
       column,
+      path,
       operator: token.value,
       value,
-      range: { from: column.range.from, to: value.range.to },
+      range: { from, to: value.range.to },
     };
   }
 
   if (token.kind === "word") {
-    if (token.upper === "LIKE" || token.upper === "ILIKE") {
+    const isWordOperator =
+      token.upper === "LIKE" ||
+      token.upper === "ILIKE" ||
+      JSON_OPERATOR_WORDS.has(token.upper);
+    if (isWordOperator) {
       stream.next();
       const value = parseScalar(stream, token.upper);
       return {
         kind: "comparison",
         column,
+        path,
         operator: token.upper as ComparisonOperator,
         value,
-        range: { from: column.range.from, to: value.range.to },
+        range: { from, to: value.range.to },
       };
     }
     if (token.upper === "IN") {
       stream.next();
-      return parseInList(stream, column, false);
+      return parseInList(stream, reference, false);
     }
     if (token.upper === "NOT") {
       stream.next();
       if (stream.isWord("IN")) {
         stream.next();
-        return parseInList(stream, column, true);
+        return parseInList(stream, reference, true);
       }
       throw new DslSyntaxError(
         "unsupported-syntax",
@@ -448,8 +552,9 @@ function parsePredicate(stream: TokenStream): FilterExpression {
       return {
         kind: "null-check",
         column,
+        path,
         negated,
-        range: { from: column.range.from, to: nullToken.range.to },
+        range: { from, to: nullToken.range.to },
       };
     }
     if (token.upper === "BETWEEN" || token.upper === "SIMILAR") {
@@ -463,7 +568,7 @@ function parsePredicate(stream: TokenStream): FilterExpression {
 
   throw unexpected(
     token,
-    `Expected an operator after "${column.value}", such as =, IN, or IS NULL.`,
+    `Expected an operator after "${referenceText(reference)}", such as =, IN, or IS NULL.`,
   );
 }
 
@@ -604,8 +709,15 @@ function parseProjectionTokens(
     const excludeToken = stream.peek();
     const exclude = excludeToken?.kind === "exclude";
     if (exclude) stream.next();
-    const column = parseIdentifier(stream, "a column name");
-    rejectFunctionCall(stream, column);
+    const reference = parseReference(stream, "a column name");
+    const { column, path } = reference;
+    if (exclude && path.length > 0) {
+      throw new DslSyntaxError(
+        "unsupported-syntax",
+        "Exclusions take whole columns. List the paths to keep instead.",
+        { from: excludeToken!.range.from, to: reference.range.to },
+      );
+    }
 
     let alias: IdentifierNode | undefined;
     if (stream.isWord("AS")) {
@@ -626,18 +738,18 @@ function parseProjectionTokens(
       if (looksLikeAlias) {
         throw new DslSyntaxError(
           "unexpected-token",
-          `Use AS to alias a column: ${column.value} AS ${token.kind === "word" ? token.value : `"${token.value}"`}.`,
+          `Use AS to alias a column: ${referenceText(reference)} AS ${token.kind === "word" ? token.value : `"${token.value}"`}.`,
           token.range,
         );
       }
     }
 
-    const columnKey = identifierKey(column);
+    const columnKey = referenceText(reference);
     if (seenColumns.has(columnKey)) {
       throw new DslSyntaxError(
         "duplicate-column",
-        `"${column.value}" is already ${exclude ? "excluded" : "projected"}.`,
-        column.range,
+        `"${columnKey}" is already ${exclude ? "excluded" : "projected"}.`,
+        reference.range,
       );
     }
     seenColumns.add(columnKey);
@@ -649,19 +761,20 @@ function parseProjectionTokens(
         "List only columns to include, or only columns to exclude (-column), not both.",
         {
           from: exclude ? excludeToken!.range.from : column.range.from,
-          to: column.range.to,
+          to: reference.range.to,
         },
       );
     }
 
     if (!exclude) {
-      const output = alias ?? column;
-      const outputKey = identifierKey(output);
+      // An unaliased path is named as typed: `payload.status`.
+      const outputKey = alias ? identifierKey(alias) : columnKey;
+      const outputRange = alias ? alias.range : reference.range;
       if (seenOutputs.has(outputKey)) {
         throw new DslSyntaxError(
           "duplicate-output",
-          `Two columns would both be named "${output.value}". Give one a different alias.`,
-          output.range,
+          `Two columns would both be named "${outputKey}". Give one a different alias.`,
+          outputRange,
         );
       }
       seenOutputs.add(outputKey);
@@ -670,9 +783,10 @@ function parseProjectionTokens(
     const from = exclude ? excludeToken!.range.from : column.range.from;
     items.push({
       column,
+      path,
       ...(alias ? { alias } : {}),
       exclude,
-      range: { from, to: (alias ?? column).range.to },
+      range: { from, to: alias ? alias.range.to : reference.range.to },
     });
 
     const separator = stream.peek();
@@ -708,11 +822,11 @@ function parseSortTokens(tokens: Token[], inputLength: number): Sort {
   const seenColumns = new Set<string>();
 
   while (true) {
-    const column = parseIdentifier(stream, "a column name");
-    rejectFunctionCall(stream, column);
+    const reference = parseReference(stream, "a column name");
+    const { column, path } = reference;
 
     let direction: "ASC" | "DESC" = "ASC";
-    let end = column.range.to;
+    let end = reference.range.to;
     const token = stream.peek();
     if (
       token?.kind === "word" &&
@@ -740,17 +854,18 @@ function parseSortTokens(tokens: Token[], inputLength: number): Sort {
       );
     }
 
-    const columnKey = identifierKey(column);
+    const columnKey = referenceText(reference);
     if (seenColumns.has(columnKey)) {
       throw new DslSyntaxError(
         "duplicate-column",
-        `"${column.value}" is already sorted.`,
-        column.range,
+        `"${columnKey}" is already sorted.`,
+        reference.range,
       );
     }
     seenColumns.add(columnKey);
     items.push({
       column,
+      path,
       direction,
       range: { from: column.range.from, to: end },
     });

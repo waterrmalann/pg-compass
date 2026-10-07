@@ -1,8 +1,10 @@
 import type { PoolClient } from "pg";
+import { isJsonFamily } from "../shared/query-dsl/bind";
 import type { QueryColumnMetadata } from "../shared/query-dsl/types";
 import type {
   ColumnInfo,
   ExecuteQueryParams,
+  GetJsonKeysParams,
   GetRowsParams,
   TableMetaParams,
   TableRowsResult,
@@ -15,7 +17,7 @@ import {
 } from "./pg-utils";
 import { buildEnumTypeMap, buildTypeMap } from "./table-data-utils";
 import { resolveForeignKeys } from "./table-data-fk";
-import { pageWindow } from "./query-dsl/compile";
+import { buildJsonKeysQuery, pageWindow } from "./query-dsl/compile";
 import { bindAndCompile, parseDataQueryOrThrow } from "./query-dsl/prepare";
 import { loadRelationMetadata } from "./query-dsl/relation-metadata";
 
@@ -112,16 +114,18 @@ export async function getRows(params: GetRowsParams): Promise<TableRowsResult> {
       // With Skip/Limit the count stops at the window's end, so a small
       // Limit never counts a huge table.
       const hasWindow = compiled.skip !== null || compiled.limit !== null;
-      const windowOffset = `$${compiled.values.length + 1}`;
-      const windowLimit = `$${compiled.values.length + 2}`;
+      // Counts use only the filter: path keys from Project and Sort would
+      // be parameters this statement never references.
+      const windowOffset = `$${compiled.filterValues.length + 1}`;
+      const windowLimit = `$${compiled.filterValues.length + 2}`;
       const countResult = hasWindow
         ? await client.query<{ count: string }>(
             `SELECT count(*) AS count FROM (SELECT 1 FROM ${qualifiedTable} ${whereFragment} OFFSET ${windowOffset} LIMIT ${windowLimit}) AS __window`,
-            [...compiled.values, compiled.skip ?? 0, compiled.limit],
+            [...compiled.filterValues, compiled.skip ?? 0, compiled.limit],
           )
         : await client.query<{ count: string }>(
             `SELECT count(*) AS count FROM ${qualifiedTable} ${whereFragment}`,
-            compiled.values,
+            compiled.filterValues,
           );
       const resultRows = parseCountRow(countResult.rows[0]?.count);
       // Skip/Limit define the result; pages are windows inside it.
@@ -222,6 +226,48 @@ export async function getQueryColumns(
       params.table,
     );
     return metadata.columns;
+  });
+}
+
+/**
+ * Object keys at a JSON column or path, sampled for key completion. The
+ * column is checked against the catalog, every key is a parameter, and a
+ * short statement timeout keeps a large table from holding the connection.
+ */
+export async function getJsonKeys(
+  params: GetJsonKeysParams,
+): Promise<string[]> {
+  return withPoolClient(params.connectionId, async (client) => {
+    await client.query("BEGIN READ ONLY");
+    try {
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const metadata = await loadRelationMetadata(
+        client,
+        params.schema,
+        params.table,
+      );
+      const column = metadata.columns.find(
+        (candidate) => candidate.name === params.column,
+      );
+      if (!column || !isJsonFamily(column.family)) {
+        throw new Error(
+          `Column "${params.column}" is not a json or jsonb column.`,
+        );
+      }
+      const relationSql = `${quoteIdent(params.schema)}.${quoteIdent(params.table)}`;
+      const query = buildJsonKeysQuery(relationSql, {
+        column: column.name,
+        path: params.path,
+        convertToJsonb: column.family === "json",
+      });
+      const result = await client.query<{ key: string }>(
+        query.text,
+        query.values,
+      );
+      return result.rows.map((row) => row.key);
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+    }
   });
 }
 

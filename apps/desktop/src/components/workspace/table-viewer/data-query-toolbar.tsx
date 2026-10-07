@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { EMPTY_DATA_QUERY } from "@/shared/query-dsl/parser";
 import type {
+  BoundPathSegment,
   DataQueryInput,
   QueryColumnMetadata,
   QueryDslError,
@@ -19,6 +20,11 @@ import type {
 import { QueryDslEditor } from "./query-dsl-editor";
 
 type ErrorsByField = Record<QueryDslField, QueryDslError[]>;
+
+type LoadJsonKeys = (
+  column: string,
+  path: BoundPathSegment[],
+) => Promise<string[]>;
 
 const NO_ERRORS: QueryDslError[] = [];
 const OPTION_FIELDS = ["projection", "sort", "skip", "limit"] as const;
@@ -64,6 +70,7 @@ interface DslFieldProps {
   placeholder: string;
   ariaLabel: string;
   columns: QueryColumnMetadata[];
+  loadJsonKeys?: LoadJsonKeys;
   errors: QueryDslError[];
   onChange: (field: QueryDslField, value: string) => void;
   onApply: () => void;
@@ -76,6 +83,7 @@ function DslField({
   placeholder,
   ariaLabel,
   columns,
+  loadJsonKeys,
   errors,
   onChange,
   onApply,
@@ -95,6 +103,7 @@ function DslField({
           placeholder={placeholder}
           ariaLabel={ariaLabel}
           columns={columns}
+          loadJsonKeys={loadJsonKeys}
           errors={errors}
           errorId={errorId}
           className="h-8 pl-6"
@@ -151,6 +160,8 @@ interface DataQueryToolbarProps {
   activeQuery: DataQueryInput;
   errors: QueryDslError[];
   columns: QueryColumnMetadata[];
+  /** Object keys at a JSON column or path, for completion after a dot. */
+  loadJsonKeys?: LoadJsonKeys;
   /** Validate and run the draft. The parent decides whether it becomes active. */
   onApply: (draft: DataQueryInput) => void;
   /** A field was edited; errors pointing into it are now stale. */
@@ -169,6 +180,7 @@ export function DataQueryToolbar({
   activeQuery,
   errors,
   columns,
+  loadJsonKeys,
   onApply,
   onFieldEdited,
   trailing,
@@ -237,6 +249,7 @@ export function DataQueryToolbar({
           placeholder="Filter — e.g. status = 'active' AND score > 10"
           ariaLabel="Filter"
           columns={columns}
+          loadJsonKeys={loadJsonKeys}
           errors={errorsByField.filter}
           onChange={handleChange}
           onApply={handleApply}
@@ -297,6 +310,7 @@ export function DataQueryToolbar({
             placeholder="Project — e.g. id, name AS label or -notes"
             ariaLabel="Project"
             columns={columns}
+            loadJsonKeys={loadJsonKeys}
             errors={errorsByField.projection}
             onChange={handleChange}
             onApply={handleApply}
@@ -308,6 +322,7 @@ export function DataQueryToolbar({
             placeholder="Sort — e.g. created_at DESC, name"
             ariaLabel="Sort"
             columns={columns}
+            loadJsonKeys={loadJsonKeys}
             errors={errorsByField.sort}
             onChange={handleChange}
             onApply={handleApply}
@@ -334,10 +349,11 @@ export function DataQueryToolbar({
         <FieldErrors id={skipErrorId} errors={errorsByField.skip} />
         <FieldErrors id={limitErrorId} errors={errorsByField.limit} />
         <p className="text-xs text-muted-foreground">
-          Project lists columns to keep, or -column to drop one. Sort accepts
-          ASC, DESC, 1 or -1. Skip and Limit narrow the result but never what
-          Delete removes. Projected rows are read-only. Without a primary key,
-          rows with equal sort values can move between pages.
+          Project lists columns or JSON paths (payload.status) to keep, or
+          -column to drop one. Sort accepts ASC, DESC, 1 or -1. Skip and Limit
+          narrow the result but never what Delete removes. Projected rows are
+          read-only. Without a primary key, rows with equal sort values can move
+          between pages.
         </p>
       </div>
     </form>

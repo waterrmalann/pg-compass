@@ -13,6 +13,37 @@ const IDENTIFIER_PART = /[A-Za-z0-9_$]/;
 const DIGIT = /[0-9]/;
 const WHITESPACE = /[ \t]/;
 const NUMBER_PATTERN = /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/;
+const INDEX_PATTERN = /^\d+/;
+
+/** PostgreSQL JSON operators, each mapped to the DSL form to use instead. */
+const JSON_OPERATOR_HINTS: { operator: string; message: string }[] = [
+  {
+    operator: "->>",
+    message: "Use a dot path instead of ->>, for example payload.status.",
+  },
+  {
+    operator: "->",
+    message: "Use a dot path instead of ->, for example payload.status.",
+  },
+  {
+    operator: "#>",
+    message:
+      "Use a dot path instead of #> or #>>, for example payload.items.0.",
+  },
+  { operator: "#-", message: "Editing JSON values is not supported." },
+  { operator: "@>", message: "Use CONTAINS instead of @>." },
+  { operator: "<@", message: "<@ is not supported. Use CONTAINS instead." },
+  { operator: "@", message: "JSONPath and @ operators are not supported." },
+  {
+    operator: "?|",
+    message: "Use HAS with OR instead of ?|: tags HAS 'a' OR tags HAS 'b'.",
+  },
+  {
+    operator: "?&",
+    message: "Use HAS with AND instead of ?&: tags HAS 'a' AND tags HAS 'b'.",
+  },
+  { operator: "?", message: "Use HAS 'key' instead of ?." },
+];
 
 function error(
   field: QueryDslField,
@@ -45,6 +76,9 @@ export function tokenize(
 
   const tokens: Token[] = [];
   let position = 0;
+  // Where the last column name or path segment ended; a `.` exactly here
+  // continues a path.
+  let pathEnd = -1;
 
   while (position < input.length) {
     const char = input[position]!;
@@ -111,6 +145,76 @@ export function tokenize(
         field,
         "unsupported-syntax",
         "Backslash escapes are not supported. Double a quote to escape it: ''.",
+        start,
+        start + 1,
+      );
+    }
+
+    const hint = JSON_OPERATOR_HINTS.find(({ operator }) =>
+      input.startsWith(operator, position),
+    );
+    if (hint) {
+      return error(
+        field,
+        "unsupported-syntax",
+        hint.message,
+        start,
+        start + hint.operator.length,
+      );
+    }
+
+    if (char === "." && start === pathEnd) {
+      tokens.push({ kind: "dot", range: { from: start, to: start + 1 } });
+      position += 1;
+      const segmentStart = input[position] ?? "";
+      if (IDENTIFIER_START.test(segmentStart) || segmentStart === '"') {
+        continue;
+      }
+      if (!DIGIT.test(segmentStart)) {
+        return error(
+          field,
+          "unexpected-token",
+          'Expected a key or an index right after ".".',
+          start,
+          start + 1,
+        );
+      }
+      const digits = INDEX_PATTERN.exec(input.slice(position))![0];
+      position += digits.length;
+      if (IDENTIFIER_PART.test(input[position] ?? "")) {
+        while (
+          position < input.length &&
+          IDENTIFIER_PART.test(input[position]!)
+        ) {
+          position += 1;
+        }
+        return error(
+          field,
+          "unexpected-token",
+          `Quote a key that starts with a digit: "${input.slice(start + 1, position)}".`,
+          start + 1,
+          position,
+        );
+      }
+      tokens.push({
+        kind: "number",
+        value: digits,
+        range: { from: start + 1, to: position },
+      });
+      pathEnd = position;
+      continue;
+    }
+
+    const previous = tokens.at(-1);
+    const spacedPath =
+      char === "." &&
+      !DIGIT.test(next) &&
+      (previous?.kind === "word" || previous?.kind === "quoted-identifier");
+    if (spacedPath) {
+      return error(
+        field,
+        "unsupported-syntax",
+        `Paths can't contain spaces. Write them as payload.key, with no spaces around ".".`,
         start,
         start + 1,
       );
@@ -196,6 +300,7 @@ export function tokenize(
         value,
         range: { from: start, to: position },
       });
+      pathEnd = position;
       continue;
     }
 
@@ -262,8 +367,10 @@ export function tokenize(
         kind: "word",
         value: raw.toLowerCase(),
         upper: raw.toUpperCase(),
+        raw,
         range: { from: start, to: position },
       });
+      pathEnd = position;
       continue;
     }
 

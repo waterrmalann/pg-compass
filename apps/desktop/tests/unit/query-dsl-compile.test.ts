@@ -27,7 +27,7 @@ const COLUMNS: QueryColumnMetadata[] = [
   { name: "role", typeName: "user_role", family: "enum" },
   { name: "external_id", typeName: "uuid", family: "uuid" },
   { name: "profile", typeName: "jsonb", family: "jsonb" },
-  { name: "raw", typeName: "json", family: "other" },
+  { name: "raw", typeName: "json", family: "json" },
   { name: "tags", typeName: "_text", family: "other" },
   { name: "email", typeName: "email_text", family: "text" },
   { name: "CreatedAt", typeName: "date", family: "temporal" },
@@ -66,13 +66,30 @@ describe("bindDataQuery", () => {
       column: "status",
     });
     expect(bound({ sort: `"CreatedAt"` }).sort).toEqual([
-      { column: "CreatedAt", direction: "ASC" },
+      {
+        column: "CreatedAt",
+        path: [],
+        convertToJsonb: false,
+        direction: "ASC",
+      },
     ]);
     expect(
       bound({ projection: `"select", "quote""col" AS q` }).projection,
     ).toEqual([
-      { column: "select", outputName: "select", aliased: false },
-      { column: 'quote"col', outputName: "q", aliased: true },
+      {
+        column: "select",
+        path: [],
+        convertToJsonb: false,
+        outputName: "select",
+        aliased: false,
+      },
+      {
+        column: 'quote"col',
+        path: [],
+        convertToJsonb: false,
+        outputName: "q",
+        aliased: true,
+      },
     ]);
   });
 
@@ -145,10 +162,18 @@ describe("bindDataQuery", () => {
     ["uuid", "external_id", "> 'a'", false],
     ["jsonb", "profile", `= '{"a": 1}'`, true],
     ["jsonb", "profile", "> '{}'", false],
-    ["other", "raw", "= '{}'", false],
+    ["jsonb", "profile", `CONTAINS '{"a": 1}'`, true],
+    ["jsonb", "profile", "HAS 'a'", true],
+    ["jsonb", "profile", "LIKE 'a%'", false],
+    ["json", "raw", "= '{}'", true],
+    ["json", "raw", "CONTAINS '[]'", true],
+    ["json", "raw", "< '{}'", false],
+    ["text", "status", "CONTAINS '{}'", false],
+    ["text", "status", "HAS 'a'", false],
     ["other", "tags", "IN ('a')", false],
+    ["other", "tags", "HAS 'a'", false],
     ["other", "tags", "IS NOT NULL", true],
-    ["other", "raw", "IS NULL", true],
+    ["json", "raw", "IS NULL", true],
   ];
 
   it.each(OPERATOR_MATRIX)(
@@ -208,6 +233,8 @@ describe("bindDataQuery exclusions and Skip/Limit", () => {
     );
     expect(bound({ projection: "-id" }).projection[0]).toEqual({
       column: "status",
+      path: [],
+      convertToJsonb: false,
       outputName: "status",
       aliased: false,
     });
@@ -277,6 +304,7 @@ describe("compileDataQuery", () => {
       whereSql: '("status" = $1 AND "score" >= $2)',
       orderBySql: '"app"."t"."created_at" DESC, "app"."t"."id" ASC',
       values: ["active", "10"],
+      filterValues: ["active", "10"],
       hasProjection: true,
       skip: null,
       limit: null,
@@ -289,6 +317,7 @@ describe("compileDataQuery", () => {
       whereSql: "",
       orderBySql: "",
       values: [],
+      filterValues: [],
       hasProjection: false,
       skip: null,
       limit: null,
@@ -494,7 +523,7 @@ describe("classifyTypeFamily", () => {
     ["user_role", "E", "enum"],
     ["uuid", "U", "uuid"],
     ["jsonb", "U", "jsonb"],
-    ["json", "U", "other"],
+    ["json", "U", "json"],
     ["_text", "A", "other"],
     ["int4range", "R", "other"],
     ["point", "G", "other"],

@@ -3,36 +3,8 @@ import path from "node:path";
 import {
   test,
   expect,
-  _electron as electron,
-  type TestInfo,
 } from "@playwright/test";
-
-function getRuntimeState(testInfo: TestInfo) {
-  const runtimeStatePath = String(testInfo.config.metadata.runtimeStatePath);
-  return JSON.parse(fs.readFileSync(runtimeStatePath, "utf8")) as {
-    storeDir: string;
-    exportDir: string;
-  };
-}
-
-function getExecutablePath(): string {
-  const appRoot = process.cwd();
-  if (process.platform === "win32") {
-    return path.join(appRoot, "out", "PG Compass-win32-x64", "pg-compass.exe");
-  }
-  if (process.platform === "darwin") {
-    return path.join(
-      appRoot,
-      "out",
-      "PG Compass-darwin-arm64",
-      "PG Compass.app",
-      "Contents",
-      "MacOS",
-      "PG Compass",
-    );
-  }
-  return path.join(appRoot, "out", "PG Compass-linux-x64", "pg-compass");
-}
+import { getRuntimeState, launchApp } from "./electron-app";
 
 test.skip(
   !process.env.PG_COMPASS_TEST_ADMIN_DATABASE_URL &&
@@ -50,13 +22,9 @@ test("filters, projects, sorts and exports with the Data tab query DSL", async (
 
   const runtime = getRuntimeState(testInfo);
   const exportDir = fs.mkdtempSync(path.join(runtime.exportDir, "dsl-"));
-  const app = await electron.launch({
-    executablePath: getExecutablePath(),
-    env: {
-      ...process.env,
-      PG_COMPASS_STORE_DIR: runtime.storeDir,
-      PG_COMPASS_TEST_SAVE_DIALOG_DIR: exportDir,
-    },
+  const app = await launchApp({
+    PG_COMPASS_STORE_DIR: runtime.storeDir,
+    PG_COMPASS_TEST_SAVE_DIALOG_DIR: exportDir,
   });
   const page = await app.firstWindow();
 
@@ -134,6 +102,54 @@ test("filters, projects, sorts and exports with the Data tab query DSL", async (
   await expect(
     page.locator("tbody tr").filter({ visible: true }).first(),
   ).toContainText("21");
+
+  await app.close();
+});
+
+test("filters and sorts by JSON paths with key completion", async ({
+  browserName,
+}, testInfo) => {
+  test.skip(
+    browserName !== "chromium",
+    "Electron tests only run with Chromium",
+  );
+
+  const runtime = getRuntimeState(testInfo);
+  const app = await launchApp({ PG_COMPASS_STORE_DIR: runtime.storeDir });
+  const page = await app.firstWindow();
+
+  await page.getByRole("button", { name: "Open E2E Database" }).click();
+  await page.getByRole("row", { name: /app/i }).click();
+  await page.getByRole("row", { name: /^users/i }).click();
+  const rowCount = page.locator('[data-slot="panel-count"]');
+  await expect(rowCount).toHaveText("120");
+
+  // Keys are sampled from the column after a dot.
+  const filter = page.getByRole("textbox", { name: "Filter" });
+  await filter.click();
+  await page.keyboard.type("profile.");
+  const completions = page.locator(".cm-tooltip-autocomplete");
+  await expect(completions).toContainText("rank");
+  await expect(completions).toContainText("tags");
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.type("rank > 100 AND profile.tags HAS 'seed'");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
+  await expect(rowCount).toHaveText("20");
+
+  await page.getByRole("button", { name: "Query options" }).click();
+  await page.getByRole("textbox", { name: "Sort" }).click();
+  await page.keyboard.type("profile.rank -1");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Apply" }).click();
+
+  // Sorting by a path keeps rows editable: no read-only notice.
+  await expect(page.getByRole("button", { name: "Read-only" })).toHaveCount(0);
+  await expect(
+    page.locator("tbody tr").filter({ visible: true }).first(),
+  ).toContainText("120");
+  await expect(rowCount).toHaveText("20");
 
   await app.close();
 });

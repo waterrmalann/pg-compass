@@ -53,6 +53,7 @@ import type {
   ExecuteQueryParams,
   ExportDataParams,
   ExportResult,
+  GetJsonKeysParams,
   GetRowsParams,
   ImportDataParams,
   ImportProgress,
@@ -120,6 +121,8 @@ export interface TableDataApi {
   getQueryColumns(
     params: TableMetaParams,
   ): Promise<IpcResult<QueryColumnMetadata[]>>;
+  /** Object keys sampled at a JSON column or path, for key completion. */
+  getJsonKeys(params: GetJsonKeysParams): Promise<IpcResult<string[]>>;
   getIndexes(params: TableMetaParams): Promise<IpcResult<IndexInfo[]>>;
   getConstraints(params: TableMetaParams): Promise<IpcResult<ConstraintInfo[]>>;
   getTriggers(params: TableMetaParams): Promise<IpcResult<TriggerInfo[]>>;

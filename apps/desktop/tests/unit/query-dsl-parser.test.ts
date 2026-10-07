@@ -53,7 +53,13 @@ describe("tokenize", () => {
   it("keeps source ranges and folds unquoted words", () => {
     const tokens = ok(tokenize("filter", `  Name = 'x' `));
     expect(tokens).toEqual([
-      { kind: "word", value: "name", upper: "NAME", range: { from: 2, to: 6 } },
+      {
+        kind: "word",
+        value: "name",
+        upper: "NAME",
+        raw: "Name",
+        range: { from: 2, to: 6 },
+      },
       { kind: "operator", value: "=", range: { from: 7, to: 8 } },
       { kind: "string", value: "x", range: { from: 9, to: 12 } },
     ]);
@@ -106,7 +112,7 @@ describe("tokenize", () => {
     ["id = 1abc", "unexpected-token", 5],
     ["id = 1.2.3", "unexpected-token", 5],
     ["id = 1 + 2", "unsupported-syntax", 7],
-    ["id = @", "unexpected-character", 5],
+    ["id = ~", "unexpected-character", 5],
   ])("rejects %j", (input, code, from) => {
     const error = firstError(tokenize("filter", input));
     expect(error).toMatchObject({ code, field: "filter", from });

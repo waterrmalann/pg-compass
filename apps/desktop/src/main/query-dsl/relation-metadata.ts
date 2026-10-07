@@ -65,6 +65,7 @@ export function classifyTypeFamily(
   if (typeCategory === "E") return "enum";
   if (TEXT_TYPES.has(baseTypeName)) return "text";
   if (baseTypeName === "uuid") return "uuid";
+  if (baseTypeName === "json") return "json";
   if (baseTypeName === "jsonb") return "jsonb";
   return "other";
 }

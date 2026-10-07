@@ -38,6 +38,7 @@ describe("preload API contract", () => {
         onImportProgress: (callback: () => void) => () => void;
         getRows: (params: unknown) => Promise<unknown>;
         getQueryColumns: (params: unknown) => Promise<unknown>;
+        getJsonKeys: (params: unknown) => Promise<unknown>;
         previewQuerySql: (params: unknown) => Promise<unknown>;
         getTriggers: (params: unknown) => Promise<unknown>;
         getTypes: (params: unknown) => Promise<unknown>;
@@ -75,6 +76,17 @@ describe("preload API contract", () => {
     expect(invoke).toHaveBeenCalledWith(
       "table-data:get-query-columns",
       triggerMetaParams,
+    );
+
+    const jsonKeysParams = {
+      ...triggerMetaParams,
+      column: "profile",
+      path: [{ kind: "key", value: "address" }],
+    };
+    await exposed.tableDataApi.getJsonKeys(jsonKeysParams);
+    expect(invoke).toHaveBeenCalledWith(
+      "table-data:get-json-keys",
+      jsonKeysParams,
     );
 
     const getRowsParams = {

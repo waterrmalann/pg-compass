@@ -17,8 +17,13 @@ import { fieldClassName } from "@/components/ui/input";
 import { pgSingleLineTheme, pgTheme } from "@/components/sql-editor/pg-theme";
 import { cn } from "@/lib/utils";
 import { getShortcut } from "@/shared/constants/shortcuts";
-import { DSL_KEYWORDS } from "@/shared/query-dsl/parser";
+import {
+  DSL_KEYWORDS,
+  JSON_OPERATOR_WORDS,
+  formatPathKey,
+} from "@/shared/query-dsl/parser";
 import type {
+  BoundPathSegment,
   QueryColumnMetadata,
   QueryDslError,
   QueryDslField,
@@ -29,6 +34,12 @@ import { suggestDslCompletions } from "./query-dsl-completion";
 const dslLanguage = StreamLanguage.define({
   token(stream) {
     if (stream.eatSpace()) return null;
+    // A segment right after a path dot is a key, even when it spells a
+    // keyword (`payload.desc`).
+    const isPathSegment = stream.string.charAt(stream.pos - 1) === ".";
+    if (isPathSegment && stream.match(/^[A-Za-z_][A-Za-z0-9_$]*|^\d+/)) {
+      return "propertyName";
+    }
     if (stream.match(/^'(?:[^']|'')*'?/)) return "string";
     if (stream.match(/^"(?:[^"]|"")*"?/)) return "propertyName";
     if (stream.match(/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/)) {
@@ -42,7 +53,9 @@ const dslLanguage = StreamLanguage.define({
       const upper = word[0].toUpperCase();
       if (upper === "TRUE" || upper === "FALSE") return "bool";
       if (upper === "NULL") return "null";
-      return DSL_KEYWORDS.has(upper) ? "keyword" : "propertyName";
+      const isKeyword =
+        DSL_KEYWORDS.has(upper) || JSON_OPERATOR_WORDS.has(upper);
+      return isKeyword ? "keyword" : "propertyName";
     }
     if (stream.match(/^(?:>=|<=|<>|!=|[=<>])/)) return "operator";
     stream.next();
@@ -73,6 +86,11 @@ interface QueryDslEditorProps {
   placeholder: string;
   ariaLabel: string;
   columns: QueryColumnMetadata[];
+  /** Object keys at a JSON column or path, for completion after a dot. */
+  loadJsonKeys?: (
+    column: string,
+    path: BoundPathSegment[],
+  ) => Promise<string[]>;
   /** Errors for this field from the last Apply; ranges are marked in place. */
   errors: QueryDslError[];
   /** Id of the element describing the current error, for aria-describedby. */
@@ -93,6 +111,7 @@ export function QueryDslEditor({
   placeholder,
   ariaLabel,
   columns,
+  loadJsonKeys,
   errors,
   errorId,
   className,
@@ -105,6 +124,8 @@ export function QueryDslEditor({
   onSubmitRef.current = onSubmit;
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
+  const loadJsonKeysRef = useRef(loadJsonKeys);
+  loadJsonKeysRef.current = loadJsonKeys;
   const initialValueRef = useRef(value);
   const attributesCompartment = useRef(new Compartment());
   const placeholderCompartment = useRef(new Compartment());
@@ -117,9 +138,9 @@ export function QueryDslEditor({
       const container = containerRef.current;
       if (!container) return;
 
-      function completionSource(
+      async function completionSource(
         context: CompletionContext,
-      ): CompletionResult | null {
+      ): Promise<CompletionResult | null> {
         const before = context.state.doc.sliceString(0, context.pos);
         const result = suggestDslCompletions(field, before, columnsRef.current);
         if (!result) return null;
@@ -127,13 +148,28 @@ export function QueryDslEditor({
         if (!typedSomething && !context.explicit) {
           // Open automatically after a separator, not on every keystroke.
           const previous = before.at(-1) ?? "";
-          if (!/[\s(,-]/.test(previous) && before.length > 0) return null;
+          if (!/[\s(,.-]/.test(previous) && before.length > 0) return null;
         }
+
+        let options = result.options;
+        const loadKeys = loadJsonKeysRef.current;
+        if (result.jsonKeys && loadKeys) {
+          const { column, path } = result.jsonKeys;
+          const keys = await loadKeys(column, path).catch(() => []);
+          if (context.aborted) return null;
+          options = keys.map((key) => ({
+            label: formatPathKey(key),
+            apply: formatPathKey(key),
+            type: "property" as const,
+          }));
+        }
+        if (options.length === 0) return null;
+
         return {
           from: result.from,
           // Keep the suggested order (catalog columns, then operators from
           // most to least common) instead of alphabetical.
-          options: result.options.map((option, index) => ({
+          options: options.map((option, index) => ({
             ...option,
             boost: Math.max(-99, -index),
           })),

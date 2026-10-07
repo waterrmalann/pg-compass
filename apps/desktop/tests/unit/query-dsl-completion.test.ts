@@ -106,10 +106,105 @@ describe("suggestDslCompletions", () => {
     expect(labels("limit", "1")).toBeNull();
   });
 
+  it("completes sort columns and directions after paths too", () => {
+    expect(labels("sort", "name.x ")).toEqual(["ASC", "DESC"]);
+  });
+
   it("completes sort columns and directions", () => {
     expect(labels("sort", "")).toContain("name");
     expect(labels("sort", "name ")).toEqual(["ASC", "DESC"]);
     expect(labels("sort", "name DESC, ")).toContain("id");
     expect(labels("sort", "name DESC ")).toBeNull();
+  });
+});
+
+describe("suggestDslCompletions for JSON columns", () => {
+  const JSON_COLUMNS: QueryColumnMetadata[] = [
+    { name: "id", typeName: "int4", family: "numeric" },
+    { name: "profile", typeName: "jsonb", family: "jsonb" },
+    { name: "raw", typeName: "json", family: "json" },
+    { name: "is_active", typeName: "bool", family: "boolean" },
+  ];
+
+  function suggest(field: "filter" | "projection" | "sort", text: string) {
+    return suggestDslCompletions(field, text, JSON_COLUMNS);
+  }
+
+  function jsonLabels(field: "filter" | "projection" | "sort", text: string) {
+    return suggest(field, text)?.options.map((option) => option.label) ?? null;
+  }
+
+  it("offers CONTAINS and HAS for whole JSON columns", () => {
+    expect(jsonLabels("filter", "profile ")).toEqual([
+      "=",
+      "!=",
+      "IN",
+      "NOT IN",
+      "CONTAINS",
+      "HAS",
+      "IS NULL",
+      "IS NOT NULL",
+    ]);
+    expect(jsonLabels("filter", "raw ")).toContain("CONTAINS");
+  });
+
+  it("offers every path operator after a path", () => {
+    expect(jsonLabels("filter", "profile.address.0 ")).toEqual([
+      "=",
+      "!=",
+      ">",
+      ">=",
+      "<",
+      "<=",
+      "LIKE",
+      "ILIKE",
+      "IN",
+      "NOT IN",
+      "CONTAINS",
+      "HAS",
+      "IS NULL",
+      "IS NOT NULL",
+    ]);
+    expect(jsonLabels("filter", "id = 1 AND profile.a ")).toContain("HAS");
+  });
+
+  it("doesn't treat a key named like a column as that column", () => {
+    expect(jsonLabels("filter", "profile.is_active = ")).toBeNull();
+    expect(jsonLabels("filter", "profile CONTAINS ")).toBeNull();
+  });
+
+  it("asks for keys right after a dot on a JSON column", () => {
+    expect(suggest("filter", "profile.")).toEqual({
+      from: 8,
+      options: [],
+      jsonKeys: { column: "profile", path: [] },
+    });
+    expect(suggest("filter", `id = 1 AND raw.Items.0."a b".na`)).toEqual({
+      from: 29,
+      options: [],
+      jsonKeys: {
+        column: "raw",
+        path: [
+          { kind: "key", value: "Items" },
+          { kind: "index", value: 0 },
+          { kind: "key", value: "a b" },
+        ],
+      },
+    });
+    expect(suggest("projection", "id, profile.")?.jsonKeys).toEqual({
+      column: "profile",
+      path: [],
+    });
+    expect(suggest("sort", "profile.")?.jsonKeys).toEqual({
+      column: "profile",
+      path: [],
+    });
+  });
+
+  it("asks for no keys on other columns or outside a column position", () => {
+    expect(suggest("filter", "id.")).toBeNull();
+    expect(suggest("filter", "profile = 'x' AND nope.")).toBeNull();
+    expect(suggest("projection", "-profile.")).toBeNull();
+    expect(suggest("filter", "x = 1.")).toBeNull();
   });
 });

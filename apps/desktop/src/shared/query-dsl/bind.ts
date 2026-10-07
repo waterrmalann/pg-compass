@@ -1,13 +1,15 @@
-import { isReservedWord, parseDataQuery } from "./parser";
+import { formatPath, isReservedWord, parseDataQuery } from "./parser";
 import type {
   BoundDataQuery,
   BoundFilter,
+  BoundReference,
   ComparisonOperator,
   DataQueryAst,
   DataQueryInput,
   DataQueryResult,
   FilterExpression,
   IdentifierNode,
+  PathSegment,
   QueryColumnMetadata,
   QueryDslError,
   QueryDslField,
@@ -15,7 +17,13 @@ import type {
   ScalarNode,
 } from "./types";
 
-type OperatorGroup = "equality" | "ordering" | "membership" | "pattern";
+type OperatorGroup =
+  | "equality"
+  | "ordering"
+  | "membership"
+  | "pattern"
+  | "containment"
+  | "key-exists";
 
 interface FamilyCapabilities {
   operators: ReadonlySet<OperatorGroup>;
@@ -28,6 +36,14 @@ const ALL_BUT_PATTERN = new Set<OperatorGroup>([
   "equality",
   "ordering",
   "membership",
+]);
+
+/** Whole `json`/`jsonb` columns: document equality plus JSON operators. */
+const JSON_COLUMN_OPERATORS = new Set<OperatorGroup>([
+  "equality",
+  "membership",
+  "containment",
+  "key-exists",
 ]);
 
 /**
@@ -62,15 +78,40 @@ export const FAMILY_CAPABILITIES: Record<QueryTypeFamily, FamilyCapabilities> =
       literal: "string",
       label: "uuid",
     },
+    json: {
+      operators: JSON_COLUMN_OPERATORS,
+      literal: "string",
+      label: "json",
+    },
     jsonb: {
-      operators: new Set(["equality", "membership"]),
+      operators: JSON_COLUMN_OPERATORS,
       literal: "string",
       label: "jsonb",
     },
     other: { operators: new Set(), literal: null, label: "this type" },
   };
 
+/** Families whose columns accept paths. */
+export function isJsonFamily(family: QueryTypeFamily): boolean {
+  return family === "json" || family === "jsonb";
+}
+
+/**
+ * Literal kinds each operator group accepts on a JSON path. A path compares
+ * against a JSON scalar of the literal's own type.
+ */
+const PATH_LITERALS: Record<OperatorGroup, ScalarNode["kind"][]> = {
+  equality: ["string", "number", "boolean"],
+  membership: ["string", "number", "boolean"],
+  ordering: ["string", "number"],
+  pattern: ["string"],
+  containment: ["string"],
+  "key-exists": ["string"],
+};
+
 export function operatorGroup(operator: ComparisonOperator): OperatorGroup {
+  if (operator === "CONTAINS") return "containment";
+  if (operator === "HAS") return "key-exists";
   if (operator === "LIKE" || operator === "ILIKE") return "pattern";
   if (operator === "=" || operator === "!=" || operator === "<>") {
     return "equality";
@@ -167,13 +208,115 @@ function resolveColumn(
   );
 }
 
+const JSON_OPERATOR_LITERAL_HINTS: Partial<Record<OperatorGroup, string>> = {
+  containment:
+    'CONTAINS needs JSON text in single quotes, such as \'{"status": "active"}\'.',
+  "key-exists": "HAS needs a key in single quotes, such as 'status'.",
+};
+
+const PATH_LITERAL_DESCRIPTIONS: Record<OperatorGroup, string> = {
+  equality: "a quoted string, a number, TRUE or FALSE",
+  membership: "quoted strings, numbers, TRUE or FALSE",
+  ordering: "a quoted string or a number",
+  pattern: "a quoted string",
+  containment: "a quoted string",
+  "key-exists": "a quoted string",
+};
+
+/**
+ * A resolved column with its (possibly empty) path. `text` is how the
+ * reference reads in messages.
+ */
+interface ResolvedReference {
+  column: QueryColumnMetadata;
+  bound: BoundReference;
+  text: string;
+}
+
+function resolveReference(
+  node: { column: IdentifierNode; path: PathSegment[] },
+  field: QueryDslField,
+  columns: QueryColumnMetadata[],
+): ResolvedReference {
+  const column = resolveColumn(node.column, field, columns);
+  const hasPath = node.path.length > 0;
+  if (hasPath && !isJsonFamily(column.family)) {
+    throw new BindError(
+      "path-not-supported",
+      `"${column.name}" is ${column.typeName}; only json and jsonb columns have paths.`,
+      field,
+      node.column.range.from,
+      node.path.at(-1)!.range.to,
+    );
+  }
+  const path = node.path.map((segment) =>
+    segment.kind === "key"
+      ? { kind: "key" as const, value: segment.value }
+      : { kind: "index" as const, value: segment.value },
+  );
+  return {
+    column,
+    bound: {
+      column: column.name,
+      path,
+      convertToJsonb: column.family === "json",
+    },
+    text: `${column.name}${formatPath(path)}`,
+  };
+}
+
+function checkJsonText(value: ScalarNode): void {
+  if (value.kind !== "string") return;
+  try {
+    JSON.parse(value.value);
+  } catch {
+    throw new BindError(
+      "invalid-json",
+      `CONTAINS needs valid JSON, such as '{"status": "active"}' or '["a", "b"]'.`,
+      "filter",
+      value.range.from,
+      value.range.to,
+    );
+  }
+}
+
+function checkPathLiteral(
+  value: ScalarNode,
+  group: OperatorGroup,
+  operatorLabel: string,
+  reference: ResolvedReference,
+): void {
+  if (PATH_LITERALS[group].includes(value.kind)) return;
+  const message =
+    JSON_OPERATOR_LITERAL_HINTS[group] ??
+    `${operatorLabel} on "${reference.text}" needs ${PATH_LITERAL_DESCRIPTIONS[group]}.`;
+  throw new BindError(
+    "literal-type-mismatch",
+    message,
+    "filter",
+    value.range.from,
+    value.range.to,
+  );
+}
+
 function checkLiteral(
   value: ScalarNode,
   column: QueryColumnMetadata,
   capabilities: FamilyCapabilities,
+  group: OperatorGroup,
 ): void {
   if (capabilities.literal === null || value.kind === capabilities.literal) {
     return;
+  }
+  const jsonHint = JSON_OPERATOR_LITERAL_HINTS[group];
+  if (jsonHint) {
+    throw new BindError(
+      "literal-type-mismatch",
+      jsonHint,
+      "filter",
+      value.range.from,
+      value.range.to,
+    );
   }
   throw new BindError(
     "literal-type-mismatch",
@@ -214,67 +357,92 @@ function bindFilter(
     };
   }
 
-  const column = resolveColumn(expression.column, "filter", columns);
+  const reference = resolveReference(expression, "filter", columns);
+  const { column, bound } = reference;
+  const isPath = bound.path.length > 0;
   if (expression.kind === "null-check") {
-    return {
-      kind: "null-check",
-      column: column.name,
-      negated: expression.negated,
-    };
+    return { kind: "null-check", ...bound, negated: expression.negated };
   }
 
   const capabilities = FAMILY_CAPABILITIES[column.family];
   if (expression.kind === "membership") {
-    if (!capabilities.operators.has("membership")) {
+    const operatorLabel = expression.negated ? "NOT IN" : "IN";
+    // Every JSON path supports IN; whole columns follow their family.
+    if (!isPath && !capabilities.operators.has("membership")) {
       throw unsupportedOperator(
-        expression.negated ? "NOT IN" : "IN",
+        operatorLabel,
         column,
         capabilities,
         expression.range,
       );
     }
     for (const value of expression.values) {
-      checkLiteral(value, column, capabilities);
+      if (isPath) {
+        checkPathLiteral(value, "membership", operatorLabel, reference);
+      } else {
+        checkLiteral(value, column, capabilities, "membership");
+      }
     }
     return {
       kind: "membership",
-      column: column.name,
+      ...bound,
       negated: expression.negated,
       values: expression.values,
     };
   }
 
-  if (!capabilities.operators.has(operatorGroup(expression.operator))) {
-    throw unsupportedOperator(
-      expression.operator,
-      column,
-      capabilities,
-      expression.range,
-    );
+  const group = operatorGroup(expression.operator);
+  if (isPath) {
+    checkPathLiteral(expression.value, group, expression.operator, reference);
+  } else {
+    if (!capabilities.operators.has(group)) {
+      throw unsupportedOperator(
+        expression.operator,
+        column,
+        capabilities,
+        expression.range,
+      );
+    }
+    checkLiteral(expression.value, column, capabilities, group);
   }
-  checkLiteral(expression.value, column, capabilities);
+  if (group === "containment") checkJsonText(expression.value);
   return {
     kind: "comparison",
-    column: column.name,
+    ...bound,
     operator: expression.operator,
     value: expression.value,
   };
 }
 
+/** Most JSON paths one Project or Sort field may list. */
+export const MAX_PATH_ITEMS = 100;
+
 function checkItemCount(
-  count: number,
+  items: { path: PathSegment[]; range: { to: number } }[],
   field: QueryDslField,
   columns: QueryColumnMetadata[],
-  inputEnd: number,
 ): void {
-  if (count <= columns.length) return;
-  throw new BindError(
-    "limit-exceeded",
-    `This relation has ${columns.length} columns; list each at most once.`,
-    field,
-    0,
-    inputEnd,
-  );
+  const inputEnd = items.at(-1)?.range.to ?? 0;
+  const pathCount = items.filter((item) => item.path.length > 0).length;
+  const columnCount = items.length - pathCount;
+  if (columnCount > columns.length) {
+    throw new BindError(
+      "limit-exceeded",
+      `This relation has ${columns.length} columns; list each at most once.`,
+      field,
+      0,
+      inputEnd,
+    );
+  }
+  if (pathCount > MAX_PATH_ITEMS) {
+    throw new BindError(
+      "limit-exceeded",
+      `List at most ${MAX_PATH_ITEMS} JSON paths.`,
+      field,
+      0,
+      inputEnd,
+    );
+  }
 }
 
 /**
@@ -309,28 +477,26 @@ export function bindDataQuery(
     : null;
 
   const projection = attempt(() => {
-    const lastItem = ast.projection.at(-1);
-    checkItemCount(
-      ast.projection.length,
-      "projection",
-      columns,
-      lastItem?.range.to ?? 0,
-    );
+    checkItemCount(ast.projection, "projection", columns);
     const resolved = ast.projection.map((item) => ({
       item,
-      column: resolveColumn(item.column, "projection", columns),
+      reference: resolveReference(item, "projection", columns),
     }));
     const isExclusion = ast.projection[0]?.exclude === true;
     if (!isExclusion) {
-      return resolved.map(({ item, column }) => ({
-        column: column.name,
-        outputName: item.alias?.value ?? column.name,
+      // An unaliased path is named as typed: `payload.status`.
+      return resolved.map(({ item, reference }) => ({
+        ...reference.bound,
+        outputName: item.alias?.value ?? reference.text,
         aliased: item.alias !== undefined,
       }));
     }
 
-    // `-a, -b`: every other column, in the relation's own order.
-    const excluded = new Set(resolved.map(({ column }) => column.name));
+    // `-a, -b`: every other column, in the relation's own order. The parser
+    // only accepts whole columns here.
+    const excluded = new Set(
+      resolved.map(({ reference }) => reference.column.name),
+    );
     const kept = columns.filter((column) => !excluded.has(column.name));
     if (kept.length === 0) {
       throw new BindError(
@@ -338,21 +504,22 @@ export function bindDataQuery(
         "Every column is excluded. Keep at least one.",
         "projection",
         ast.projection[0]!.range.from,
-        lastItem!.range.to,
+        ast.projection.at(-1)!.range.to,
       );
     }
     return kept.map((column) => ({
       column: column.name,
+      path: [],
+      convertToJsonb: column.family === "json",
       outputName: column.name,
       aliased: false,
     }));
   });
 
   const sort = attempt(() => {
-    const lastItem = ast.sort.at(-1);
-    checkItemCount(ast.sort.length, "sort", columns, lastItem?.range.to ?? 0);
+    checkItemCount(ast.sort, "sort", columns);
     return ast.sort.map((item) => ({
-      column: resolveColumn(item.column, "sort", columns).name,
+      ...resolveReference(item, "sort", columns).bound,
       direction: item.direction,
     }));
   });

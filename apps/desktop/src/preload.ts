@@ -67,6 +67,7 @@ import type {
   ExportDataParams,
   ExportResult,
   ExecuteQueryParams,
+  GetJsonKeysParams,
   GetRowsParams,
   ImportDataParams,
   ImportProgress,
@@ -165,6 +166,9 @@ const tableDataApi = {
     params: TableMetaParams,
   ): Promise<IpcResult<QueryColumnMetadata[]>> =>
     ipcRenderer.invoke(TableDataChannels.GET_QUERY_COLUMNS, params),
+
+  getJsonKeys: (params: GetJsonKeysParams): Promise<IpcResult<string[]>> =>
+    ipcRenderer.invoke(TableDataChannels.GET_JSON_KEYS, params),
 
   getIndexes: (params: TableMetaParams): Promise<IpcResult<IndexInfo[]>> =>
     ipcRenderer.invoke(TableDataChannels.GET_INDEXES, params),

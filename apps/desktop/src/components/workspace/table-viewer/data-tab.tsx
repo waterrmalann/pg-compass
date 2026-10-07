@@ -42,6 +42,7 @@ import {
   parseDataQuery,
 } from "@/shared/query-dsl/parser";
 import type {
+  BoundPathSegment,
   DataQueryInput,
   QueryColumnMetadata,
   QueryDslError,
@@ -186,6 +187,8 @@ export function DataTab({
   // The query of an Apply still waiting for its rows, if any.
   const pendingApplyRef = useRef<DataQueryInput | null>(null);
   const [queryColumns, setQueryColumns] = useState<QueryColumnMetadata[]>([]);
+  // Sampled JSON keys per column and path, reset with the column list.
+  const jsonKeyCacheRef = useRef(new Map<string, Promise<string[]>>());
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewModeState] = useState<ViewMode>(
     session?.dataViewMode ?? "table",
@@ -284,6 +287,7 @@ export function DataTab({
       // The relation's full column list drives completion and linting; it is
       // kept apart from result columns, which a projection can shrink.
       let cancelled = false;
+      jsonKeyCacheRef.current = new Map();
       globalThis.window.tableDataApi
         .getQueryColumns({ connectionId, schema, table })
         .then((result) => {
@@ -295,6 +299,27 @@ export function DataTab({
       };
     },
     [connectionId, schema, table, refreshSignal],
+  );
+
+  const loadJsonKeys = useCallback(
+    (column: string, path: BoundPathSegment[]): Promise<string[]> => {
+      const cacheKey = JSON.stringify([column, path]);
+      const cached = jsonKeyCacheRef.current.get(cacheKey);
+      if (cached) return cached;
+      const cache = jsonKeyCacheRef.current;
+      // Failures aren't cached, so the next dot tries again.
+      const forget = (): string[] => {
+        cache.delete(cacheKey);
+        return [];
+      };
+      const request = globalThis.window.tableDataApi
+        .getJsonKeys({ connectionId, schema, table, column, path })
+        .then((result) => (result.success ? result.data : forget()))
+        .catch(forget);
+      cache.set(cacheKey, request);
+      return request;
+    },
+    [connectionId, schema, table],
   );
 
   useEffect(() => {
@@ -424,6 +449,7 @@ export function DataTab({
         activeQuery={activeQuery}
         errors={dslErrors}
         columns={queryColumns}
+        loadJsonKeys={loadJsonKeys}
         onApply={handleApply}
         onFieldEdited={handleFieldEdited}
         trailing={

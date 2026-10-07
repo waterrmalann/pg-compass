@@ -1,6 +1,10 @@
 /** Types for table/view data queries used across main, preload, and renderer. */
 
-import type { DataQueryInput, QueryDslError } from "../query-dsl/types";
+import type {
+  BoundPathSegment,
+  DataQueryInput,
+  QueryDslError,
+} from "../query-dsl/types";
 
 export type { DataQueryInput, QueryDslError } from "../query-dsl/types";
 
@@ -200,6 +204,13 @@ export interface TableMetaParams {
   connectionId: string;
   schema: string;
   table: string;
+}
+
+/** Parameters for sampling the object keys at a JSON column or path. */
+export interface GetJsonKeysParams extends TableMetaParams {
+  column: string;
+  /** Empty for the column's top-level keys. */
+  path: BoundPathSegment[];
 }
 
 /** Parameters for enabling or disabling a table trigger. */

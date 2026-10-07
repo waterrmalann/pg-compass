@@ -397,7 +397,7 @@ export async function deleteRows(
       // (codebase-consistency ADR).
       const result = await client.query(
         `DELETE FROM ${qualifiedTable}${whereFragment}`,
-        compiled.values,
+        compiled.filterValues,
       );
       await client.query("COMMIT");
       return { deletedCount: result.rowCount ?? 0 };

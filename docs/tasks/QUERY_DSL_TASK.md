@@ -33,10 +33,11 @@ The renderer parses and binds drafts for instant feedback and completion. The ma
 | Temporal (date/time and interval)                                         | equality, ordering, `IN`, null checks                  | string  |
 | Boolean                                                                   | equality, `IN`, null checks                            | boolean |
 | Enum                                                                      | equality, ordering, `IN`, null checks                  | string  |
-| UUID, JSONB                                                               | equality, `IN`, null checks                            | string  |
-| JSON, arrays, ranges, geometric, network, vector, PostGIS, unknown types  | null checks only                                       | —       |
+| UUID                                                                      | equality, `IN`, null checks                            | string  |
+| JSON, JSONB                                                               | equality, `IN`, `CONTAINS`, `HAS`, paths, null checks  | string  |
+| Arrays, ranges, geometric, network, vector, PostGIS, unknown types        | null checks only                                       | —       |
 
-Domains, including domains over domains, inherit their base type's family.
+Domains, including domains over domains, inherit their base type's family. JSON paths and their operators are described in [QUERY_DSL_JSON_TASK.md](QUERY_DSL_JSON_TASK.md).
 
 ## Implementation
 

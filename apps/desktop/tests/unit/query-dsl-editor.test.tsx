@@ -1,9 +1,13 @@
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
+import { currentCompletions, startCompletion } from "@codemirror/autocomplete";
 import { EditorView } from "@codemirror/view";
 import { forEachDiagnostic } from "@codemirror/lint";
 import { describe, expect, it, vi } from "vitest";
 import { QueryDslEditor } from "@/components/workspace/table-viewer/query-dsl-editor";
-import type { QueryDslError } from "@/shared/query-dsl/types";
+import type {
+  QueryColumnMetadata,
+  QueryDslError,
+} from "@/shared/query-dsl/types";
 
 function renderEditor(errors: QueryDslError[] = [], value = "id >=") {
   const onChange = vi.fn();
@@ -76,5 +80,49 @@ describe("QueryDslEditor", () => {
     });
     expect(editorView.state.doc.toString()).toBe("id = 1 OR id = 2");
     expect(onChange).toHaveBeenLastCalledWith("id = 1 OR id = 2");
+  });
+});
+
+describe("QueryDslEditor JSON key completion", () => {
+  const columns: QueryColumnMetadata[] = [
+    { name: "profile", typeName: "jsonb", family: "jsonb" },
+  ];
+
+  it("loads and quotes sampled keys after a dot", async () => {
+    const loadJsonKeys = vi
+      .fn()
+      .mockResolvedValue(["city", "content-type", "Zip"]);
+    const view = render(
+      <QueryDslEditor
+        field="filter"
+        value="profile.address."
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        placeholder="Filter"
+        ariaLabel="Filter"
+        columns={columns}
+        loadJsonKeys={loadJsonKeys}
+        errors={[]}
+      />,
+    );
+    const editorView = EditorView.findFromDOM(
+      view
+        .getByTestId("query-dsl-filter")
+        .querySelector(".cm-editor") as HTMLElement,
+    )!;
+
+    act(() => {
+      editorView.dispatch({ selection: { anchor: "profile.address.".length } });
+      startCompletion(editorView);
+    });
+
+    await waitFor(() => {
+      expect(
+        currentCompletions(editorView.state).map((option) => option.label),
+      ).toEqual(["city", '"content-type"', "Zip"]);
+    });
+    expect(loadJsonKeys).toHaveBeenCalledWith("profile", [
+      { kind: "key", value: "address" },
+    ]);
   });
 });

@@ -106,6 +106,7 @@ export function runTableDataIntegrationSuite(
       async () => {
         const { cancelQuery, executeQuery } =
           await import("@/main/table-data-rows");
+        const { withPoolClient } = await import("@/main/pg-utils");
         const queryId = "integration-slow-query";
         const running = executeQuery({
           connectionId,
@@ -114,15 +115,36 @@ export function runTableDataIntegrationSuite(
           page: 1,
           pageSize: 1,
         });
+        const cancelled = expect(running).rejects.toThrow("Query cancelled.");
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        await expect(cancelQuery(connectionId, queryId)).resolves.toBe(
-          "cancel-requested",
+        // Wait until the sleep is running on its backend, so the cancel goes
+        // through pg_cancel_backend rather than the not-yet-connected path.
+        await vi.waitFor(
+          async () => {
+            const activity = await withPoolClient(connectionId, (client) =>
+              client.query(
+                `SELECT 1 FROM pg_stat_activity
+                  WHERE datname = current_database()
+                    AND pid <> pg_backend_pid()
+                    AND state = 'active'
+                    AND query LIKE '%pg_sleep(10)%'`,
+              ),
+            );
+            expect(activity.rowCount).toBe(1);
+          },
+          { timeout: 5_000, interval: 25 },
         );
-        await expect(cancelQuery(connectionId, queryId)).resolves.toBe(
-          "cancel-requested",
-        );
-        await expect(running).rejects.toThrow("Query cancelled.");
+
+        // A cancelled backend stops at once, so a repeat sent after the first
+        // returns may already find the query gone. Sending both together
+        // makes the repeat see the first cancel still in flight.
+        const [first, repeated] = await Promise.all([
+          cancelQuery(connectionId, queryId),
+          cancelQuery(connectionId, queryId),
+        ]);
+        expect(first).toBe("cancel-requested");
+        expect(repeated).toBe("cancel-requested");
+        await cancelled;
         await expect(cancelQuery(connectionId, queryId)).resolves.toBe(
           "already-finished",
         );
@@ -2089,6 +2111,356 @@ export function runTableDataIntegrationSuite(
           expect(await countDeleteTarget()).toBe(5);
         },
       );
+
+      describe("query DSL JSON paths", () => {
+        const DOCS = [
+          {
+            id: 1,
+            doc: {
+              status: "active",
+              count: 10,
+              tags: ["urgent", "x"],
+              items: [{ sku: "AB-1" }],
+              userId: "u1",
+              meta: { source: "web" },
+              deleted_at: null,
+              "Weird key": 1,
+              名前: "x",
+            },
+            settings: { theme: "dark" },
+          },
+          {
+            id: 2,
+            doc: {
+              status: "inactive",
+              count: "50",
+              tags: ["x"],
+              items: [{ sku: "cd-2" }],
+              meta: { source: "api" },
+            },
+            settings: { theme: "light" },
+          },
+          {
+            id: 3,
+            doc: {
+              status: "active",
+              count: 3.5,
+              flag: true,
+              items: [],
+              deleted_at: "2026-01-01",
+            },
+            settings: null,
+          },
+          { id: 4, doc: { status: "10", count: 10.0 }, settings: null },
+          { id: 5, doc: null, settings: null },
+          { id: 6, doc: [1, 2], settings: null },
+        ];
+
+        beforeAll(async () => {
+          const { withPoolClient } = await import("@/main/pg-utils");
+          await withPoolClient(connectionId, async (client) => {
+            await client.query("DROP TABLE IF EXISTS app.json_docs");
+            await client.query("DROP DOMAIN IF EXISTS app.settings_doc");
+            await client.query("CREATE DOMAIN app.settings_doc AS jsonb");
+            await client.query(
+              "CREATE TABLE app.json_docs (id INT PRIMARY KEY, doc JSONB, raw JSON, settings app.settings_doc)",
+            );
+            for (const row of DOCS) {
+              const doc = row.doc === null ? null : JSON.stringify(row.doc);
+              const settings =
+                row.settings === null ? null : JSON.stringify(row.settings);
+              await client.query(
+                "INSERT INTO app.json_docs VALUES ($1, $2::jsonb, $2::json, $3::jsonb)",
+                [row.id, doc, settings],
+              );
+            }
+          });
+        });
+
+        async function docsQuery(
+          query: Partial<typeof NO_QUERY>,
+          page = 1,
+          pageSize = 25,
+        ) {
+          const { getRows } = await import("@/main/table-data-rows");
+          return getRows({
+            connectionId,
+            schema: "app",
+            table: "json_docs",
+            page,
+            pageSize,
+            query: { ...NO_QUERY, ...query },
+          });
+        }
+
+        async function matchingIds(filter: string): Promise<number[]> {
+          const result = await docsQuery({ filter });
+          return result.rows.map((row) => row.id as number);
+        }
+
+        it.each([
+          ["doc.status = 'active'", [1, 3]],
+          ["doc.count = 10", [1, 4]],
+          ["doc.status = '10'", [4]],
+          ["doc.status = 10", []],
+          ["doc.status != 'active'", [2, 4]],
+          ["doc.status IN ('inactive', '10')", [2, 4]],
+          ["doc.flag = TRUE", [3]],
+        ])("compares typed JSON values: %s", async (filter, ids) => {
+          expect(await matchingIds(filter)).toEqual(ids);
+        });
+
+        it.each([
+          ["doc.count > 5", [1, 4]],
+          ["doc.count <= 3.5", [3]],
+          ["doc.status > 'b'", [2]],
+        ])(
+          "orders only values of the literal's JSON type: %s",
+          async (filter, ids) => {
+            expect(await matchingIds(filter)).toEqual(ids);
+          },
+        );
+
+        it("treats a missing key and JSON null as NULL", async () => {
+          expect(await matchingIds("doc.deleted_at IS NULL")).toEqual([
+            1, 2, 4, 5, 6,
+          ]);
+          expect(await matchingIds("doc.deleted_at IS NOT NULL")).toEqual([3]);
+          expect(await matchingIds("doc IS NULL")).toEqual([5]);
+        });
+
+        it("follows array indexes and matches string patterns", async () => {
+          expect(await matchingIds("doc.items.0.sku ILIKE 'ab%'")).toEqual([1]);
+          expect(await matchingIds("doc.tags.0 = 'urgent'")).toEqual([1]);
+          expect(await matchingIds("doc.1 = 2")).toEqual([6]);
+          // Numbers never match a pattern, even when their text would.
+          expect(await matchingIds("doc.count LIKE '1%'")).toEqual([]);
+        });
+
+        it("keeps keys case-sensitive and supports quoted keys", async () => {
+          expect(await matchingIds("doc.userId = 'u1'")).toEqual([1]);
+          expect(await matchingIds("doc.userid = 'u1'")).toEqual([]);
+          expect(await matchingIds(`doc."Weird key" = 1`)).toEqual([1]);
+          expect(await matchingIds(`doc."名前" = 'x'`)).toEqual([1]);
+        });
+
+        it("supports CONTAINS and HAS on columns and paths", async () => {
+          expect(
+            await matchingIds(`doc CONTAINS '{"status": "active"}'`),
+          ).toEqual([1, 3]);
+          expect(
+            await matchingIds(`doc.meta CONTAINS '{"source": "api"}'`),
+          ).toEqual([2]);
+          expect(await matchingIds(`doc.tags CONTAINS '["x"]'`)).toEqual([
+            1, 2,
+          ]);
+          expect(await matchingIds("doc.tags HAS 'urgent'")).toEqual([1]);
+          expect(await matchingIds("doc HAS 'flag'")).toEqual([3]);
+        });
+
+        it("gives json columns the same features through jsonb", async () => {
+          expect(await matchingIds("raw.status = 'active'")).toEqual([1, 3]);
+          expect(await matchingIds(`raw CONTAINS '{"flag": true}'`)).toEqual([
+            3,
+          ]);
+          // Whole-document equality ignores key order and whitespace.
+          expect(
+            await matchingIds(`raw = '{ "count": 10.0, "status": "10" }'`),
+          ).toEqual([4]);
+          // SQL NULLs (no "count" in the array row) sort first when descending.
+          const sorted = await docsQuery({
+            filter: "raw IS NOT NULL",
+            sort: "raw.count DESC",
+          });
+          expect(sorted.rows.map((row) => row.id)).toEqual([6, 1, 4, 3, 2]);
+        });
+
+        it("supports paths on domains over jsonb", async () => {
+          expect(await matchingIds("settings.theme = 'dark'")).toEqual([1]);
+        });
+
+        it("sorts by a path with paging, Skip/Limit counts and edit identity", async () => {
+          const query = {
+            filter: "doc.status IS NOT NULL",
+            sort: "doc.count DESC",
+            skip: "1",
+            limit: "3",
+          };
+          // Numbers sort above strings in jsonb order; 10 and 10.0 tie and
+          // fall back to the primary key.
+          const first = await docsQuery(query, 1, 2);
+          const second = await docsQuery(query, 2, 2);
+          expect(first.totalCount).toBe(3);
+          expect(first.rows.map((row) => row.id)).toEqual([4, 3]);
+          expect(second.rows.map((row) => row.id)).toEqual([2]);
+          expect(first.primaryKey).toEqual(["id"]);
+        });
+
+        it("projects paths as jsonb values named as typed", async () => {
+          const result = await docsQuery({
+            filter: "id <= 2",
+            projection: "id, doc.status, doc.items.0 AS first",
+            sort: "id",
+          });
+          expect(result.rows).toEqual([
+            { id: 1, "doc.status": "active", first: { sku: "AB-1" } },
+            { id: 2, "doc.status": "inactive", first: { sku: "cd-2" } },
+          ]);
+          expect(result.columns.map((column) => column.dataType)).toEqual([
+            "int4",
+            "jsonb",
+            "jsonb",
+          ]);
+          expect(result.primaryKey).toBeNull();
+        });
+
+        it("previews and exports path queries with every parameter", async () => {
+          const { exportData, previewQuerySql } =
+            await import("@/main/table-data-export");
+          const query = {
+            ...NO_QUERY,
+            filter: "doc.status = 'active'",
+            projection: "id, doc.count AS count",
+            sort: "doc.count DESC",
+            limit: "5",
+          };
+          const preview = await previewQuerySql({
+            connectionId,
+            schema: "app",
+            table: "json_docs",
+            query,
+          });
+          expect(preview).toEqual({
+            sql: [
+              'SELECT "id", ("doc" -> $3::text) AS "count"',
+              'FROM "app"."json_docs"',
+              'WHERE ("doc" -> $1::text) = to_jsonb($2::text)',
+              'ORDER BY ("app"."json_docs"."doc" -> $4::text) DESC, "app"."json_docs"."id" ASC',
+              "LIMIT $5",
+            ].join("\n"),
+            values: ["status", "active", "count", "count", 5],
+          });
+
+          const directory = createTempDir("pg-compass-dsl-json-export-");
+          const filePath = path.join(directory, "docs.json");
+          const sender = { send: () => undefined } as unknown as WebContents;
+          const result = await exportData(
+            {
+              connectionId,
+              format: "json",
+              filePath,
+              schema: "app",
+              table: "json_docs",
+              query,
+            },
+            sender,
+          );
+          expect(result.rowCount).toBe(2);
+          expect(JSON.parse(fs.readFileSync(filePath, "utf8"))).toEqual([
+            { id: 1, count: 10 },
+            { id: 3, count: 3.5 },
+          ]);
+        });
+
+        it("deletes rows matching a path filter", async () => {
+          const { withPoolClient } = await import("@/main/pg-utils");
+          const { deleteRows } = await import("@/main/table-data-write");
+          await withPoolClient(connectionId, async (client) => {
+            await client.query("DROP TABLE IF EXISTS app.json_delete_target");
+            await client.query(
+              "CREATE TABLE app.json_delete_target (id SERIAL PRIMARY KEY, doc JSONB)",
+            );
+            await client.query(
+              `INSERT INTO app.json_delete_target (doc) VALUES ('{"kind": "temp"}'), ('{"kind": "temp"}'), ('{"kind": "keep"}'), (NULL)`,
+            );
+          });
+
+          const result = await deleteRows({
+            connectionId,
+            schema: "app",
+            table: "json_delete_target",
+            filter: "doc.kind = 'temp'",
+          });
+          expect(result.deletedCount).toBe(2);
+        });
+
+        it("samples object keys at columns and paths for completion", async () => {
+          const { getJsonKeys } = await import("@/main/table-data-rows");
+          const keysAt = (
+            column: string,
+            path: { kind: "key"; value: string }[] | [] = [],
+          ) =>
+            getJsonKeys({
+              connectionId,
+              schema: "app",
+              table: "json_docs",
+              column,
+              path,
+            });
+
+          // Collation decides the order, so compare as sets.
+          expect([...(await keysAt("doc"))].sort()).toEqual(
+            [
+              "Weird key",
+              "count",
+              "deleted_at",
+              "flag",
+              "items",
+              "meta",
+              "status",
+              "tags",
+              "userId",
+              "名前",
+            ].sort(),
+          );
+          expect(await keysAt("doc", [{ kind: "key", value: "meta" }])).toEqual(
+            ["source"],
+          );
+          expect(await keysAt("raw", [{ kind: "key", value: "meta" }])).toEqual(
+            ["source"],
+          );
+          expect(await keysAt("settings")).toEqual(["theme"]);
+          // Arrays and scalars at the path contribute nothing.
+          expect(await keysAt("doc", [{ kind: "key", value: "tags" }])).toEqual(
+            [],
+          );
+          expect(
+            await keysAt("doc", [
+              { kind: "key", value: "x'); DROP TABLE t; --" },
+            ]),
+          ).toEqual([]);
+          await expect(keysAt("id")).rejects.toThrow(/not a json or jsonb/);
+          await expect(keysAt("missing")).rejects.toThrow(
+            /not a json or jsonb/,
+          );
+        });
+
+        it("rejects paths on non-JSON columns before querying", async () => {
+          await expectDslFailure(docsQuery({ filter: "id.a = 1" }), {
+            field: "filter",
+            code: "path-not-supported",
+          });
+          await expectDslFailure(docsQuery({ filter: "doc CONTAINS '{a}'" }), {
+            field: "filter",
+            code: "invalid-json",
+          });
+        });
+
+        it.each([
+          `x'); DROP TABLE app.json_docs; --`,
+          "$1",
+          "back\\slash",
+          `quote""s`,
+        ])("keeps the key %s a parameter in every field", async (key) => {
+          const result = await docsQuery({
+            filter: `doc."${key}" IS NULL`,
+            projection: `id, doc."${key}" AS k`,
+            sort: `doc."${key}"`,
+          });
+          expect(result.totalCount).toBe(6);
+          expect(await matchingIds("id > 0")).toHaveLength(6);
+        });
+      });
     });
 
     // -----------------------------------------------------------------------

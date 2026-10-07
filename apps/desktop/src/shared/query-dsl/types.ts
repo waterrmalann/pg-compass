@@ -34,7 +34,9 @@ export type QueryDslErrorCode =
   | "unknown-column"
   | "case-mismatch"
   | "operator-not-supported"
-  | "literal-type-mismatch";
+  | "literal-type-mismatch"
+  | "path-not-supported"
+  | "invalid-json";
 
 export interface QueryDslError {
   code: QueryDslErrorCode;
@@ -62,11 +64,24 @@ export type ComparisonOperator =
   | "<"
   | "<="
   | "LIKE"
-  | "ILIKE";
+  | "ILIKE"
+  /** JSON containment (`@>`). */
+  | "CONTAINS"
+  /** JSON key or string-element existence (`?`). */
+  | "HAS";
 
 export type Token =
-  /** Unquoted word: a keyword or an identifier (folded to lowercase). */
-  | { kind: "word"; value: string; upper: string; range: SourceRange }
+  /**
+   * Unquoted word: a keyword or an identifier (folded to lowercase). `raw`
+   * keeps the typed spelling for case-sensitive JSON keys.
+   */
+  | {
+      kind: "word";
+      value: string;
+      upper: string;
+      raw: string;
+      range: SourceRange;
+    }
   | { kind: "quoted-identifier"; value: string; range: SourceRange }
   | { kind: "string"; value: string; range: SourceRange }
   /** Numeric lexeme kept as text so large values stay lossless. */
@@ -78,7 +93,9 @@ export type Token =
     }
   | { kind: "punctuation"; value: "(" | ")" | ","; range: SourceRange }
   /** Projection only: the `-` that excludes the column right after it. */
-  | { kind: "exclude"; range: SourceRange };
+  | { kind: "exclude"; range: SourceRange }
+  /** A `.` directly after a column or path segment: `payload.status`. */
+  | { kind: "dot"; range: SourceRange };
 
 // ---------------------------------------------------------------------------
 // AST
@@ -89,6 +106,14 @@ export interface IdentifierNode {
   quoted: boolean;
   range: SourceRange;
 }
+
+/**
+ * One step into a JSON value. Keys are case-sensitive as typed; indexes are
+ * unsigned integers into arrays.
+ */
+export type PathSegment =
+  | { kind: "key"; value: string; range: SourceRange }
+  | { kind: "index"; value: number; range: SourceRange };
 
 export type ScalarNode =
   | { kind: "string"; value: string; range: SourceRange }
@@ -106,6 +131,7 @@ export type FilterExpression =
   | {
       kind: "comparison";
       column: IdentifierNode;
+      path: PathSegment[];
       operator: ComparisonOperator;
       value: ScalarNode;
       range: SourceRange;
@@ -113,6 +139,7 @@ export type FilterExpression =
   | {
       kind: "membership";
       column: IdentifierNode;
+      path: PathSegment[];
       negated: boolean;
       values: ScalarNode[];
       range: SourceRange;
@@ -120,12 +147,15 @@ export type FilterExpression =
   | {
       kind: "null-check";
       column: IdentifierNode;
+      path: PathSegment[];
       negated: boolean;
       range: SourceRange;
     };
 
 export interface ProjectionItem {
   column: IdentifierNode;
+  /** Empty for the whole column. */
+  path: PathSegment[];
   alias?: IdentifierNode;
   /** `-column`: return every column except this one. */
   exclude: boolean;
@@ -136,6 +166,8 @@ export type Projection = ProjectionItem[];
 
 export interface SortItem {
   column: IdentifierNode;
+  /** Empty for the whole column. */
+  path: PathSegment[];
   direction: "ASC" | "DESC";
   range: SourceRange;
 }
@@ -162,6 +194,7 @@ export type QueryTypeFamily =
   | "boolean"
   | "enum"
   | "uuid"
+  | "json"
   | "jsonb"
   | "other";
 
@@ -179,6 +212,19 @@ export interface RelationMetadata {
   primaryKey: string[] | null;
 }
 
+export type BoundPathSegment =
+  | { kind: "key"; value: string }
+  | { kind: "index"; value: number };
+
+/** A catalog column, or a path inside a `json`/`jsonb` column. */
+export interface BoundReference {
+  column: string;
+  /** Empty for the whole column. */
+  path: BoundPathSegment[];
+  /** `json` columns are converted to `jsonb` before JSON operators. */
+  convertToJsonb: boolean;
+}
+
 export type BoundFilter =
   | {
       kind: "logical";
@@ -186,24 +232,22 @@ export type BoundFilter =
       left: BoundFilter;
       right: BoundFilter;
     }
-  | {
+  | (BoundReference & {
       kind: "comparison";
-      column: string;
       operator: ComparisonOperator;
       value: ScalarNode;
-    }
-  | {
+    })
+  | (BoundReference & {
       kind: "membership";
-      column: string;
       negated: boolean;
       values: ScalarNode[];
-    }
-  | { kind: "null-check"; column: string; negated: boolean };
+    })
+  | (BoundReference & { kind: "null-check"; negated: boolean });
 
 export interface BoundDataQuery {
   filter: BoundFilter | null;
-  projection: { column: string; outputName: string; aliased: boolean }[];
-  sort: { column: string; direction: "ASC" | "DESC" }[];
+  projection: (BoundReference & { outputName: string; aliased: boolean })[];
+  sort: (BoundReference & { direction: "ASC" | "DESC" })[];
   skip: number | null;
   limit: number | null;
 }

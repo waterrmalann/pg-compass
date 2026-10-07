@@ -9,6 +9,7 @@ import {
   validateDropRoleInput,
   validateExportDataParams,
   validatePreviewQuerySqlParams,
+  validateGetJsonKeysParams,
   validateGetRowsParams,
   validateImportDataParams,
   validateImportOpenDialogOptions,
@@ -89,6 +90,52 @@ describe("IPC runtime validation", () => {
         query: { filter: "", projection: "", sort: "", skip: "", limit: "" },
       }),
     ).toThrow(/pageSize/);
+  });
+
+  it("accepts JSON key requests with bounded key and index segments", () => {
+    const params = {
+      connectionId: "connection",
+      schema: "public",
+      table: "docs",
+      column: "payload",
+      path: [
+        { kind: "key", value: "items" },
+        { kind: "index", value: 0 },
+        { kind: "key", value: " " },
+      ],
+    };
+    expect(validateGetJsonKeysParams(params)).toBe(params);
+    expect(validateGetJsonKeysParams({ ...params, path: [] })).toEqual({
+      ...params,
+      path: [],
+    });
+    expect(() =>
+      validateGetJsonKeysParams({
+        ...params,
+        path: [{ kind: "index", value: -1 }],
+      }),
+    ).toThrow(/path\[0\]\.value/);
+    expect(() =>
+      validateGetJsonKeysParams({
+        ...params,
+        path: [{ kind: "sql", value: "1; DROP" }],
+      }),
+    ).toThrow(/kind/);
+    expect(() =>
+      validateGetJsonKeysParams({
+        ...params,
+        path: [{ kind: "key", value: "a", extra: true }],
+      }),
+    ).toThrow(/extra/);
+    expect(() =>
+      validateGetJsonKeysParams({
+        ...params,
+        path: Array.from({ length: 17 }, () => ({ kind: "key", value: "k" })),
+      }),
+    ).toThrow(/16 segments/);
+    expect(() => validateGetJsonKeysParams({ ...params, column: "" })).toThrow(
+      /column/,
+    );
   });
 
   it("requires a well-formed Data-tab query and rejects the old whereClause", () => {

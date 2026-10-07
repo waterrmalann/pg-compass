@@ -19,6 +19,7 @@ export const TableDataChannels = {
   GET_ROWS: "table-data:get-rows",
   GET_STRUCTURE: "table-data:get-structure",
   GET_QUERY_COLUMNS: "table-data:get-query-columns",
+  GET_JSON_KEYS: "table-data:get-json-keys",
   GET_INDEXES: "table-data:get-indexes",
   GET_CONSTRAINTS: "table-data:get-constraints",
   GET_TRIGGERS: "table-data:get-triggers",
