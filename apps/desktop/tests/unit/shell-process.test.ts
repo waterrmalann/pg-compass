@@ -34,6 +34,13 @@ function buildConnection(
   };
 }
 
+// The PATH tests touch the real filesystem, so they search it the host's way:
+// its PATH delimiter, and an executable marked by a PATHEXT extension on
+// Windows or by the mode bit elsewhere.
+const hostPlatform = process.platform;
+const isWindows = hostPlatform === "win32";
+const hostPsqlName = isWindows ? "psql.EXE" : "psql";
+
 const target = {
   dbname: "postgresql://demo@localhost:5432/shop",
   env: { PGPASSWORD: "secret" },
@@ -88,22 +95,25 @@ describe("findExecutable", () => {
   it("returns the first executable match on PATH", () => {
     const empty = makeDir();
     const bin = makeDir();
-    const psql = path.join(bin, "psql");
+    const psql = path.join(bin, hostPsqlName);
     fs.writeFileSync(psql, "#!/bin/sh\n", { mode: 0o755 });
+    const pathValue = [empty, bin].join(path.delimiter);
 
-    expect(findExecutable("psql", { PATH: `${empty}:${bin}` }, "linux")).toBe(
+    expect(findExecutable("psql", { PATH: pathValue }, hostPlatform)).toBe(
       psql,
     );
   });
 
   it("skips non-executable files and directories", () => {
+    // No mode bit on POSIX, and no PATHEXT extension on Windows.
     const bin = makeDir();
     fs.writeFileSync(path.join(bin, "psql"), "", { mode: 0o644 });
     const other = makeDir();
-    fs.mkdirSync(path.join(other, "psql"));
+    fs.mkdirSync(path.join(other, hostPsqlName));
+    const pathValue = [bin, other].join(path.delimiter);
 
     expect(
-      findExecutable("psql", { PATH: `${bin}:${other}` }, "linux"),
+      findExecutable("psql", { PATH: pathValue }, hostPlatform),
     ).toBeNull();
   });
 });
@@ -154,16 +164,21 @@ describe("locating psql", () => {
     return filePath;
   }
 
-  it("recognises only executable files", () => {
+  it("recognises files, not folders or missing paths", () => {
     const dir = makeDir();
     const executable = makeExecutable(dir);
-    const plain = path.join(dir, "notes.txt");
-    fs.writeFileSync(plain, "", { mode: 0o644 });
 
     expect(isExecutableFile(executable)).toBe(true);
-    expect(isExecutableFile(plain)).toBe(false);
     expect(isExecutableFile(dir)).toBe(false);
     expect(isExecutableFile(path.join(dir, "missing"))).toBe(false);
+  });
+
+  // Windows has no executable bit: Node treats X_OK as F_OK there.
+  it.skipIf(isWindows)("needs the executable bit on POSIX", () => {
+    const plain = path.join(makeDir(), "notes.txt");
+    fs.writeFileSync(plain, "", { mode: 0o644 });
+
+    expect(isExecutableFile(plain)).toBe(false);
   });
 
   it("tries PATHEXT extensions on Windows", () => {
@@ -244,26 +259,26 @@ describe("locating psql", () => {
   it("prefers PATH, then the common folders", () => {
     const onPath = makeDir();
     const common = makeDir();
-    const commonPsql = makeExecutable(common);
+    const commonPsql = makeExecutable(common, hostPsqlName);
 
     expect(
       locatePsql({
         configuredPath: "",
         env: { PATH: onPath },
-        platform: "linux",
+        platform: hostPlatform,
         commonDirectories: [common],
       }),
-    ).toEqual({ path: commonPsql, source: "common", platform: "linux" });
+    ).toEqual({ path: commonPsql, source: "common", platform: hostPlatform });
 
-    const pathPsql = makeExecutable(onPath);
+    const pathPsql = makeExecutable(onPath, hostPsqlName);
     expect(
       locatePsql({
         configuredPath: "",
         env: { PATH: onPath },
-        platform: "linux",
+        platform: hostPlatform,
         commonDirectories: [common],
       }),
-    ).toEqual({ path: pathPsql, source: "path", platform: "linux" });
+    ).toEqual({ path: pathPsql, source: "path", platform: hostPlatform });
   });
 
   it("explains when psql is nowhere", () => {
