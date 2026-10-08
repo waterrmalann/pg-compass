@@ -26,6 +26,11 @@ export interface DiagramFixture {
   tableCount: number;
   /** Foreign keys declared by tables in `schema` (partition copies excluded). */
   foreignKeyCount: number;
+  /**
+   * Lines the diagram draws for `schema`: every key except the one into a
+   * partition, which is not drawn as a card and shows only as a marker.
+   */
+  drawnRelationshipCount: number;
 }
 
 const BATCH_SIZE = 100;
@@ -135,6 +140,20 @@ export function buildDiagramFixture(
   );
   foreignKeyCount += 1;
 
+  // A key into the partitioned parent: PostgreSQL also copies it once per
+  // partition, and only the parent's key is drawn. A key a user declared
+  // straight into one partition is their own and is kept.
+  statements.push(
+    `CREATE TABLE ${schema}.event_notes (id serial PRIMARY KEY, event_id bigint NOT NULL, occurred_on date NOT NULL, FOREIGN KEY (event_id, occurred_on) REFERENCES ${schema}.events (id, occurred_on))`,
+    `CREATE TABLE ${schema}.archived_events (id serial PRIMARY KEY, event_id bigint NOT NULL, occurred_on date NOT NULL, FOREIGN KEY (event_id, occurred_on) REFERENCES ${schema}.events_2025 (id, occurred_on))`,
+  );
+  foreignKeyCount += 2;
+
+  // Unique on its key column alone; the INCLUDE column does not count.
+  statements.push(
+    `CREATE UNIQUE INDEX regions_name_key ON ${schema}.regions (name) INCLUDE (country)`,
+  );
+
   // A table with no columns at all.
   statements.push(`CREATE TABLE ${schema}.empty_shell ()`);
 
@@ -161,12 +180,14 @@ export function buildDiagramFixture(
   }
   dropBatches.push(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
 
-  const extraTableCount = 4; // regions, stores, events, empty_shell
+  // regions, stores, events, event_notes, archived_events, empty_shell
+  const extraTableCount = 6;
   return {
     batches,
     dropBatches,
     tableCount: options.tableCount + extraTableCount,
     foreignKeyCount,
+    drawnRelationshipCount: foreignKeyCount - 1,
   };
 }
 

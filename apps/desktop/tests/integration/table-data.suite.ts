@@ -357,6 +357,24 @@ export function runTableDataIntegrationSuite(
         const tableNames = bulk.tables.map((table) => table.name);
         expect(tableNames).toContain("events");
         expect(tableNames).not.toContain("events_2025");
+        // The parent's key is drawn once, without its per-partition copies;
+        // a key declared straight into a partition is kept.
+        expect(
+          bulk.foreignKeys.filter((key) => key.sourceTable === "event_notes"),
+        ).toEqual([expect.objectContaining({ targetTable: "events" })]);
+        expect(bulk.foreignKeys).toContainEqual(
+          expect.objectContaining({
+            sourceTable: "archived_events",
+            targetTable: "events_2025",
+            targetColumns: ["id", "occurred_on"],
+          }),
+        );
+        // Unique on its key column even with an INCLUDE column.
+        expect(
+          bulk.tables
+            .find((table) => table.name === "regions")
+            ?.columns.find((column) => column.name === "name"),
+        ).toMatchObject({ isUnique: true, isPrimaryKey: false });
         expect(
           bulk.tables.find((table) => table.name === "empty_shell")?.columns,
         ).toEqual([]);

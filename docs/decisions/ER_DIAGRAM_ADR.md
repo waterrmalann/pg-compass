@@ -12,7 +12,7 @@ The usual building blocks are a graph library (React Flow, ~150 KB) plus a layou
 
 ## Decision
 
-1. **One catalog snapshot per load.** A single IPC call (`connections:get-schema-diagram`) runs two `pg_catalog` queries in a read-only transaction with a 15 s statement timeout: tables with columns, and foreign keys. It is scoped to the schemas asked for, and nothing is queried until the Diagram tab is opened. No `information_schema`, row counts or size functions are used. Partitions, and the foreign-key copies PostgreSQL creates for them, are left out.
+1. **One catalog snapshot per load.** A single IPC call (`connections:get-schema-diagram`) runs two `pg_catalog` queries in a read-only transaction with a 15 s statement timeout: tables with columns, and foreign keys. It is scoped to the schemas asked for, and nothing is queried until the Diagram tab is opened. No `information_schema`, row counts or size functions are used. Partitions, and the foreign-key copies PostgreSQL creates for them (`conparentid <> 0`), are left out. A key a user declares straight into a partition is kept. Uniqueness counts index key columns only (`indnkeyatts`), so a unique index with `INCLUDE` columns still marks its column unique. Both catalog columns need PostgreSQL 11 or later.
 2. **Built-in layout, no layout library.** A small, deterministic layered layout (`schema-diagram/layout.ts`):
    - tables are grouped by foreign keys;
    - referenced tables are ranked left of the tables that reference them (longest path, ignoring cycles);
@@ -32,5 +32,6 @@ The usual building blocks are a graph library (React Flow, ~150 KB) plus a layou
 
 - Layout quality is good for typical schemas but simpler than dagre's: no edge routing around cards, and crossings are reduced but not minimised. Users can drag tables, and Reset layout restores the computed layout.
 - Moved positions live in the tab's state only and are not saved between sessions.
-- Foreign keys into schemas outside the current scope show as a column marker with a tooltip, not a line.
+- Foreign keys into schemas outside the current scope, or into a partition, show as a column marker with a tooltip, not a line. The header's relationship count counts drawn lines.
+- The diagram needs PostgreSQL 11 or later.
 - Views are not drawn (they have no foreign keys); they remain in the Schemas and schema viewers.
