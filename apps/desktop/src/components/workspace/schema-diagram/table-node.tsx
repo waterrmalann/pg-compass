@@ -42,18 +42,14 @@ function describeReference(foreignKey: DiagramForeignKey): string {
   return `References ${target} (${foreignKey.targetColumns.join(", ")})`;
 }
 
-function ColumnIcon({
-  column,
-  foreignKey,
-}: Readonly<{
-  column: DiagramColumn;
-  foreignKey: DiagramForeignKey | undefined;
-}>) {
+/**
+ * Primary key, otherwise unique: a primary key is already unique, so one
+ * marker covers both. Foreign keys have their own slot (see ColumnRow), so a
+ * column can show a key and a reference together, e.g. in a junction table.
+ */
+function KeyMarker({ column }: Readonly<{ column: DiagramColumn }>) {
   if (column.isPrimaryKey) {
     return <KeyRound aria-label="Primary key" className="text-foreground" />;
-  }
-  if (foreignKey) {
-    return <Link2 aria-label="Foreign key" />;
   }
   if (column.isUnique) {
     return <Fingerprint aria-label="Unique" />;
@@ -70,12 +66,15 @@ function ColumnRow({
 }>) {
   return (
     <div
-      className="flex items-center gap-1.5 px-3 font-mono"
+      className="flex items-center gap-1 px-3 font-mono"
       style={{ height: ROW_HEIGHT }}
       title={foreignKey ? describeReference(foreignKey) : undefined}
     >
       <span className="flex size-3.5 shrink-0 items-center justify-center text-subtle-foreground [&_svg]:size-3">
-        <ColumnIcon column={column} foreignKey={foreignKey} />
+        <KeyMarker column={column} />
+      </span>
+      <span className="flex size-3.5 shrink-0 items-center justify-center text-subtle-foreground [&_svg]:size-3">
+        {foreignKey ? <Link2 aria-label="Foreign key" /> : null}
       </span>
       <span className="min-w-0 flex-1 truncate text-[12px] text-foreground/85">
         {column.name}

@@ -15,7 +15,7 @@ Use this document as the source of truth when building any app or marketing site
 3. **Hairlines over boxes.** Structure comes from 1px low-contrast borders and dividers, not from heavy fills or big shadows. Many sections are just a divided list.
 4. **Small, precise, medium-weight type.** Headings use weight 500 (sometimes 600), never 700+. Tracking is tight on display sizes. UI text sits at 12–14px, and metadata goes down to 10px.
 5. **Show the product.** Marketing pages put real, working UI previews in front of illustrations. The preview frames use the same components as the app.
-6. **Honest, two-beat copy.** Short declarative headlines ending in a period. Plain descriptions that also say what the product *doesn't* do.
+6. **Honest, two-beat copy.** Short declarative headlines ending in a period. Plain descriptions that also say what the product _doesn't_ do.
 7. **Dark mode is the hero.** Design and review in dark first. Light mode is fully supported and mirrors the same alpha logic.
 
 ---
@@ -31,36 +31,41 @@ These are the only raw colours in the system. Semantic tokens (§2.2) point at t
   /* Neutral scale */
   --color-white: #ffffff;
   --color-black: #000000;
-  --color-neutral-50:  #fafafa;  /* light sidebar, text on dark primary */
-  --color-neutral-100: #f5f5f5;  /* dark-mode foreground and primary */
-  --color-neutral-300: #d4d4d4;  /* chart context series (light) */
-  --color-neutral-400: #a3a3a3;  /* focus ring (light), chart ink (dark) */
-  --color-neutral-500: #737373;  /* base for muted text, ring (dark) */
-  --color-neutral-600: #525252;  /* chart ink (light) */
-  --color-neutral-700: #404040;  /* chart context series (dark) */
-  --color-neutral-800: #262626;  /* light-mode foreground and primary */
-  --color-neutral-950: #0a0a0a;  /* base for dark surfaces */
+  --color-neutral-50: #fafafa; /* light sidebar, text on dark primary */
+  --color-neutral-100: #f5f5f5; /* dark-mode foreground and primary */
+  --color-neutral-300: #d4d4d4; /* chart context series (light) */
+  --color-neutral-400: #a3a3a3; /* focus ring (light), chart ink (dark) */
+  --color-neutral-500: #737373; /* base for muted text, ring (dark) */
+  --color-neutral-600: #525252; /* chart ink (light) */
+  --color-neutral-700: #404040; /* chart context series (dark) */
+  --color-neutral-800: #262626; /* light-mode foreground and primary */
+  --color-neutral-950: #0a0a0a; /* base for dark surfaces */
 
   /* Status hues */
-  --color-red-400:     #ff6467;
-  --color-red-500:     #fb2c36;
-  --color-red-700:     #c10007;
-  --color-amber-400:   #ffb900;
-  --color-amber-500:   #fe9a00;
-  --color-amber-700:   #bb4d00;
+  --color-red-400: #ff6467;
+  --color-red-500: #fb2c36;
+  --color-red-700: #c10007;
+  --color-amber-400: #ffb900;
+  --color-amber-500: #fe9a00;
+  --color-amber-700: #bb4d00;
   --color-emerald-400: #00d492;
   --color-emerald-500: #00bc7d;
   --color-emerald-700: #007a55;
-  --color-blue-400:    #51a2ff;
-  --color-blue-500:    #2b7fff;
-  --color-blue-700:    #1447e6;
+  --color-blue-400: #51a2ff;
+  --color-blue-500: #2b7fff;
+  --color-blue-700: #1447e6;
 
   /* Chart categorical steps (validated, see §2.4) */
-  --viz-blue-l:    #2a78d6;  --viz-blue-d:    #3987e5;
-  --viz-orange-l:  #eb6834;  --viz-orange-d:  #d95926;
-  --viz-aqua-l:    #1baf7a;  --viz-aqua-d:    #199e70;
-  --viz-violet-l:  #4a3aa7;  --viz-violet-d:  #9085e9;
-  --viz-magenta-l: #e87ba4;  --viz-magenta-d: #d55181;
+  --viz-blue-l: #2a78d6;
+  --viz-blue-d: #3987e5;
+  --viz-orange-l: #eb6834;
+  --viz-orange-d: #d95926;
+  --viz-aqua-l: #1baf7a;
+  --viz-aqua-d: #199e70;
+  --viz-violet-l: #4a3aa7;
+  --viz-violet-d: #9085e9;
+  --viz-magenta-l: #e87ba4;
+  --viz-magenta-d: #d55181;
 }
 ```
 
@@ -72,53 +77,65 @@ Resolved surface values (dark): sidebar ≈ `#111111`, page ≈ `#141414`, card 
 :root {
   --radius: 0.625rem; /* 10px */
 
-  --background:            #ffffff;
-  --foreground:            var(--color-neutral-800);            /* #262626 */
-  --card:                  #ffffff;
-  --card-foreground:       var(--color-neutral-800);
-  --popover:               #ffffff;
-  --popover-foreground:    var(--color-neutral-800);
+  --background: #ffffff;
+  --foreground: var(--color-neutral-800); /* #262626 */
+  --card: #ffffff;
+  --card-foreground: var(--color-neutral-800);
+  --popover: #ffffff;
+  --popover-foreground: var(--color-neutral-800);
 
-  --primary:               var(--color-neutral-800);            /* near-black */
-  --primary-foreground:    var(--color-neutral-50);
-  --secondary:             color-mix(in oklab, #000 4%, transparent);
-  --secondary-foreground:  var(--color-neutral-800);
-  --muted:                 color-mix(in oklab, #000 4%, transparent);
-  --muted-foreground:      color-mix(in srgb, var(--color-neutral-500) 90%, #000); /* ≈ #686868 */
-  --subtle-foreground:     color-mix(in srgb, var(--foreground) 72%, transparent); /* text <12px and text on muted fills */
-  --accent:                color-mix(in oklab, #000 4%, transparent);   /* hover fill */
-  --accent-foreground:     var(--color-neutral-800);
+  --primary: var(--color-neutral-800); /* near-black */
+  --primary-foreground: var(--color-neutral-50);
+  --secondary: color-mix(in oklab, #000 4%, transparent);
+  --secondary-foreground: var(--color-neutral-800);
+  --muted: color-mix(in oklab, #000 4%, transparent);
+  --muted-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-500) 90%,
+    #000
+  ); /* ≈ #686868 */
+  --subtle-foreground: color-mix(
+    in srgb,
+    var(--foreground) 72%,
+    transparent
+  ); /* text <12px and text on muted fills */
+  --accent: color-mix(in oklab, #000 4%, transparent); /* hover fill */
+  --accent-foreground: var(--color-neutral-800);
 
-  --border:                color-mix(in oklab, #000 8%, transparent);
-  --input:                 color-mix(in oklab, #000 10%, transparent);
-  --ring:                  var(--color-neutral-400);
+  --border: color-mix(in oklab, #000 8%, transparent);
+  --input: color-mix(in oklab, #000 10%, transparent);
+  --ring: var(--color-neutral-400);
 
-  --destructive:           var(--color-red-500);        /* #fb2c36 */
-  --destructive-foreground:var(--color-red-700);        /* #c10007 */
-  --warning:               var(--color-amber-500);      /* #fe9a00 */
-  --warning-foreground:    var(--color-amber-700);      /* #bb4d00 */
-  --success:               var(--color-emerald-500);    /* #00bc7d */
-  --success-foreground:    var(--color-emerald-700);    /* #007a55 */
-  --info:                  var(--color-blue-500);       /* #2b7fff */
-  --info-foreground:       var(--color-blue-700);       /* #1447e6 */
+  --destructive: var(--color-red-500); /* #fb2c36 */
+  --destructive-foreground: var(--color-red-700); /* #c10007 */
+  --warning: var(--color-amber-500); /* #fe9a00 */
+  --warning-foreground: var(--color-amber-700); /* #bb4d00 */
+  --success: var(--color-emerald-500); /* #00bc7d */
+  --success-foreground: var(--color-emerald-700); /* #007a55 */
+  --info: var(--color-blue-500); /* #2b7fff */
+  --info-foreground: var(--color-blue-700); /* #1447e6 */
 
-  --sidebar:               var(--color-neutral-50);
-  --sidebar-foreground:    color-mix(in srgb, var(--color-neutral-800) 64%, var(--sidebar));
-  --sidebar-primary:       var(--color-neutral-800);
+  --sidebar: var(--color-neutral-50);
+  --sidebar-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-800) 64%,
+    var(--sidebar)
+  );
+  --sidebar-primary: var(--color-neutral-800);
   --sidebar-primary-foreground: var(--color-neutral-50);
-  --sidebar-accent:        color-mix(in oklab, #000 4%, transparent);
+  --sidebar-accent: color-mix(in oklab, #000 4%, transparent);
   --sidebar-accent-foreground: var(--color-neutral-800);
-  --sidebar-border:        color-mix(in oklab, #000 6%, transparent);
-  --sidebar-ring:          var(--color-neutral-400);
+  --sidebar-border: color-mix(in oklab, #000 6%, transparent);
+  --sidebar-ring: var(--color-neutral-400);
 
-  --code:                  #ffffff;
-  --code-foreground:       var(--foreground);
-  --code-highlight:        color-mix(in oklab, #000 4%, transparent);
+  --code: #ffffff;
+  --code-foreground: var(--foreground);
+  --code-highlight: color-mix(in oklab, #000 4%, transparent);
 
   /* Charts: see §2.4 for rules */
-  --chart-ink:     var(--color-neutral-600);  /* single-series default */
-  --chart-context: var(--color-neutral-300);  /* comparison / previous period */
-  --chart-grid:    color-mix(in oklab, #000 6%, transparent);
+  --chart-ink: var(--color-neutral-600); /* single-series default */
+  --chart-context: var(--color-neutral-300); /* comparison / previous period */
+  --chart-grid: color-mix(in oklab, #000 6%, transparent);
   --chart-1: var(--viz-blue-l);
   --chart-2: var(--viz-orange-l);
   --chart-3: var(--viz-aqua-l);
@@ -127,47 +144,63 @@ Resolved surface values (dark): sidebar ≈ `#111111`, page ≈ `#141414`, card 
 }
 
 .dark {
-  --background:            color-mix(in srgb, var(--color-neutral-950) 96%, #fff); /* ≈ #141414 */
-  --foreground:            var(--color-neutral-100);                               /* #f5f5f5 */
-  --card:                  color-mix(in srgb, var(--background) 98%, #fff);        /* ≈ #191919 */
-  --card-foreground:       var(--color-neutral-100);
-  --popover:               color-mix(in srgb, var(--background) 98%, #fff);
-  --popover-foreground:    var(--color-neutral-100);
+  --background: color-mix(
+    in srgb,
+    var(--color-neutral-950) 96%,
+    #fff
+  ); /* ≈ #141414 */
+  --foreground: var(--color-neutral-100); /* #f5f5f5 */
+  --card: color-mix(in srgb, var(--background) 98%, #fff); /* ≈ #191919 */
+  --card-foreground: var(--color-neutral-100);
+  --popover: color-mix(in srgb, var(--background) 98%, #fff);
+  --popover-foreground: var(--color-neutral-100);
 
-  --primary:               var(--color-neutral-100);   /* inverted: light button on dark */
-  --primary-foreground:    var(--color-neutral-800);
-  --secondary:             color-mix(in oklab, #fff 4%, transparent);
-  --secondary-foreground:  var(--color-neutral-100);
-  --muted:                 color-mix(in oklab, #fff 4%, transparent);
-  --muted-foreground:      color-mix(in srgb, var(--color-neutral-500) 90%, #fff); /* ≈ #818181 */
-  --accent:                color-mix(in oklab, #fff 4%, transparent);
-  --accent-foreground:     var(--color-neutral-100);
+  --primary: var(--color-neutral-100); /* inverted: light button on dark */
+  --primary-foreground: var(--color-neutral-800);
+  --secondary: color-mix(in oklab, #fff 4%, transparent);
+  --secondary-foreground: var(--color-neutral-100);
+  --muted: color-mix(in oklab, #fff 4%, transparent);
+  --muted-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-500) 90%,
+    #fff
+  ); /* ≈ #818181 */
+  --accent: color-mix(in oklab, #fff 4%, transparent);
+  --accent-foreground: var(--color-neutral-100);
 
-  --border:                color-mix(in oklab, #fff 6%, transparent);
-  --input:                 color-mix(in oklab, #fff 8%, transparent);
-  --ring:                  var(--color-neutral-500);
+  --border: color-mix(in oklab, #fff 6%, transparent);
+  --input: color-mix(in oklab, #fff 8%, transparent);
+  --ring: var(--color-neutral-500);
 
-  --destructive:           color-mix(in srgb, var(--color-red-500) 90%, #fff);
-  --destructive-foreground:var(--color-red-400);       /* #ff6467 */
-  --warning-foreground:    var(--color-amber-400);     /* #ffb900 */
-  --success-foreground:    var(--color-emerald-400);   /* #00d492 */
-  --info-foreground:       var(--color-blue-400);      /* #51a2ff */
+  --destructive: color-mix(in srgb, var(--color-red-500) 90%, #fff);
+  --destructive-foreground: var(--color-red-400); /* #ff6467 */
+  --warning-foreground: var(--color-amber-400); /* #ffb900 */
+  --success-foreground: var(--color-emerald-400); /* #00d492 */
+  --info-foreground: var(--color-blue-400); /* #51a2ff */
 
-  --sidebar:               color-mix(in srgb, var(--color-neutral-950) 97%, #fff); /* ≈ #111111 */
-  --sidebar-foreground:    color-mix(in srgb, var(--color-neutral-100) 64%, var(--sidebar));
-  --sidebar-primary:       var(--color-neutral-100);
+  --sidebar: color-mix(
+    in srgb,
+    var(--color-neutral-950) 97%,
+    #fff
+  ); /* ≈ #111111 */
+  --sidebar-foreground: color-mix(
+    in srgb,
+    var(--color-neutral-100) 64%,
+    var(--sidebar)
+  );
+  --sidebar-primary: var(--color-neutral-100);
   --sidebar-primary-foreground: var(--color-neutral-800);
-  --sidebar-accent:        color-mix(in oklab, #fff 4%, transparent);
+  --sidebar-accent: color-mix(in oklab, #fff 4%, transparent);
   --sidebar-accent-foreground: var(--color-neutral-100);
-  --sidebar-border:        color-mix(in oklab, #fff 5%, transparent);
-  --sidebar-ring:          var(--color-neutral-400);
+  --sidebar-border: color-mix(in oklab, #fff 5%, transparent);
+  --sidebar-ring: var(--color-neutral-400);
 
-  --code:                  color-mix(in srgb, var(--background) 98%, #fff);
-  --code-highlight:        color-mix(in oklab, #fff 4%, transparent);
+  --code: color-mix(in srgb, var(--background) 98%, #fff);
+  --code-highlight: color-mix(in oklab, #fff 4%, transparent);
 
-  --chart-ink:     var(--color-neutral-400);
+  --chart-ink: var(--color-neutral-400);
   --chart-context: var(--color-neutral-700);
-  --chart-grid:    color-mix(in oklab, #fff 6%, transparent);
+  --chart-grid: color-mix(in oklab, #fff 6%, transparent);
   --chart-1: var(--viz-blue-d);
   --chart-2: var(--viz-orange-d);
   --chart-3: var(--viz-aqua-d);
@@ -188,20 +221,20 @@ Resolved surface values (dark): sidebar ≈ `#111111`, page ≈ `#141414`, card 
 - **Label colours** (tags like "urgent", "hr", "sales") are shown as a 6px dot (`size-1.5 rounded-full`) inside a neutral chip. The chip itself stays neutral.
 - **Priority** is shown as a small icon in a status colour inside a neutral chip: chevron-down in blue/muted for low, chevron-up in amber for medium, double chevron in amber for high, and a red alert icon for urgent.
 - **Gradients** are only near-invisible depth cues, for example `bg-linear-to-b from-muted/20 to-background` behind a board, or a `from-muted/25` 40px fade under a column header.
-- **Normal is neutral.** A healthy, on-track or default state gets no colour: a neutral chip, or no chip at all. Only deviations get colour (warning, destructive, and info for "in progress"). Success green is kept for a *change* worth celebrating (a job finished, a check that just passed), not for resting "OK" states. A screen where everything is fine should look almost entirely grey.
+- **Normal is neutral.** A healthy, on-track or default state gets no colour: a neutral chip, or no chip at all. Only deviations get colour (warning, destructive, and info for "in progress"). Success green is kept for a _change_ worth celebrating (a job finished, a check that just passed), not for resting "OK" states. A screen where everything is fine should look almost entirely grey.
 
 ### 2.4 Chart colour
 
 Charts follow the same restraint as the rest of the UI. Pick the colour by the job the chart does:
 
-| Situation | Colour |
-|---|---|
-| One series (the common case) | `--chart-ink` for every mark. No legend; the panel title names the series. |
-| One series plus a comparison (previous period, target, average) | Current = `--chart-ink`, comparison = `--chart-context`. The legend uses dots. |
-| One highlighted item among many (the selected bar, the anomaly) | That item in `--chart-1`, the rest in `--chart-context`. |
-| 2–5 separate series (reads vs writes, per region) | `--chart-1 … --chart-5` **in order, never skipped or cycled**. More than 5 → fold into "Other" or use small multiples. |
-| A value that *means* good or bad (error rate, failed jobs) | The status tokens (`--destructive`, `--warning`), always with an icon or label. Never mix status and categorical colours in one chart. |
-| Magnitude on a heat grid | One hue ramp: `--chart-1` at 12% → 100% opacity over the surface. |
+| Situation                                                       | Colour                                                                                                                                 |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| One series (the common case)                                    | `--chart-ink` for every mark. No legend; the panel title names the series.                                                             |
+| One series plus a comparison (previous period, target, average) | Current = `--chart-ink`, comparison = `--chart-context`. The legend uses dots.                                                         |
+| One highlighted item among many (the selected bar, the anomaly) | That item in `--chart-1`, the rest in `--chart-context`.                                                                               |
+| 2–5 separate series (reads vs writes, per region)               | `--chart-1 … --chart-5` **in order, never skipped or cycled**. More than 5 → fold into "Other" or use small multiples.                 |
+| A value that _means_ good or bad (error rate, failed jobs)      | The status tokens (`--destructive`, `--warning`), always with an icon or label. Never mix status and categorical colours in one chart. |
+| Magnitude on a heat grid                                        | One hue ramp: `--chart-1` at 12% → 100% opacity over the surface.                                                                      |
 
 The categorical order (blue, orange, aqua, violet, magenta) is validated for colour-vision deficiency. Adjacent pairs clear ΔE 9.2 (light) and 9.4 (dark), and the normal-vision floor ΔE ≥ 19.7. Keep the order. In light mode, aqua and magenta sit below 3:1 contrast on white, so charts that use slot 3 or 5 must show direct value labels or offer a table view.
 
@@ -218,9 +251,11 @@ Also:
 ### 3.1 Families
 
 ```css
---font-sans:    "Geist", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+--font-sans: "Geist", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 --font-heading: var(--font-sans);
---font-mono:    "Geist Mono", "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+--font-mono:
+  "Geist Mono", "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo,
+  Monaco, Consolas, monospace;
 ```
 
 Loading: Google Fonts serves the family as `Geist` / `Geist Mono` (`https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap`). The npm package `@fontsource-variable/geist` registers it as `Geist Variable`. The stack above covers both.
@@ -229,25 +264,25 @@ Geist is a neo-grotesk with a technical feel. If it isn't available, fall back t
 
 ### 3.2 Scale
 
-| Role | Size / line-height | Weight | Tracking | Notes |
-|---|---|---|---|---|
-| Display / H1 | 36px → 48px (md) / 1.06 | 500 | −0.025em | `text-balance`, max ~2 lines |
-| Feature H2 | `clamp(26px, 2.7vw, 34px)` / 1.2 | 500 | −0.035em | `text-balance` |
-| Section H2 | 24px → 30px / 1.33 | 500 | −0.025em | FAQ, resource lists |
-| Story H2 | 30px → 36px / 1.2 | 600 | −0.025em | Long-form or personal sections |
-| Entity title (in-app) | 24–32px / 1.15 | 600 | −0.02em | Task or document title inside detail views |
-| Page title (in-app) | 24px / 1.25 | 500 | −0.025em | Top of an app screen, one per screen. Can be a two-beat sentence ("Replica is healthy. Two tables need a vacuum.") |
-| Metric | 28px / 1.1 | 500 | −0.02em | Stat tiles. `font-variant-numeric: tabular-nums`. Unit follows in `muted-foreground` at 60% of the size ("48.2 GB") |
-| Panel title | 14px / 20px | 500 | 0 | Panel headers, often with a count badge |
-| Table header | 12px / 16px | 500 | 0 | `muted-foreground`, sentence case, no uppercase |
-| Data cell | 13px / 20px | 400 | 0 | Numbers right-aligned with `tabular-nums`. Identifiers and SQL in mono |
-| H3 / item title | 16px / 1.5 | 500 | −0.025em | FAQ questions, list titles |
-| Lead paragraph | 18px / 1.7 | 400 | 0 | `muted-foreground`, max-width ~34rem |
-| Body (marketing) | 15px / 1.8 | 400 | 0 | `muted-foreground`, `text-pretty` |
-| Body (UI) | 14px / 1.43 | 400–500 | 0 | Default app text |
-| Small / button | 14px / 20px | 500 | 0 | Buttons, nav links, footer headings |
-| Caption / eyebrow | 12px / 16px | 400 | 0 | `muted-foreground`, sentence case, **not** uppercase |
-| Micro / meta | 10–11px / 1.5 | 400–500 | 0 | IDs (`WEB-24`), chip text, preview hints. Colour: `--subtle-foreground`, never `muted-foreground` (see §12) |
+| Role                  | Size / line-height               | Weight  | Tracking | Notes                                                                                                               |
+| --------------------- | -------------------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| Display / H1          | 36px → 48px (md) / 1.06          | 500     | −0.025em | `text-balance`, max ~2 lines                                                                                        |
+| Feature H2            | `clamp(26px, 2.7vw, 34px)` / 1.2 | 500     | −0.035em | `text-balance`                                                                                                      |
+| Section H2            | 24px → 30px / 1.33               | 500     | −0.025em | FAQ, resource lists                                                                                                 |
+| Story H2              | 30px → 36px / 1.2                | 600     | −0.025em | Long-form or personal sections                                                                                      |
+| Entity title (in-app) | 24–32px / 1.15                   | 600     | −0.02em  | Task or document title inside detail views                                                                          |
+| Page title (in-app)   | 24px / 1.25                      | 500     | −0.025em | Top of an app screen, one per screen. Can be a two-beat sentence ("Replica is healthy. Two tables need a vacuum.")  |
+| Metric                | 28px / 1.1                       | 500     | −0.02em  | Stat tiles. `font-variant-numeric: tabular-nums`. Unit follows in `muted-foreground` at 60% of the size ("48.2 GB") |
+| Panel title           | 14px / 20px                      | 500     | 0        | Panel headers, often with a count badge                                                                             |
+| Table header          | 12px / 16px                      | 500     | 0        | `muted-foreground`, sentence case, no uppercase                                                                     |
+| Data cell             | 13px / 20px                      | 400     | 0        | Numbers right-aligned with `tabular-nums`. Identifiers and SQL in mono                                              |
+| H3 / item title       | 16px / 1.5                       | 500     | −0.025em | FAQ questions, list titles                                                                                          |
+| Lead paragraph        | 18px / 1.7                       | 400     | 0        | `muted-foreground`, max-width ~34rem                                                                                |
+| Body (marketing)      | 15px / 1.8                       | 400     | 0        | `muted-foreground`, `text-pretty`                                                                                   |
+| Body (UI)             | 14px / 1.43                      | 400–500 | 0        | Default app text                                                                                                    |
+| Small / button        | 14px / 20px                      | 500     | 0        | Buttons, nav links, footer headings                                                                                 |
+| Caption / eyebrow     | 12px / 16px                      | 400     | 0        | `muted-foreground`, sentence case, **not** uppercase                                                                |
+| Micro / meta          | 10–11px / 1.5                    | 400–500 | 0        | IDs (`WEB-24`), chip text, preview hints. Colour: `--subtle-foreground`, never `muted-foreground` (see §12)         |
 
 ### 3.3 Rules
 
@@ -276,23 +311,22 @@ Geist is a neo-grotesk with a technical feel. If it isn't available, fall back t
 ## 5. Radius
 
 ```css
---radius:     0.625rem;                 /* 10px, the base */
---radius-sm:  calc(var(--radius) - 4px) /* 6px  */
---radius-md:  calc(var(--radius) - 2px) /* 8px  */
---radius-lg:  var(--radius)             /* 10px */
---radius-xl:  calc(var(--radius) + 4px) /* 14px */
---radius-2xl: 1rem                      /* 16px */
+--radius: 0.625rem; /* 10px, the base */
+--radius-sm: calc(var(--radius) - 4px) /* 6px  */
+  --radius-md: calc(var(--radius) - 2px) /* 8px  */ --radius-lg: var(--radius)
+  /* 10px */ --radius-xl: calc(var(--radius) + 4px) /* 14px */
+  --radius-2xl: 1rem /* 16px */;
 ```
 
-| Element | Radius |
-|---|---|
-| Buttons, segmented control shell, cards | `lg` (10px) |
-| Segment items, small buttons, menu items, count badges | `md` (8px) |
-| Meta chips / tags | 4px (`rounded`) |
-| Checkboxes | 4px |
-| Board columns, app frames, modals | `xl` (12–14px) |
-| Feature preview panels | 8px |
-| Avatars, status dots | full |
+| Element                                                | Radius          |
+| ------------------------------------------------------ | --------------- |
+| Buttons, segmented control shell, cards                | `lg` (10px)     |
+| Segment items, small buttons, menu items, count badges | `md` (8px)      |
+| Meta chips / tags                                      | 4px (`rounded`) |
+| Checkboxes                                             | 4px             |
+| Board columns, app frames, modals                      | `xl` (12–14px)  |
+| Feature preview panels                                 | 8px             |
+| Avatars, status dots                                   | full            |
 
 Nested radii follow the inner-radius rule: an inner element is 2px smaller than its container when it is inset by 2px (e.g. `rounded-lg` shell with `p-0.5` → `rounded-md` items).
 
@@ -302,16 +336,16 @@ Nested radii follow the inner-radius rule: an inner element is 2px smaller than 
 
 Depth comes from light **edges**, not from drop shadows.
 
-| Level | Recipe | Use |
-|---|---|---|
-| Flat | none | Most surfaces |
-| Hairline lift | `box-shadow: 0 1px 2px rgb(0 0 0 / 0.05)` (`shadow-xs/5`) | Cards, columns, outline buttons |
-| Top highlight (dark) | `::before { box-shadow: 0 -1px color-mix(in oklab, #fff 6%, transparent) }` | Buttons and inputs in dark mode. Simulates a lit top edge |
-| Inner shine (primary) | `inset 0 1px 0 color-mix(in oklab, #fff 16%, transparent)` | Primary buttons |
-| Panel | `0 20px 50px -30px rgb(0 0 0 / 0.25)` | Feature preview panels |
-| Popover | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` (`shadow-lg`) | Tooltips, menus, dropdowns |
-| Floating | `0 25px 50px -12px rgb(0 0 0 / 0.25)` (`shadow-2xl`) + `ring-1 ring-black/5` | App window frame, drawers, dragged items |
-| Glow | `0 0 80px 8px color-mix(in srgb, var(--foreground) 7%, transparent)` | The single hero product screenshot. Used once per page |
+| Level                 | Recipe                                                                             | Use                                                       |
+| --------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Flat                  | none                                                                               | Most surfaces                                             |
+| Hairline lift         | `box-shadow: 0 1px 2px rgb(0 0 0 / 0.05)` (`shadow-xs/5`)                          | Cards, columns, outline buttons                           |
+| Top highlight (dark)  | `::before { box-shadow: 0 -1px color-mix(in oklab, #fff 6%, transparent) }`        | Buttons and inputs in dark mode. Simulates a lit top edge |
+| Inner shine (primary) | `inset 0 1px 0 color-mix(in oklab, #fff 16%, transparent)`                         | Primary buttons                                           |
+| Panel                 | `0 20px 50px -30px rgb(0 0 0 / 0.25)`                                              | Feature preview panels                                    |
+| Popover               | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` (`shadow-lg`) | Tooltips, menus, dropdowns                                |
+| Floating              | `0 25px 50px -12px rgb(0 0 0 / 0.25)` (`shadow-2xl`) + `ring-1 ring-black/5`       | App window frame, drawers, dragged items                  |
+| Glow                  | `0 0 80px 8px color-mix(in srgb, var(--foreground) 7%, transparent)`               | The single hero product screenshot. Used once per page    |
 
 Glass: the sticky header and board canvases use `bg-background/85 backdrop-blur-md` (or `bg-card/70 backdrop-blur`) with `supports-[backdrop-filter]` fallbacks.
 
@@ -319,13 +353,13 @@ Glass: the sticky header and board canvases use `bg-background/85 backdrop-blur-
 
 ## 7. Motion
 
-| Token | Value | Use |
-|---|---|---|
-| Default | `150ms cubic-bezier(0.4, 0, 0.2, 1)` | Colour, opacity and shadow transitions |
-| Snappy out | `160ms cubic-bezier(0.23, 1, 0.32, 1)` | Press feedback (`active:scale-[0.97]`), click pulses |
-| Glide | `700ms cubic-bezier(0.77, 0, 0.175, 1)` | Scripted demo cursors, large positional moves |
-| Card settle | `300ms ease-out` | Column/card border and background changes |
-| Drawer | `200ms cubic-bezier(0.23, 1, 0.32, 1)` (scrim 150ms fade) | Mobile navigation, side sheets |
+| Token       | Value                                                     | Use                                                  |
+| ----------- | --------------------------------------------------------- | ---------------------------------------------------- |
+| Default     | `150ms cubic-bezier(0.4, 0, 0.2, 1)`                      | Colour, opacity and shadow transitions               |
+| Snappy out  | `160ms cubic-bezier(0.23, 1, 0.32, 1)`                    | Press feedback (`active:scale-[0.97]`), click pulses |
+| Glide       | `700ms cubic-bezier(0.77, 0, 0.175, 1)`                   | Scripted demo cursors, large positional moves        |
+| Card settle | `300ms ease-out`                                          | Column/card border and background changes            |
+| Drawer      | `200ms cubic-bezier(0.23, 1, 0.32, 1)` (scrim 150ms fade) | Mobile navigation, side sheets                       |
 
 - Hover states change **fill or colour only**. No lifts, no scale-ups.
 - Secondary affordances show up on hover (`opacity-0 → group-hover:opacity-100`, 150ms). Examples: "Add task" at the foot of a column, row detail text, arrows.
@@ -353,26 +387,26 @@ Base: `relative inline-flex items-center justify-center gap-2 whitespace-nowrap 
 
 Touch: on `pointer-coarse`, add an `::after` hit area of at least 44×44px.
 
-| Size | Height | Padding X | Text |
-|---|---|---|---|
-| xs | 24px | 8px | 12px |
-| sm | 28px | 10px | 12px |
-| default | 32px | 10px | 14px |
-| lg | 40px | 14px | 14px |
-| xl (hero CTA) | 48px | 20px | 14px |
+| Size          | Height | Padding X | Text |
+| ------------- | ------ | --------- | ---- |
+| xs            | 24px   | 8px       | 12px |
+| sm            | 28px   | 10px      | 12px |
+| default       | 32px   | 10px      | 14px |
+| lg            | 40px   | 14px      | 14px |
+| xl (hero CTA) | 48px   | 20px      | 14px |
 
-| Variant | Rest | Hover | Pressed (`:active`, `[data-pressed]`) |
-|---|---|---|---|
-| **Primary** | `bg-primary text-primary-foreground border-primary shadow-xs` + inset `0 1px 0 #fff/16%`. Dark: a near-white button on a near-black page. Light: near-black on white. | `bg-primary/90` (border too) | `bg-primary/85`, inset highlight removed, `scale(0.98)` |
-| **Outline** | `bg-background border-border shadow-xs/5` (dark: bg `#fff/2.5%`, border `#fff/8%`, `::before` top highlight `#fff/6%`) | `bg-accent/50` | `bg-accent`, top highlight removed |
-| **Secondary** | `bg-secondary text-secondary-foreground border-transparent` | `bg-secondary/80` | `bg-accent` |
-| **Ghost** | `border-transparent text-muted-foreground` (or foreground when it's the only label) | `bg-accent text-foreground` | `bg-accent/80` |
-| **Destructive** | `bg-destructive text-white border-destructive` (reserve for confirmations) | `bg-destructive/90` | `bg-destructive/85` |
-| **Link** | `text-muted-foreground`, often with a trailing `↗` (14px) | `text-foreground underline underline-offset-4` | none |
+| Variant         | Rest                                                                                                                                                                  | Hover                                          | Pressed (`:active`, `[data-pressed]`)                   |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| **Primary**     | `bg-primary text-primary-foreground border-primary shadow-xs` + inset `0 1px 0 #fff/16%`. Dark: a near-white button on a near-black page. Light: near-black on white. | `bg-primary/90` (border too)                   | `bg-primary/85`, inset highlight removed, `scale(0.98)` |
+| **Outline**     | `bg-background border-border shadow-xs/5` (dark: bg `#fff/2.5%`, border `#fff/8%`, `::before` top highlight `#fff/6%`)                                                | `bg-accent/50`                                 | `bg-accent`, top highlight removed                      |
+| **Secondary**   | `bg-secondary text-secondary-foreground border-transparent`                                                                                                           | `bg-secondary/80`                              | `bg-accent`                                             |
+| **Ghost**       | `border-transparent text-muted-foreground` (or foreground when it's the only label)                                                                                   | `bg-accent text-foreground`                    | `bg-accent/80`                                          |
+| **Destructive** | `bg-destructive text-white border-destructive` (reserve for confirmations)                                                                                            | `bg-destructive/90`                            | `bg-destructive/85`                                     |
+| **Link**        | `text-muted-foreground`, often with a trailing `↗` (14px)                                                                                                             | `text-foreground underline underline-offset-4` | none                                                    |
 
 Disabled: `opacity: 0.64; pointer-events: none` for every variant. Icon-only buttons are square (width = height) with the same variants, most often ghost.
 
-**Primary button rule.** A screen's header or top bar has **at most one** primary button, the main action for that screen. A self-contained tool panel inside the screen (a query editor, a composer, a form in a dialog) may have its own primary for *its* action (Run, Send, Save), at size `sm` or `xs`. Everything else is outline, ghost or link.
+**Primary button rule.** A screen's header or top bar has **at most one** primary button, the main action for that screen. A self-contained tool panel inside the screen (a query editor, a composer, a form in a dialog) may have its own primary for _its_ action (Run, Send, Save), at size `sm` or `xs`. Everything else is outline, ghost or link.
 
 Hero pattern: a full-width stack on mobile of **Primary (with →)** above **Outline**, and under them a 12px muted reassurance line ("14-day trial. No credit card required.").
 
@@ -388,13 +422,13 @@ Hero pattern: a full-width stack on mobile of **Primary (with →)** above **Out
 
 ### 9.3 Chips, badges & tags
 
-| Kind | Recipe |
-|---|---|
-| **Meta chip** (date, subtasks, checklist) | `inline-flex h-5.5 items-center gap-1 rounded border border-border/70 bg-muted/55 px-2 text-[11px]` in `--subtle-foreground` + 12px icon |
-| **Label tag** | Meta chip + leading `size-1.5 rounded-full` dot in the label colour, text `text-foreground/90 font-medium` |
-| **Status chip** | `flex h-5.5 items-center gap-1 rounded px-2 text-[11px] font-medium bg-{status}/10 text-{status}-foreground` + 12px status icon (e.g. overdue date → destructive; due soon → warning). Only for deviations; see "Normal is neutral" (§2.3) |
-| **Count badge** | `rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium` in `--subtle-foreground` |
-| **Keyboard hint** | `inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-[11px]` in `--subtle-foreground` (e.g. `⌘K`) |
+| Kind                                      | Recipe                                                                                                                                                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Meta chip** (date, subtasks, checklist) | `inline-flex h-5.5 items-center gap-1 rounded border border-border/70 bg-muted/55 px-2 text-[11px]` in `--subtle-foreground` + 12px icon                                                                                                   |
+| **Label tag**                             | Meta chip + leading `size-1.5 rounded-full` dot in the label colour, text `text-foreground/90 font-medium`                                                                                                                                 |
+| **Status chip**                           | `flex h-5.5 items-center gap-1 rounded px-2 text-[11px] font-medium bg-{status}/10 text-{status}-foreground` + 12px status icon (e.g. overdue date → destructive; due soon → warning). Only for deviations; see "Normal is neutral" (§2.3) |
+| **Count badge**                           | `rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium` in `--subtle-foreground`                                                                                                                                                           |
+| **Keyboard hint**                         | `inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-[11px]` in `--subtle-foreground` (e.g. `⌘K`)                                                                                                     |
 
 ### 9.4 Avatar
 
@@ -408,7 +442,9 @@ group relative w-full rounded-lg border border-border bg-background p-3 text-lef
 shadow-xs/5 transition-colors hover:bg-muted/40
 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
 ```
+
 Anatomy, top to bottom:
+
 1. Row: ID (`text-[11px]` in `--subtle-foreground`, e.g. `ABC-12`) on the left, assignee avatar (20px) on the right.
 2. Title: `text-sm font-medium text-foreground`, wraps to 2 lines max.
 3. Tags row: label tags.
@@ -420,6 +456,7 @@ Anatomy, top to bottom:
 flex flex-col rounded-xl border border-border/70 bg-muted/40 dark:bg-card/90
 shadow-xs/5 transition-all duration-300 ease-out hover:border-border/90
 ```
+
 - Header: `px-3 py-2 border-b border-border/60`, status icon + `text-sm font-medium` title + count badge.
 - Body: `p-2`, cards stacked with `gap-2`.
 - Footer: `border-t border-border/60 p-1.5`, ghost row button "+ Add item" (`text-xs text-muted-foreground`). Shown on hover at `md+`, always shown on touch.
@@ -440,6 +477,7 @@ shadow-xs/5 transition-all duration-300 ease-out hover:border-border/90
 ### 9.9 Header (marketing)
 
 `sticky top-0 z-50 h-16 border-b bg-background/85 px-4 md:px-6 backdrop-blur-md`
+
 - Left: wordmark (logo glyph + name, ~24px tall).
 - Centre/left: nav links `text-sm font-medium text-muted-foreground hover:text-primary px-2 py-1.5`. Dropdown for resources.
 - Right: search trigger with a `⌘K` hint, plus a Primary `sm/default` "Get started" button. On mobile: the button plus a hamburger (ghost icon button).
@@ -447,6 +485,7 @@ shadow-xs/5 transition-all duration-300 ease-out hover:border-border/90
 ### 9.10 Footer
 
 `border-t border-border/30 bg-sidebar/70 px-6 py-12 sm:py-16`
+
 - First column: wordmark + one-line tagline (`text-sm text-muted-foreground`).
 - Link columns: heading `text-sm font-medium text-foreground`, links `text-sm text-muted-foreground hover:text-foreground`, 12px vertical gap.
 - Bottom bar: copyright + small social icons, muted.
@@ -456,12 +495,14 @@ shadow-xs/5 transition-all duration-300 ease-out hover:border-border/90
 Two tiers:
 
 **Hero app window:** `overflow-hidden rounded-xl border border-border/70 bg-background shadow-2xl ring-1 ring-black/5` plus the page's single **glow**. Inside it is a real app shell:
+
 - Top bar: `h-11 border-b border-border/80 bg-card px-2`, breadcrumb `Workspace / Project` (the parent in muted, the current page in foreground 500), and a segmented view switcher.
 - Filter bar: an outline `h-7` button with a filter icon.
 - Canvas: `bg-linear-to-b from-muted/20 to-background`, columns laid out horizontally with `gap-3 p-3`.
 - Below the frame: underline scene tabs + a play/pause button.
 
 **Feature preview panel:** `rounded-[8px] border border-border bg-background overflow-hidden shadow-[0_20px_50px_-30px_rgb(0_0_0/0.25)]`
+
 - Header: `min-h-12 px-4 py-2.5 border-b text-[13px] font-medium text-muted-foreground`. Shows the entity ID on the left and actions on the right.
 - Property strip: inline status, priority, assignee and date, each as icon + 12px label.
 - Body: `p-6 flex flex-col gap-7`. Entity title in 32px/600/−0.02em, description in 15.5px/1.72 muted.
@@ -491,6 +532,7 @@ The basic container for anything on an app dashboard.
 ```
 rounded-xl border border-border bg-card shadow-xs/5 overflow-hidden
 ```
+
 - **Header:** `flex items-center gap-2 min-h-11 px-4 border-b border-border`. It holds a 14px muted icon, the panel title (14px/500), an optional count badge, and on the right either a muted 12px note ("Sorted by size") or ghost `xs` actions.
 - **Body:** `p-4`. Lists and tables go edge to edge with no body padding, and their rows carry the 16px inset.
 - **Footer (optional):** `px-4 py-2.5 border-t border-border text-[12px] text-muted-foreground`. Use it for a one-line explanation of the data ("Durations over 1 s are marked red.").
@@ -504,6 +546,7 @@ A panel with no header, for a single headline number.
 ```
 rounded-xl border border-border bg-card p-4 shadow-xs/5 flex flex-col gap-3
 ```
+
 1. **Label row:** 12px `muted-foreground` label on the left, 14px muted icon on the right.
 2. **Value:** the Metric role (28px/500, tabular). A unit or denominator follows in `muted-foreground` at 60% size ("38 / 200", "184 ms").
 3. **Sparkline (optional):** 32px tall, full width. A 1.5px `--chart-ink` stroke, area fill of the ink at 8%, and a 4px end dot in `--foreground` with a 2px `--card` ring. No axes.
@@ -519,6 +562,7 @@ thead th: h-9 px-4 text-left text-[12px] font-medium text-muted-foreground borde
 tbody td: h-10 px-4 border-b border-border/70 (none on the last row)
 tbody tr: transition-colors hover:bg-muted/40; selected → bg-accent
 ```
+
 - Numbers are right-aligned with `tabular-nums`, and their header is right-aligned too. Identifiers, SQL and paths are in mono at 12.5px.
 - Qualified names split tone: `schema.` in `muted-foreground`, the name in foreground 500.
 - **Inline bar (optional):** a 48×4px track (`bg-muted`, radius 2px) with a `--chart-ink` fill, placed before a size value to show relative magnitude.
@@ -549,24 +593,26 @@ code:      font-mono text-[12.5px] leading-[20px] p-3, tab-size 2, overflow-x au
 gutter:    line numbers right-aligned, min-width 2ch, text-muted-foreground/60, pr-3
 current line: bg-code-highlight
 ```
+
 Syntax colours stay mostly monochrome, so the code reads like the rest of the UI:
 
-| Token | Colour |
-|---|---|
-| Keywords (`SELECT`, `const`, `if`) | `--foreground`, weight 500 |
-| Identifiers, columns, variables | `--foreground` at 85% |
-| Functions | `--foreground` |
-| Strings | `--success-foreground` |
-| Numbers, booleans, `NULL` | `--info-foreground` |
-| Comments | `--muted-foreground` (no italics) |
-| Operators, punctuation | `--muted-foreground` |
-| Errors / invalid | wavy underline in `--destructive` |
+| Token                              | Colour                            |
+| ---------------------------------- | --------------------------------- |
+| Keywords (`SELECT`, `const`, `if`) | `--foreground`, weight 500        |
+| Identifiers, columns, variables    | `--foreground` at 85%             |
+| Functions                          | `--foreground`                    |
+| Strings                            | `--success-foreground`            |
+| Numbers, booleans, `NULL`          | `--info-foreground`               |
+| Comments                           | `--muted-foreground` (no italics) |
+| Operators, punctuation             | `--muted-foreground`              |
+| Errors / invalid                   | wavy underline in `--destructive` |
 
 Code editor chrome: a header with the file name (12px mono muted) on the right and a toolbar underneath the code (`border-t px-3 py-2`) holding the Run primary (`sm`), a Format ghost and a `⌘↵` keyboard hint. The result area below starts as a 12px muted placeholder line.
 
 ### 9.20 Mobile navigation drawer
 
 Below 768px the sidebar leaves the layout and becomes a drawer:
+
 - **Trigger:** a ghost icon button (menu icon) at the left of the top bar. The top bar keeps the page title, the screen's primary action (as an icon button, or `sm`) and at most one more icon button. Everything else moves into the drawer or an overflow menu.
 - **Drawer:** fixed, full height, `width: min(288px, 85vw)`, `bg-sidebar border-r border-sidebar-border shadow-2xl`, sliding in from the left with `transform` over 200ms `cubic-bezier(0.23, 1, 0.32, 1)`.
 - **Scrim:** `bg-black/40 backdrop-blur-[2px]`, fading in over 150ms. Tapping it closes the drawer.
@@ -576,6 +622,7 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 ### 9.21 Top bar (app)
 
 `sticky top-0 z-20 flex h-11 items-center gap-2 px-3 border-b border-border bg-background/85 backdrop-blur-md`
+
 - **Left:** a breadcrumb. Ancestors are 13px `muted-foreground` (mono for connection or resource names), separated by a muted `/`. The current page is 13px foreground 500.
 - **Middle:** a segmented view switcher (§9.2), if the screen has views.
 - **Right:** in order, icon buttons (theme toggle, notifications), then outline actions, then the one primary. Top-bar buttons are size `sm` (28px) and icon buttons are 28×28.
@@ -595,6 +642,7 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 ## 10. Page patterns
 
 ### Marketing landing (in order)
+
 1. **Sticky glass header**
 2. **Hero:** left-aligned H1 (two lines, balanced), muted lead, stacked CTAs (primary with arrow + outline), 12px reassurance line, small muted text links with icons (e.g. source repo, launch page ↗).
 3. **Live product window** with glow and scene switcher.
@@ -607,6 +655,7 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 10. **Footer** on the sidebar tone.
 
 ### App shell
+
 - Sidebar: `bg-sidebar`, `border-sidebar-border`, text `sidebar-foreground` (64% blend, so inactive items recede). The active item uses `bg-sidebar-accent text-sidebar-accent-foreground`, radius `md`.
 - Main: `bg-background`, a 44px top bar with breadcrumb and view switcher, then content.
 - Detail views: large 600-weight title, property strip, rich text body, sub-item checklist with a progress ring and count (`1/2`).
@@ -637,6 +686,7 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 ## 13. Do / Don't
 
 **Do**
+
 - Build every nested surface from `muted`, `accent` and `border` alphas.
 - Keep one primary button per screen header (tool panels may have their own, see §9.1).
 - Leave healthy states grey. Colour is for what needs attention.
@@ -646,11 +696,12 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 - Show real, interactive UI in marketing.
 
 **Don't**
+
 - Don't introduce a brand accent colour for buttons or links. Primary is neutral (inverted).
 - Don't use bold (700) headings, all-caps eyebrows or wide letter-spacing.
 - Don't stack shadows or add hover lifts.
 - Don't fill status chips with solid colour.
-- Don't colour chart series green, amber or red unless they *mean* good, warning or bad.
+- Don't colour chart series green, amber or red unless they _mean_ good, warning or bad.
 - Don't set 10–11px text in `muted-foreground`.
 - Don't use illustrations, 3D blobs or stock photography.
 - Don't use large radii (>16px) on anything but avatars.
@@ -665,7 +716,9 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 
 @theme inline {
   --font-sans: "Geist", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono:
+    "Geist Mono", "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo,
+    monospace;
   --font-heading: var(--font-sans);
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -720,11 +773,23 @@ Below 768px the sidebar leaves the layout and becomes a drawer:
 /* paste the --viz-* primitives from §2.1 (Tailwind already has the others), then the :root and .dark blocks from §2.2 */
 
 @layer base {
-  * { @apply border-border outline-ring/50; }
-  html { @apply antialiased; }
-  body { @apply bg-background text-foreground font-sans; }
-  h1, h2, h3 { @apply font-heading text-balance; }
-  p { text-wrap: pretty; }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading text-balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
 }
 ```
 
@@ -742,13 +807,13 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Primitives beyond shadcn.**
 
-| Component | Use |
-|---|---|
-| `Panel`, `PanelHeader`, `PanelTitle`, `PanelCount`, `PanelFooter` | Every workspace table, result set and grouped list (§9.15). Pagination is the panel footer. |
-| `SegmentedControl` | Any 2–4 option mode switch (view mode, export format, connection mode, backup source, access level). Segments are `aria-pressed` buttons. |
-| `EmptyState`, `LoadingState` | Centered empty, error and loading placeholders. |
-| `Kbd` | Keyboard hints (sidebar search, run query). |
-| `fieldClassName` (from `input.tsx`) | Shared field recipe for native `select`, `textarea` and editor containers. |
+| Component                                                         | Use                                                                                                                                       |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `Panel`, `PanelHeader`, `PanelTitle`, `PanelCount`, `PanelFooter` | Every workspace table, result set and grouped list (§9.15). Pagination is the panel footer.                                               |
+| `SegmentedControl`                                                | Any 2–4 option mode switch (view mode, export format, connection mode, backup source, access level). Segments are `aria-pressed` buttons. |
+| `EmptyState`, `LoadingState`                                      | Centered empty, error and loading placeholders.                                                                                           |
+| `Kbd`                                                             | Keyboard hints (sidebar search, run query).                                                                                               |
+| `fieldClassName` (from `input.tsx`)                               | Shared field recipe for native `select`, `textarea` and editor containers.                                                                |
 
 **Data grids.** Column headers show the name in 12.5px mono foreground over the type in 11px mono `subtle-foreground`. Values are 12.5px mono. Row and cell actions (copy, edit) are `icon-xs` ghost buttons revealed on hover. Unknown values render as a muted `—`.
 
@@ -764,7 +829,7 @@ How the desktop app (`apps/desktop`) applies this system. Tokens live in `src/in
 
 **Intentional exceptions.** Theme-picker previews use fixed neutral values because they show a theme other than the active one.
 
-**Schema diagram.** The database tab's Diagram sub-tab is one full-height panel. Its header holds a 28px native schema `select` (field recipe), a 12px muted "N tables · N relationships" count, an `xs` ghost Reset layout (only after a table is moved) and a 28px Find table input. The canvas sits on `background` with a `--border` dot grid that scales with zoom (hidden below 30%). Tables are `card` cards with a hairline border and an `xs` shadow. The header is mono 12.5px/500 with a muted `schema.` prefix when all schemas are shown, plus an `icon-xs` ghost Open table button that appears on hover. Column rows are 24px, with the name in mono 12px at `foreground/85`, the type in mono 11px `subtle-foreground` (short aliases such as `timestamptz`), and 12px `subtle-foreground` markers: key (primary key, `foreground`), link (foreign key), fingerprint (unique), and a hollow diamond for nullable. Relationship lines are 1.25px non-scaling `muted-foreground` curves at 50% with dot ends. Selecting a table gives it a `ring` border, draws its lines in `foreground` at 1.75px, and dims unrelated tables to 40% and other lines to 15%. Below 45% zoom, cards drop their rows and become `muted-foreground/20` blocks. Zoom controls are a small `card` group at the bottom right (zoom out, a mono percentage, zoom in, fit). The panel footer carries the marker legend and a one-line hint. No colour is used: the diagram is entirely neutral.
+**Schema diagram.** The database tab's Diagram sub-tab is one full-height panel. Its header holds a 28px native schema `select` (field recipe), a 12px muted "N tables · N relationships" count, an `xs` ghost Reset layout (only after a table is moved) and a 28px Find table input. The canvas sits on `background` with a `--border` dot grid that scales with zoom (hidden below 30%). Tables are `card` cards with a hairline border and an `xs` shadow. The header is mono 12.5px/500 with a muted `schema.` prefix when all schemas are shown, plus an `icon-xs` ghost Open table button that appears on hover. Column rows are 24px, with the name in mono 12px at `foreground/85`, the type in mono 11px `subtle-foreground` (short aliases such as `timestamptz`), and 12px `subtle-foreground` markers in two leading slots: key (primary key, `foreground`) or fingerprint (unique) first, then link (foreign key), so a column that is both shows both; a hollow diamond after the type marks nullable. Relationship lines are 1.25px non-scaling `muted-foreground` curves at 50% with dot ends. Selecting a table gives it a `ring` border, draws its lines in `foreground` at 1.75px, and dims unrelated tables to 40% and other lines to 15%. Below 45% zoom, cards drop their rows and become `muted-foreground/20` blocks. Zoom controls are a small `card` group at the bottom right (zoom out, a mono percentage, zoom in, fit). The panel footer carries the marker legend and a one-line hint. No colour is used: the diagram is entirely neutral.
 
 **Data query toolbar.** The Data tab keeps the Filter field (search icon, 32px single-line editor) in the first row with an icon-only outline **Query options** toggle, an outline Apply and a ghost Clear. The toggle opens a second row with Project and Sort fields, then 112px Skip and Limit inputs with an inline 12px muted label, and a 12px muted help line. The row stays mounted while hidden so it opens instantly; while it is closed, active options show as a count chip inside the toggle, never as colour alone. Skip and Limit errors run full width under the row. Errors appear under the field as 12px `destructive-foreground` text with an alert icon and a wavy underline on the exact range. Projected results replace Add with an `aria-disabled` ghost "Read-only" button whose tooltip says "Clear projection to edit rows." The export dialog lists the query's fields in a `bg-code` box with an `icon-xs` ghost eye toggle (`aria-pressed`) that reveals the compiled SQL in mono and its `$n` parameters as SQL literals.
 

@@ -69,4 +69,8 @@ The layout is pure and deterministic, so it is unit tested directly.
 - Long chains of foreign keys gave a very wide, flat layout, so a group with many ranks wraps into bands. Chains of up to eight ranks always stay on one band, so small schemas keep a plain left-to-right reading.
 - Changing schema used to fit the view to the previous diagram, because the fit ran before the new data arrived. The fit now waits for the loaded scope, and a new scope shows the loading state instead of the old diagram. A unit test and the Playwright spec cover this.
 - `format_type` spellings are shortened on cards (`timestamp with time zone` → `timestamptz`). The full type shows on hover.
+- Review follow-ups:
+  - Unique markers count index key columns only, so `UNIQUE … INCLUDE (…)` still marks its column.
+  - Foreign keys a user declares into a partition are kept; only PostgreSQL's per-partition copies are dropped.
+  - Cards show the key or unique marker and the foreign-key marker together, so junction-table and one-to-one columns show both.
 - Screenshots are in `docs/screenshots/er-diagram`. They are produced by the Playwright spec with `PG_COMPASS_E2E_SCREENSHOT_DIR` set.

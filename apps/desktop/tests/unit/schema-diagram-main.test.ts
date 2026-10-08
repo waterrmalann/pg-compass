@@ -163,10 +163,11 @@ describe("loadSchemaDiagram", () => {
     const sql = query.mock.calls.map(([text]) => text).join("\n");
     expect(sql).not.toMatch(/information_schema/i);
     expect(sql).not.toMatch(/pg_(total_)?relation_size|reltuples|count\(/i);
-    // Partitions and their copied foreign keys are excluded.
+    // Partitions and the foreign-key copies made for them are excluded,
+    // but not keys a user declared against a partition.
     expect(sql).toMatch(/NOT c\.relispartition/);
-    expect(sql).toMatch(/NOT source\.relispartition/);
-    expect(sql).toMatch(/NOT target\.relispartition/);
+    expect(sql).toMatch(/con\.conparentid = 0/);
+    expect(sql).not.toMatch(/NOT target\.relispartition/);
   });
 
   it("rolls back and rethrows when a catalog query fails", async () => {

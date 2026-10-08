@@ -6,7 +6,7 @@
  * or relation sizes, and `information_schema` is avoided because its views
  * are slow on large catalogs. Partitions, and the foreign-key copies
  * PostgreSQL creates for them, are left out so a partitioned table is drawn
- * once.
+ * once. Needs PostgreSQL 11 or later (`indnkeyatts`, `conparentid`).
  */
 
 import type { ClientBase } from "pg";
@@ -58,7 +58,8 @@ const TABLES_SQL = `
       SELECT 1 FROM pg_index i
       WHERE i.indrelid = c.oid
         AND i.indisunique
-        AND i.indnatts = 1
+        -- Key columns only: INCLUDE columns do not take part in uniqueness.
+        AND i.indnkeyatts = 1
         AND i.indkey[0] = a.attnum
         AND i.indpred IS NULL
     ) AS is_unique
@@ -97,8 +98,10 @@ const FOREIGN_KEYS_SQL = `
   JOIN pg_class target ON target.oid = con.confrelid
   JOIN pg_namespace target_ns ON target_ns.oid = target.relnamespace
   WHERE con.contype = 'f'
+    -- Copies PostgreSQL makes for partitions point at a parent constraint.
+    -- A key a user declared against a partition is kept.
+    AND con.conparentid = 0
     AND NOT source.relispartition
-    AND NOT target.relispartition
     AND source_ns.nspname = ANY ($1::text[])
   ORDER BY source_ns.nspname, source.relname, con.conname
 `;

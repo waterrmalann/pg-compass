@@ -128,7 +128,7 @@ test("draws a 1,500-table schema, keeping off-screen tables out of the DOM", asy
   await expect(page.getByLabel("Diagram schema")).toHaveValue(BULK_SCHEMA);
   await expect(
     page.getByText(
-      `${count(BULK.tableCount)} tables · ${count(BULK.foreignKeyCount)} relationships`,
+      `${count(BULK.tableCount)} tables · ${count(BULK.drawnRelationshipCount)} relationships`,
     ),
   ).toBeVisible({ timeout: 20_000 });
   await expect(tableCards(page).first()).toBeVisible();

@@ -230,6 +230,62 @@ describe("SchemaDiagramTab", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks a column that is both a key and a reference with both markers", async () => {
+    getSchemaDiagram.mockResolvedValueOnce(
+      ok({
+        tables: [
+          { schema: "public", name: "users", columns: [column("id", true)] },
+          {
+            schema: "public",
+            name: "memberships",
+            columns: [
+              column("user_id", true),
+              { ...column("profile_id"), isUnique: true },
+            ],
+          },
+        ],
+        foreignKeys: [
+          {
+            ...PUBLIC_DIAGRAM.foreignKeys[0]!,
+            name: "memberships_user_id_fkey",
+            sourceTable: "memberships",
+          },
+          {
+            name: "memberships_profile_id_fkey",
+            sourceSchema: "public",
+            sourceTable: "memberships",
+            sourceColumns: ["profile_id"],
+            targetSchema: "billing",
+            targetTable: "profiles",
+            targetColumns: ["id"],
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    await openDiagram(user);
+    const memberships = await screen.findByRole("group", {
+      name: "Table public.memberships",
+    });
+
+    const userRow = within(memberships).getByText("user_id").parentElement!;
+    expect(within(userRow).getByLabelText("Primary key")).toBeInTheDocument();
+    expect(within(userRow).getByLabelText("Foreign key")).toBeInTheDocument();
+
+    // A one-to-one reference into another schema: unique and foreign key,
+    // with the reference named on hover since no line can be drawn.
+    const profileRow =
+      within(memberships).getByText("profile_id").parentElement!;
+    expect(within(profileRow).getByLabelText("Unique")).toBeInTheDocument();
+    expect(
+      within(profileRow).getByLabelText("Foreign key"),
+    ).toBeInTheDocument();
+    expect(profileRow).toHaveAttribute(
+      "title",
+      "References billing.profiles (id)",
+    );
+  });
+
   it("loads every schema for All schemas and prefixes table names", async () => {
     const user = userEvent.setup();
     await openDiagram(user);
