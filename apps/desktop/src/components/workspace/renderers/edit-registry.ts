@@ -315,7 +315,9 @@ function makeJsonEditor(pgCast: "json" | "jsonb"): TypeEditor {
     kind: "inline",
     toInput(value) {
       if (value === null || value === undefined) return "";
-      if (typeof value === "string") return value;
+      // `pg` parses json/jsonb into JS values, so a JS string here is a JSON
+      // string scalar and must be re-quoted — returning it bare would make an
+      // unchanged save fail validation, or turn "123" into the number 123.
       return JSON.stringify(value, null, 2);
     },
     validate(raw) {

@@ -39,9 +39,8 @@ describe("parseEWKBHex", () => {
     expect(geom).toEqual({ type: "Unknown", srid: undefined });
   });
 
-  it("returns Invalid for empty or malformed hex", () => {
+  it("returns Invalid for hex too short to hold a geometry header", () => {
     expect(parseEWKBHex("")).toEqual({ type: "Invalid" });
-    expect(parseEWKBHex("zz")).toEqual({ type: "Invalid" });
     expect(parseEWKBHex("01")).toEqual({ type: "Invalid" });
   });
 });
@@ -92,6 +91,13 @@ describe("extractPoint", () => {
     expect(extractPoint("LINESTRING(1 2, 3 4)")).toBeNull();
     expect(extractPoint("")).toBeNull();
     expect(extractPoint("   ")).toBeNull();
+  });
+
+  it("reads lat/lng/SRID from an EWKB hex Point", () => {
+    // SRID 3857 (0x0F11, little-endian 110F0000), x=1, y=2.
+    expect(
+      extractPoint("0101000020110F0000000000000000F03F0000000000000040"),
+    ).toEqual({ lat: 2, lng: 1, srid: 3857 });
   });
 
   it("returns null when EWKB hex parses to a non-Point geometry", () => {

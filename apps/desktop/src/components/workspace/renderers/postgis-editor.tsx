@@ -88,6 +88,27 @@ function initialWkt(
   return "";
 }
 
+// Strict, unlike `parseFloat`, which reads "40abc" as 40.
+function parseNumberField(text: string): number {
+  const trimmed = text.trim();
+  if (trimmed === "") return Number.NaN;
+  return Number(trimmed);
+}
+
+function parsePointFields(
+  lat: string,
+  lng: string,
+  srid: string,
+): { lat: number; lng: number; srid: number } | null {
+  const latN = parseNumberField(lat);
+  const lngN = parseNumberField(lng);
+  const sridN = parseNumberField(srid);
+  const valid =
+    Number.isFinite(latN) && Number.isFinite(lngN) && Number.isInteger(sridN);
+  if (!valid) return null;
+  return { lat: latN, lng: lngN, srid: sridN };
+}
+
 interface GeometryMapEditorProps extends TypeEditorProps {
   /** The column's PostGIS type, sent back as the write cast. */
   pgCast: "geometry" | "geography";
@@ -114,23 +135,15 @@ export function GeometryMapEditor({
   useEffect(
     function syncPointToWkt() {
       if (!pointMode) return;
-      const latN = Number.parseFloat(lat);
-      const lngN = Number.parseFloat(lng);
-      const sridN = Number.parseInt(srid, 10);
-      if (
-        Number.isFinite(latN) &&
-        Number.isFinite(lngN) &&
-        Number.isFinite(sridN)
-      ) {
-        setWkt(pointToEWKT({ lat: latN, lng: lngN, srid: sridN }));
-      }
+      const point = parsePointFields(lat, lng, srid);
+      if (point) setWkt(pointToEWKT(point));
     },
     [lat, lng, srid, pointMode],
   );
 
   const markerPosition = useMemo<[number, number] | null>(() => {
-    const latN = Number.parseFloat(lat);
-    const lngN = Number.parseFloat(lng);
+    const latN = parseNumberField(lat);
+    const lngN = parseNumberField(lng);
     if (pointMode && Number.isFinite(latN) && Number.isFinite(lngN)) {
       return [latN, lngN];
     }
@@ -162,6 +175,12 @@ export function GeometryMapEditor({
   }
 
   function handleSave(): void {
+    // In point mode the WKT only follows the fields while they parse, so an
+    // invalid field would otherwise save the last valid point unnoticed.
+    if (pointMode && parsePointFields(lat, lng, srid) === null) {
+      setError("Latitude, longitude and SRID must be numbers.");
+      return;
+    }
     const value = wkt.trim();
     if (value === "") {
       setError("Geometry cannot be empty.");

@@ -192,6 +192,49 @@ describe("ForeignKeyPicker", () => {
     expect(lastCall.query).toBe("ali");
   });
 
+  it("ignores an older search that resolves after a newer one", async () => {
+    const pending = new Map<string, (value: unknown) => void>();
+    const fn = vi.fn(
+      (params: { query: string }) =>
+        new Promise((resolve) => pending.set(params.query, resolve)),
+    );
+    Object.defineProperty(globalThis.window, "tableDataApi", {
+      configurable: true,
+      value: { searchForeignKey: fn },
+    });
+    render(
+      <ForeignKeyPicker
+        currentValue={null}
+        foreignKey={fk}
+        connectionId="c1"
+        allowNull={false}
+        onPick={() => {}}
+      />,
+    );
+    await advanceSearchDebounce();
+    fireEvent.change(screen.getByTestId("fk-search-input"), {
+      target: { value: "ali" },
+    });
+    await advanceSearchDebounce();
+    expect(fn).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      pending.get("ali")!({
+        success: true,
+        data: { options: [{ value: 1, label: "Alice" }], hasMore: false },
+      });
+    });
+    await act(async () => {
+      pending.get("")!({
+        success: true,
+        data: { options: [{ value: 2, label: "Bob" }], hasMore: false },
+      });
+    });
+
+    expect(screen.getByTestId("fk-option-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("fk-option-2")).toBeNull();
+  });
+
   it("surfaces a server-side error inline", async () => {
     const fn = vi.fn(async () => ({ success: false, error: "boom" }));
     Object.defineProperty(globalThis.window, "tableDataApi", {
@@ -235,5 +278,22 @@ describe("ForeignKeyModalEditor", () => {
     screen.getByTestId("fk-option-99");
     fireEvent.click(screen.getByTestId("fk-option-99"));
     expect(onSave).toHaveBeenCalledWith({ value: 99, pgCast: "int4" });
+  });
+
+  it("emits a null value with the column's pgCast for the (NULL) option", () => {
+    setupSearchMock({ "": { options: [], hasMore: false } });
+    const onSave = vi.fn();
+    render(
+      <ForeignKeyModalEditor
+        initialValue={5}
+        onSave={onSave}
+        onCancel={() => {}}
+        foreignKey={fk}
+        connectionId="c1"
+        allowNull
+      />,
+    );
+    fireEvent.click(screen.getByTestId("fk-option-null"));
+    expect(onSave).toHaveBeenCalledWith({ value: null, pgCast: "int4" });
   });
 });

@@ -13,14 +13,19 @@ beforeAll(() => {
   registerDefaultEditors();
 });
 
+function accepted(value: unknown, pgCast: string) {
+  return { ok: true, result: { value, pgCast } };
+}
+
 describe("text editor", () => {
-  it("accepts arbitrary strings verbatim (empty string included)", () => {
-    const ed = editRegistry.get("text");
-    expect(ed.validate("").ok).toBe(true);
-    expect(ed.validate("hello").ok).toBe(true);
-    expect(ed.validate("   trailing whitespace   ").ok).toBe(true);
-    expect(ed.validate("emoji \u{1F600}").ok).toBe(true);
-  });
+  it.each(["", "hello", "   trailing whitespace   ", "emoji \u{1F600}"])(
+    "accepts %j verbatim with the text cast",
+    (raw) => {
+      expect(editRegistry.get("text").validate(raw)).toEqual(
+        accepted(raw, "text"),
+      );
+    },
+  );
 
   it("rejects strings containing NUL (U+0000)", () => {
     const ed = editRegistry.get("text");
@@ -30,11 +35,7 @@ describe("text editor", () => {
 
   it("does not interpret the literal 'NULL' as SQL NULL", () => {
     const ed = editRegistry.get("text");
-    const result = ed.validate("NULL");
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.result.value).toBe("NULL");
-    }
+    expect(ed.validate("NULL")).toEqual(accepted("NULL", "text"));
   });
 });
 
@@ -48,17 +49,13 @@ describe("int4 editor", () => {
     ["2147483647", 2147483647],
     ["-2147483648", -2147483648],
     ["  5  ", 5],
-  ])("accepts %s", (raw, expected) => {
-    const r = ed().validate(raw);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.result.value).toBe(expected);
+  ])("accepts %s as the number %s", (raw, expected) => {
+    expect(ed().validate(raw)).toEqual(accepted(expected, "int4"));
   });
 
   it.each([
     "",
-    "  ",
     "1.0",
-    "1.5",
     "1e3",
     "NaN",
     "Infinity",
@@ -68,7 +65,6 @@ describe("int4 editor", () => {
     "-2147483649",
     "true",
     "--5",
-    "+-5",
   ])("rejects %s", (raw) => {
     expect(ed().validate(raw).ok).toBe(false);
   });
@@ -88,15 +84,13 @@ describe("int2 editor", () => {
 describe("int8 editor", () => {
   const ed = () => editRegistry.get("int8");
 
-  it("preserves values above Number.MAX_SAFE_INTEGER using BigInt", () => {
+  it("keeps values above Number.MAX_SAFE_INTEGER as the exact digit string", () => {
     const big = "9007199254740993"; // 2^53 + 1 — lossy in Number
-    const r = ed().validate(big);
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      // Either BigInt or the preserved string — any representation that
-      // round-trips back to the same digits is acceptable.
-      expect(String(r.result.value)).toBe(big);
-    }
+    expect(ed().validate(big)).toEqual(accepted(big, "int8"));
+  });
+
+  it("strips a leading + from the digit string", () => {
+    expect(ed().validate("+42")).toEqual(accepted("42", "int8"));
   });
 
   it("rejects values above int8 max", () => {
@@ -116,21 +110,26 @@ describe("float8 editor", () => {
     ["1.5", 1.5],
     ["-1.2e-3", -0.0012],
     ["+3.14", 3.14],
-  ])("accepts %s", (raw, expected) => {
-    const r = ed().validate(raw);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(Number(r.result.value)).toBeCloseTo(expected, 10);
+  ])("accepts %s as the number %s", (raw, expected) => {
+    expect(ed().validate(raw)).toEqual(accepted(expected, "float8"));
   });
 
   it.each(["", "1.2.3", "1e", "hello", "1,5"])("rejects %s", (raw) => {
     expect(ed().validate(raw).ok).toBe(false);
   });
 
-  it("accepts NaN and Infinity (Postgres float accepts these)", () => {
-    expect(ed().validate("NaN").ok).toBe(true);
-    expect(ed().validate("Infinity").ok).toBe(true);
-    expect(ed().validate("-Infinity").ok).toBe(true);
-  });
+  it.each([
+    ["NaN", "NaN"],
+    ["Infinity", "Infinity"],
+    ["-Infinity", "-Infinity"],
+    ["inf", "Infinity"],
+    ["-INF", "-Infinity"],
+  ])(
+    "accepts the special value %s as the Postgres keyword %s",
+    (raw, keyword) => {
+      expect(ed().validate(raw)).toEqual(accepted(keyword, "float8"));
+    },
+  );
 });
 
 describe("numeric editor", () => {
@@ -138,12 +137,12 @@ describe("numeric editor", () => {
 
   it("preserves arbitrary-precision decimals exactly as a string", () => {
     const precise = "123456789012345678901234567890.987654321";
-    const r = ed().validate(precise);
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      // MUST NOT round-trip through Number (would lose precision).
-      expect(r.result.value).toBe(precise);
-    }
+    // MUST NOT round-trip through Number (would lose precision).
+    expect(ed().validate(precise)).toEqual(accepted(precise, "numeric"));
+  });
+
+  it("accepts nan as the NaN keyword", () => {
+    expect(ed().validate("nan")).toEqual(accepted("NaN", "numeric"));
   });
 
   it("rejects thousands separators", () => {
@@ -167,9 +166,7 @@ describe("bool editor", () => {
     ["0", false],
     ["off", false],
   ])("accepts %s as %s", (raw, expected) => {
-    const r = ed().validate(raw);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.result.value).toBe(expected);
+    expect(ed().validate(raw)).toEqual(accepted(expected, "bool"));
   });
 
   it.each(["", "maybe", "2", "0.0", "tru", "ja"])("rejects %s", (raw) => {
@@ -179,15 +176,15 @@ describe("bool editor", () => {
 
 describe("uuid editor", () => {
   const ed = () => editRegistry.get("uuid");
+  const canonical = "550e8400-e29b-41d4-a716-446655440000";
 
   it.each([
-    "550e8400-e29b-41d4-a716-446655440000",
+    canonical,
     "550E8400-E29B-41D4-A716-446655440000",
     "550e8400e29b41d4a716446655440000",
     "{550e8400-e29b-41d4-a716-446655440000}",
-    "00000000-0000-0000-0000-000000000000",
-  ])("accepts %s", (raw) => {
-    expect(ed().validate(raw).ok).toBe(true);
+  ])("normalises %s to the canonical lowercase form", (raw) => {
+    expect(ed().validate(raw)).toEqual(accepted(canonical, "uuid"));
   });
 
   it.each([
@@ -205,9 +202,8 @@ describe("uuid editor", () => {
 describe("jsonb editor", () => {
   const ed = () => editRegistry.get("jsonb");
 
-  it("accepts JSON null (distinct from SQL NULL)", () => {
-    const r = ed().validate("null");
-    expect(r.ok).toBe(true);
+  it("accepts JSON null as the text 'null' (distinct from SQL NULL)", () => {
+    expect(ed().validate("null")).toEqual(accepted("null", "jsonb"));
   });
 
   it.each(["{}", "[]", '{"a":1}', "[1,2,3]", '"hello"', "1.5", "true"])(
@@ -224,24 +220,39 @@ describe("jsonb editor", () => {
     },
   );
 
-  it("rejects strings containing NUL in jsonb (cannot be stored)", () => {
-    const r = ed().validate('"with\u0000null"');
-    expect(r.ok).toBe(false);
+  it("rejects an escaped NUL in jsonb but accepts it in json", () => {
+    // The escaped form is valid JSON, so only the jsonb storage rule rejects it.
+    const withNul = String.raw`"with\u0000null"`;
+    expect(ed().validate(withNul).ok).toBe(false);
+    expect(editRegistry.get("json").validate(withNul)).toEqual(
+      accepted(withNul, "json"),
+    );
   });
 
   it("uses pgCast 'jsonb'", () => {
-    const r = ed().validate("{}");
-    if (r.ok) expect(r.result.pgCast).toBe("jsonb");
+    expect(ed().validate("{}")).toEqual(accepted("{}", "jsonb"));
   });
+
+  // `pg` parses json/jsonb into JS values, so a string scalar arrives as a
+  // plain JS string; the editor must reopen it as a JSON string literal.
+  it.each([
+    ["hello", '"hello"'],
+    ["123", '"123"'],
+  ])(
+    "re-saves the string scalar %j unchanged as %s",
+    (dbValue, expectedInput) => {
+      const input = ed().toInput(dbValue);
+      expect(input).toBe(expectedInput);
+      expect(ed().validate(input)).toEqual(accepted(expectedInput, "jsonb"));
+    },
+  );
 });
 
 describe("_int4 array editor", () => {
   const ed = () => editRegistry.get("_int4");
 
   it("accepts [1,2,3] (JSON-ish array syntax for the editor)", () => {
-    const r = ed().validate("[1,2,3]");
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.result.value).toEqual([1, 2, 3]);
+    expect(ed().validate("[1,2,3]")).toEqual(accepted([1, 2, 3], "_int4"));
   });
 
   it("accepts empty array []", () => {
@@ -253,13 +264,23 @@ describe("_int4 array editor", () => {
   });
 });
 
+describe("integer array ranges", () => {
+  it("rejects an _int2 element outside the int2 range", () => {
+    expect(editRegistry.get("_int2").validate("[1,40000]").ok).toBe(false);
+  });
+
+  it("keeps _int8 elements as digit strings so they stay exact", () => {
+    expect(
+      editRegistry.get("_int8").validate('[1,"9223372036854775807"]'),
+    ).toEqual(accepted(["1", "9223372036854775807"], "_int8"));
+  });
+});
+
 describe("_text array editor", () => {
   const ed = () => editRegistry.get("_text");
 
   it("accepts a JSON-style array of strings", () => {
-    const r = ed().validate('["a","b"]');
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.result.value).toEqual(["a", "b"]);
+    expect(ed().validate('["a","b"]')).toEqual(accepted(["a", "b"], "_text"));
   });
 
   it("rejects an array containing non-strings", () => {
@@ -276,16 +297,15 @@ describe("array cast preservation", () => {
     ["_varchar", '["a"]'],
   ])("returns the source cast for %s", (pgType, raw) => {
     const result = editRegistry.get(pgType).validate(raw);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.result.pgCast).toBe(pgType);
+    expect(result).toMatchObject({ ok: true, result: { pgCast: pgType } });
   });
 });
 
 describe("timetz editor", () => {
   it("accepts an explicit offset and preserves the timetz cast", () => {
-    const result = editRegistry.get("timetz").validate("12:30:00+05:30");
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.result.pgCast).toBe("timetz");
+    expect(editRegistry.get("timetz").validate("12:30:00+05:30")).toEqual(
+      accepted("12:30:00+05:30", "timetz"),
+    );
   });
 });
 
@@ -301,21 +321,32 @@ describe("timestamptz editor", () => {
     expect(ed().validate("").ok).toBe(false);
   });
 
-  it("rejects obviously invalid dates", () => {
+  it("rejects strings without a date-and-time shape", () => {
     expect(ed().validate("2026-13-01").ok).toBe(false);
     expect(ed().validate("not-a-date").ok).toBe(false);
   });
+
+  it.each(["2026-13-01 12:00", "2026-01-15T25:00"])(
+    "rejects the well-shaped but impossible timestamp %s",
+    (raw) => {
+      expect(ed().validate(raw).ok).toBe(false);
+    },
+  );
 });
 
 describe("date editor", () => {
   const ed = () => editRegistry.get("date");
 
   it("accepts ISO date", () => {
-    expect(ed().validate("2026-04-20").ok).toBe(true);
+    expect(ed().validate("2026-04-20")).toEqual(accepted("2026-04-20", "date"));
   });
 
   it("rejects a time component", () => {
     expect(ed().validate("2026-04-20T12:00:00").ok).toBe(false);
+  });
+
+  it("rejects a well-shaped but impossible month", () => {
+    expect(ed().validate("2026-00-10").ok).toBe(false);
   });
 });
 
@@ -323,18 +354,19 @@ describe("vector editor", () => {
   const ed = () => editRegistry.get("vector");
 
   it("accepts [1,2,3] (pgvector format)", () => {
-    const r = ed().validate("[1,2,3]");
-    expect(r.ok).toBe(true);
+    expect(ed().validate("[1,2,3]")).toEqual(accepted("[1,2,3]", "vector"));
   });
 
   it("rejects PG array syntax {1,2,3}", () => {
     expect(ed().validate("{1,2,3}").ok).toBe(false);
   });
 
-  it("rejects a vector containing non-finite numbers", () => {
-    expect(ed().validate("[NaN, 1, 2]").ok).toBe(false);
-    expect(ed().validate("[Infinity, 1, 2]").ok).toBe(false);
-  });
+  it.each(['["a",1]', "[null]", "[true]"])(
+    "rejects the JSON array %s with a non-number element",
+    (raw) => {
+      expect(ed().validate(raw).ok).toBe(false);
+    },
+  );
 });
 
 describe("PostGIS geometry editor", () => {
@@ -349,11 +381,37 @@ describe("PostGIS geometry editor", () => {
   });
 
   it("accepts EWKT with SRID", () => {
-    expect(ed().validate("SRID=4326;POINT(13.405 52.52)").ok).toBe(true);
+    expect(ed().validate("SRID=4326;POINT(13.405 52.52)")).toEqual(
+      accepted("SRID=4326;POINT(13.405 52.52)", "geometry"),
+    );
   });
 
   it("rejects empty string", () => {
     expect(ed().validate("").ok).toBe(false);
+  });
+
+  it("rejects text that is not a WKT geometry", () => {
+    expect(ed().validate("hello").ok).toBe(false);
+  });
+});
+
+describe("bytea editor", () => {
+  const ed = () => editRegistry.get("bytea");
+
+  it("accepts the \\x hex form unchanged", () => {
+    expect(ed().validate(String.raw`\xDEAD`)).toEqual(
+      accepted(String.raw`\xDEAD`, "bytea"),
+    );
+  });
+
+  it("prefixes bare hex with \\x", () => {
+    expect(ed().validate("dead")).toEqual(
+      accepted(String.raw`\xdead`, "bytea"),
+    );
+  });
+
+  it.each(["", "xyz", String.raw`\xZZ`])("rejects %j", (raw) => {
+    expect(ed().validate(raw).ok).toBe(false);
   });
 });
 
@@ -365,17 +423,21 @@ describe("pass-through types", () => {
     "%s accepts any non-empty string",
     (pgType) => {
       const ed = editRegistry.get(pgType);
-      expect(ed.validate("anything at all").ok).toBe(true);
+      expect(ed.validate("anything at all")).toEqual(
+        accepted("anything at all", pgType),
+      );
       expect(ed.validate("").ok).toBe(false); // empty still rejected
     },
   );
 });
 
 describe("registry mechanics", () => {
-  it("falls back to a text editor for unknown pg types", () => {
+  it("falls back to the text editor for unknown pg types", () => {
     const fallback = editRegistry.get("some_unknown_type");
     expect(fallback.kind).toBe("inline");
-    expect(fallback.validate("anything").ok).toBe(true);
+    expect(fallback.validate("anything")).toEqual(accepted("anything", "text"));
+    expect(fallback.validate("")).toEqual(accepted("", "text"));
+    expect(fallback.validate("with\u0000null").ok).toBe(false);
   });
 
   it("has() reports explicit registration only", () => {

@@ -186,6 +186,32 @@ describe("GeometryMapEditor", () => {
     expect(screen.getByText(/cannot be empty/i)).toBeInTheDocument();
   });
 
+  // The WKT keeps the last valid point while a field is unparsable, so saving
+  // would silently write a point the fields no longer show.
+  it.each(["abc", "40abc", ""])(
+    "blocks save while the latitude field holds %j",
+    (latText) => {
+      const { onSave } = renderEditor("SRID=4326;POINT(1 2)");
+      fireEvent.change(screen.getByTestId("postgis-lat"), {
+        target: { value: latText },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /save/i }));
+      expect(onSave).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/latitude, longitude and srid must be numbers/i),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("blocks save while the SRID field is not an integer", () => {
+    const { onSave } = renderEditor("SRID=4326;POINT(1 2)");
+    fireEvent.change(screen.getByTestId("postgis-srid"), {
+      target: { value: "4326.5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("cancel calls onCancel", () => {
     const { onCancel } = renderEditor("POINT(0 0)");
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));

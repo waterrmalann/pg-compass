@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { EditableCell } from "@/components/workspace/table-viewer/editable-cell";
 import { registerDefaultRenderers } from "@/components/workspace/renderers/default-renderers";
 import { registerDefaultEditors } from "@/components/workspace/renderers/edit-registry";
@@ -138,6 +138,157 @@ describe("EditableCell gating", () => {
     );
     fireEvent.doubleClick(screen.getByTestId("cell-editor-target"));
     expect(screen.queryByText("Set NULL")).toBeNull();
+  });
+});
+
+describe("EditableCell edit dialog", () => {
+  function mockUpdateCell(
+    response: unknown = {
+      success: true,
+      data: { row: { id: 1, display_name: "Saved" } },
+    },
+  ) {
+    const updateCell = vi.fn(async () => response);
+    Object.defineProperty(globalThis.window, "tableDataApi", {
+      configurable: true,
+      value: { updateCell },
+    });
+    return updateCell;
+  }
+
+  function openEditor(
+    col: ColumnInfo,
+    value: unknown,
+    onRowUpdated: (row: Record<string, unknown>) => void = () => {},
+  ) {
+    render(
+      <EditableCell
+        col={col}
+        value={value}
+        readOnly={false}
+        primaryKey={["id"]}
+        pkValues={[1]}
+        schema="app"
+        table="users"
+        connectionId="c1"
+        variant="cell"
+        onRowUpdated={onRowUpdated}
+      />,
+    );
+    fireEvent.doubleClick(screen.getByTestId("cell-editor-target"));
+  }
+
+  const loginCountCol: ColumnInfo = {
+    name: "login_count",
+    dataTypeId: 23,
+    dataType: "int4",
+    isNullable: true,
+  };
+
+  it("sends the validated value for the row and closes after a successful save", async () => {
+    const updateCell = mockUpdateCell();
+    const onRowUpdated = vi.fn();
+    openEditor(loginCountCol, 5, onRowUpdated);
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: " 9 " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("cell-editor")).not.toBeInTheDocument(),
+    );
+    expect(updateCell).toHaveBeenCalledWith({
+      connectionId: "c1",
+      schema: "app",
+      table: "users",
+      pkColumns: ["id"],
+      pkValues: [1],
+      column: "login_count",
+      pgCast: "int4",
+      newValue: 9,
+      setNull: false,
+    });
+    expect(onRowUpdated).toHaveBeenCalledWith({ id: 1, display_name: "Saved" });
+  });
+
+  it("saves with Enter", async () => {
+    const updateCell = mockUpdateCell();
+    openEditor(loginCountCol, 5);
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+
+    await waitFor(() => expect(updateCell).toHaveBeenCalledTimes(1));
+  });
+
+  it("Set NULL writes NULL for a nullable column", async () => {
+    const updateCell = mockUpdateCell();
+    openEditor(loginCountCol, 5);
+
+    fireEvent.click(screen.getByRole("button", { name: "Set NULL" }));
+
+    await waitFor(() => expect(updateCell).toHaveBeenCalledTimes(1));
+    expect(updateCell).toHaveBeenCalledWith(
+      expect.objectContaining({
+        column: "login_count",
+        newValue: null,
+        setNull: true,
+      }),
+    );
+  });
+
+  it("shows a validation error and does not write an invalid value", () => {
+    const updateCell = mockUpdateCell();
+    openEditor(loginCountCol, 5);
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateCell).not.toHaveBeenCalled();
+    expect(screen.getByTestId("cell-editor")).toHaveTextContent(
+      /not a valid int4/i,
+    );
+  });
+
+  it("keeps the dialog open with the server error when the update fails", async () => {
+    mockUpdateCell({ success: false, error: "permission denied" });
+    const onRowUpdated = vi.fn();
+    openEditor(loginCountCol, 5, onRowUpdated);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText("permission denied", { selector: "p" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("cell-editor")).toBeInTheDocument();
+    expect(onRowUpdated).not.toHaveBeenCalled();
+  });
+
+  it("uses the foreign-key picker for a column that is both an FK and an enum", () => {
+    mockUpdateCell();
+    Object.assign(globalThis.window.tableDataApi, {
+      searchForeignKey: vi.fn(async () => ({
+        success: true,
+        data: { options: [], hasMore: false },
+      })),
+    });
+    openEditor(
+      {
+        name: "role",
+        dataTypeId: 99999,
+        dataType: "user_role",
+        enumLabels: ["admin", "viewer"],
+        foreignKey: {
+          schema: "app",
+          table: "roles",
+          column: "name",
+          labelColumn: null,
+          valuePgCast: "text",
+        },
+      },
+      "admin",
+    );
+
+    expect(screen.getByTestId("fk-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("cell-enum-select")).toBeNull();
   });
 });
 

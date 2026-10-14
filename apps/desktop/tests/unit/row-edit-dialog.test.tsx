@@ -236,6 +236,109 @@ describe("RowEditDialog", () => {
     ]);
   });
 
+  it("Set NULL on a column that is already NULL is not a change", () => {
+    setupUpdateRowMock();
+    render(
+      <RowEditDialog
+        columns={columns}
+        row={{ ...row, profile_note: null }}
+        primaryKey={["id"]}
+        pkValues={[1]}
+        schema="app"
+        table="users"
+        connectionId="c1"
+        onRowUpdated={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("setnull-profile_note"));
+
+    expect(
+      screen.getByTestId("row-field-profile_note").getAttribute("data-changed"),
+    ).toBe("false");
+    expect(screen.getByTestId("row-editor-save")).toBeDisabled();
+  });
+
+  it("Set NULL on an enum column sends the enum's qualified cast", async () => {
+    const { fn } = setupUpdateRowMock();
+    render(
+      <RowEditDialog
+        columns={[
+          columns[0]!,
+          {
+            name: "role",
+            dataTypeId: 99999,
+            dataType: "user_role",
+            enumPgCast: '"app"."user_role"',
+            enumLabels: ["admin", "viewer"],
+            isNullable: true,
+          },
+        ]}
+        row={{ id: 1, role: "admin" }}
+        primaryKey={["id"]}
+        pkValues={[1]}
+        schema="app"
+        table="users"
+        connectionId="c1"
+        onRowUpdated={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("setnull-role"));
+    fireEvent.click(screen.getByTestId("row-editor-save"));
+
+    await waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+    expect(fn.mock.calls[0]![0]).toMatchObject({
+      changes: [
+        {
+          column: "role",
+          pgCast: '"app"."user_role"',
+          newValue: null,
+          setNull: true,
+        },
+      ],
+    });
+  });
+
+  it("keeps the dialog open after a failed update and allows a retry", async () => {
+    const { fn } = setupUpdateRowMock(() => ({
+      success: false,
+      error: "permission denied",
+    }));
+    const onRowUpdated = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <RowEditDialog
+        columns={columns}
+        row={row}
+        primaryKey={["id"]}
+        pkValues={[1]}
+        schema="app"
+        table="users"
+        connectionId="c1"
+        onRowUpdated={onRowUpdated}
+        onClose={onClose}
+      />,
+    );
+    const countInput = screen
+      .getByTestId("row-field-login_count")
+      .querySelector("input")!;
+    fireEvent.change(countInput, { target: { value: "9" } });
+
+    fireEvent.click(screen.getByTestId("row-editor-save"));
+    await waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("row-editor-save")).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByTestId("row-editor-save"));
+
+    await waitFor(() => expect(fn).toHaveBeenCalledTimes(2));
+    expect(onRowUpdated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("surfaces validation errors and blocks save when an integer field is invalid", async () => {
     const { fn } = setupUpdateRowMock();
     render(
