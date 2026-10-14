@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPgDate } from "@/components/workspace/renderers/edit-registry";
 import type { DataQueryInput } from "@/shared/query-dsl/types";
 import type { ColumnInfo } from "@/shared/types/table-data";
 
@@ -353,7 +354,7 @@ function DeletePreview({
                   key={column.name}
                   className="w-36 max-w-36 truncate px-3 font-mono text-xs whitespace-nowrap"
                 >
-                  {formatCellValue(row[column.name])}
+                  {formatCellValue(row[column.name], column.dataType)}
                 </TableCell>
               ))}
             </TableRow>
@@ -364,9 +365,9 @@ function DeletePreview({
   );
 }
 
-function formatCellValue(value: unknown): string {
+function formatCellValue(value: unknown, dataType: string): string {
   if (value === null || value === undefined) return "NULL";
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return formatPgDate(value, dataType);
   if (typeof value === "object") return safeJsonStringify(value);
   return String(value);
 }

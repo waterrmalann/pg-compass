@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StructureTab } from "@/components/workspace/table-viewer/structure-tab";
 import type { ColumnStructure } from "@/shared/types/table-data";
 
@@ -74,5 +74,46 @@ describe("StructureTab type labels", () => {
     expect(screen.getByText("character varying(12)")).toBeTruthy();
     expect(screen.getByText("2026-09-26T18:40:00.000Z")).toBeTruthy();
     expect(screen.queryByText("USER-DEFINED")).toBeNull();
+  });
+});
+
+describe("StructureTab date samples", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("shows date and timestamp samples from their local fields", async () => {
+    // `pg` builds date/timestamp Dates from LOCAL fields; a zone east of UTC
+    // makes a UTC-based sample show the previous day.
+    vi.stubEnv("TZ", "Asia/Kolkata");
+    const localMidnight = new Date(2024, 0, 5);
+    expect(localMidnight.getTimezoneOffset()).toBe(-330);
+
+    Object.assign(window, {
+      tableDataApi: {
+        getStructure: vi.fn().mockResolvedValue({
+          success: true,
+          data: [
+            column({
+              name: "born_on",
+              dataType: "date",
+              udtName: "date",
+              sampleValues: [localMidnight],
+            }),
+            column({
+              name: "seen_at",
+              dataType: "timestamp without time zone",
+              udtName: "timestamp",
+              sampleValues: [new Date(2024, 0, 5, 0, 15, 30)],
+            }),
+          ],
+        }),
+      },
+    });
+
+    render(<StructureTab connectionId="conn-1" schema="shop" table="people" />);
+
+    expect(await screen.findByText("2024-01-05")).toBeTruthy();
+    expect(screen.getByText("2024-01-05T00:15:30")).toBeTruthy();
   });
 });

@@ -117,14 +117,24 @@ function pad(n: number): string {
  * UTC offset — a full day for `date` in any non-UTC zone. These two read the
  * Date's LOCAL fields back out instead, which is the correct inverse.
  */
-function toLocalDateString(value: Date): string {
+export function toLocalDateString(value: Date): string {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
 }
 
-function toLocalTimestampString(value: Date): string {
+export function toLocalTimestampString(value: Date): string {
   const ms = value.getMilliseconds();
   const msPart = ms ? `.${String(ms).padStart(3, "0")}` : "";
   return `${toLocalDateString(value)}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}${msPart}`;
+}
+
+/**
+ * Text for a `pg`-parsed Date given its column's type name. Only `timestamptz`
+ * (and anything unknown) is an absolute instant that reads correctly as UTC.
+ */
+export function formatPgDate(value: Date, pgType: string): string {
+  if (pgType === "date") return toLocalDateString(value);
+  if (pgType === "timestamp") return toLocalTimestampString(value);
+  return value.toISOString();
 }
 
 // --- text -------------------------------------------------------------------

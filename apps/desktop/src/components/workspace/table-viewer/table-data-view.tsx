@@ -135,7 +135,7 @@ export function TableDataView({
                       </div>
                       <DataCopyButton
                         label={`Copy ${col.name} value`}
-                        text={serializeCellValue(row[col.name])}
+                        text={serializeCellValue(row[col.name], col.dataType)}
                         successMessage="Cell value copied"
                         className="shrink-0 opacity-0 group-hover/cell:opacity-100 focus-visible:opacity-100"
                       />

@@ -7,6 +7,8 @@ import {
   registerDefaultEditors,
 } from "@/components/workspace/renderers/edit-registry";
 import { DateTimeEditor } from "@/components/workspace/renderers/date-time-editor";
+import { registerDefaultRenderers } from "@/components/workspace/renderers/default-renderers";
+import { typeRegistry } from "@/components/workspace/renderers/type-registry";
 import { StructuredValueEditor } from "@/components/workspace/renderers/structured-value-editor";
 import { DataTab } from "@/components/workspace/table-viewer/data-tab";
 
@@ -74,6 +76,54 @@ describe("edit registry local date/timestamp inputs", () => {
     const instant = new Date("2024-01-05T00:15:30.000Z");
 
     expect(editRegistry.get("timestamptz").toInput(instant)).toBe(
+      "2024-01-05T00:15:30.000Z",
+    );
+  });
+});
+
+describe("date/timestamp display renderers", () => {
+  // Same local-field rule as the editor inputs above: the grid must not show
+  // a `date` as the previous day east of UTC.
+  beforeAll(() => {
+    vi.stubEnv("TZ", "Asia/Kolkata");
+    registerDefaultRenderers();
+  });
+
+  afterAll(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function renderedText(pgType: string, value: Date, variant: "cell" | "card") {
+    const renderer = typeRegistry.get(pgType);
+    const node =
+      variant === "cell"
+        ? renderer.renderCell(value)
+        : renderer.renderCard(value);
+    return render(<>{node}</>).container.textContent;
+  }
+
+  it.each(["cell", "card"] as const)(
+    "shows a date from its local calendar fields (%s)",
+    (variant) => {
+      const localMidnight = new Date(2024, 0, 5);
+      expect(localMidnight.getTimezoneOffset()).toBe(-330);
+
+      expect(renderedText("date", localMidnight, variant)).toBe("2024-01-05");
+    },
+  );
+
+  it("shows a timestamp without time zone from its local fields", () => {
+    const local = new Date(2024, 0, 5, 0, 15, 30, 120);
+
+    expect(renderedText("timestamp", local, "cell")).toBe(
+      "2024-01-05T00:15:30.120",
+    );
+  });
+
+  it("shows timestamptz as an absolute UTC instant", () => {
+    const instant = new Date("2024-01-05T00:15:30.000Z");
+
+    expect(renderedText("timestamptz", instant, "cell")).toBe(
       "2024-01-05T00:15:30.000Z",
     );
   });

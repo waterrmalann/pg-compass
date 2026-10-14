@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { typeRegistry, type TypeRenderer } from "./type-registry";
+import { toLocalDateString, toLocalTimestampString } from "./edit-registry";
 import { stringify } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -74,20 +75,18 @@ const booleanRenderer: TypeRenderer = {
 // Date / Time types
 // ---------------------------------------------------------------------------
 
-const dateRenderer: TypeRenderer = {
-  renderCell(value: unknown) {
-    if (value instanceof Date) {
-      return <span className="tabular-nums">{value.toISOString()}</span>;
-    }
-    return <span className="tabular-nums">{stringify(value)}</span>;
-  },
-  renderCard(value: unknown) {
-    if (value instanceof Date) {
-      return <span className="tabular-nums">{value.toISOString()}</span>;
-    }
-    return <span className="tabular-nums">{stringify(value)}</span>;
-  },
-};
+// `date` and `timestamp` Dates carry their value in LOCAL fields (see
+// `toLocalDateString` in the edit registry); only `timestamptz` is an absolute
+// instant that `toISOString()` shows correctly.
+function makeDateRenderer(formatDate: (value: Date) => string): TypeRenderer {
+  function renderValue(value: unknown) {
+    const text = value instanceof Date ? formatDate(value) : stringify(value);
+    return <span className="tabular-nums">{text}</span>;
+  }
+  return { renderCell: renderValue, renderCard: renderValue };
+}
+
+const toUtcString = (value: Date): string => value.toISOString();
 
 // ---------------------------------------------------------------------------
 // JSON / JSONB types — compact in cell, tree-expandable in card
@@ -187,9 +186,11 @@ export function registerDefaultRenderers(): void {
   typeRegistry.register("bool", booleanRenderer);
 
   // Date / Time
+  typeRegistry.register("date", makeDateRenderer(toLocalDateString));
+  typeRegistry.register("timestamp", makeDateRenderer(toLocalTimestampString));
   typeRegistry.registerMany(
-    ["date", "time", "timetz", "timestamp", "timestamptz", "interval"],
-    dateRenderer,
+    ["time", "timetz", "timestamptz", "interval"],
+    makeDateRenderer(toUtcString),
   );
 
   // JSON / JSONB

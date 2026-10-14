@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   isCopyableValue,
@@ -50,9 +50,11 @@ describe("QOL helpers", () => {
   });
 
   it("serializes cells and rows predictably while omitting unavailable values", () => {
-    expect(serializeCellValue({ enabled: true })).toBe('{"enabled":true}');
-    expect(serializeCellValue([1, 2])).toBe("[1,2]");
-    expect(serializeCellValue(null)).toBe("NULL");
+    expect(serializeCellValue({ enabled: true }, "jsonb")).toBe(
+      '{"enabled":true}',
+    );
+    expect(serializeCellValue([1, 2], "_int4")).toBe("[1,2]");
+    expect(serializeCellValue(null, "text")).toBe("NULL");
     expect(isCopyableValue("[masked]")).toBe(false);
     expect(
       serializeRow(
@@ -102,5 +104,66 @@ describe("QOL helpers", () => {
         "windows",
       ),
     ).toBe(true);
+  });
+});
+
+describe("copying date and timestamp values", () => {
+  // `pg` builds date/timestamp Dates from LOCAL fields; a zone east of UTC
+  // makes a UTC-based copy shift the value back by a day.
+  beforeAll(() => {
+    vi.stubEnv("TZ", "Asia/Kolkata");
+  });
+
+  afterAll(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("copies a date cell from its local calendar fields", () => {
+    const localMidnight = new Date(2024, 0, 5);
+    // Guard: the zone override must be active for this test to mean anything.
+    expect(localMidnight.getTimezoneOffset()).toBe(-330);
+
+    expect(serializeCellValue(localMidnight, "date")).toBe("2024-01-05");
+  });
+
+  it("copies a timestamp without time zone from its local fields", () => {
+    const local = new Date(2024, 0, 5, 0, 15, 30, 120);
+
+    expect(serializeCellValue(local, "timestamp")).toBe(
+      "2024-01-05T00:15:30.120",
+    );
+  });
+
+  it("copies timestamptz as an absolute UTC instant", () => {
+    const instant = new Date("2024-01-05T00:15:30.000Z");
+
+    expect(serializeCellValue(instant, "timestamptz")).toBe(
+      "2024-01-05T00:15:30.000Z",
+    );
+  });
+
+  it("formats each Date in a copied row by its column type", () => {
+    const row = {
+      born_on: new Date(2024, 0, 5),
+      seen_at: new Date(2024, 0, 5, 0, 15, 30),
+      placed_at: new Date("2024-01-05T00:15:30.000Z"),
+    };
+
+    expect(
+      JSON.parse(
+        serializeRow(
+          [
+            { name: "born_on", dataType: "date", dataTypeId: 1082 },
+            { name: "seen_at", dataType: "timestamp", dataTypeId: 1114 },
+            { name: "placed_at", dataType: "timestamptz", dataTypeId: 1184 },
+          ],
+          row,
+        ),
+      ),
+    ).toEqual({
+      born_on: "2024-01-05",
+      seen_at: "2024-01-05T00:15:30",
+      placed_at: "2024-01-05T00:15:30.000Z",
+    });
   });
 });

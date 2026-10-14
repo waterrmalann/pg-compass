@@ -6,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatPgDate } from "@/components/workspace/renderers/edit-registry";
 import type { ColumnInfo } from "@/shared/types/table-data";
 
 const MASKED_VALUE = /^(?:\*{3,}|•{3,}|\[masked\]|\[unavailable\])$/i;
@@ -17,10 +18,13 @@ export function isCopyableValue(value: unknown): boolean {
   return true;
 }
 
-export function serializeCellValue(value: unknown): string | null {
+export function serializeCellValue(
+  value: unknown,
+  dataType: string,
+): string | null {
   if (!isCopyableValue(value)) return null;
   if (value === null) return "NULL";
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return formatPgDate(value, dataType);
   if (typeof value === "object") return JSON.stringify(value);
   if (typeof value === "bigint") return value.toString();
   return String(value);
@@ -36,7 +40,7 @@ export function serializeRow(
     if (!isCopyableValue(value)) continue;
     copy[column.name] =
       value instanceof Date
-        ? value.toISOString()
+        ? formatPgDate(value, column.dataType)
         : typeof value === "bigint"
           ? value.toString()
           : value;

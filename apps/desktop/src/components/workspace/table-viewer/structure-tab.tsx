@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { MissingValue } from "@/components/workspace/relation-list-table";
+import { formatPgDate } from "@/components/workspace/renderers/edit-registry";
 import type { ColumnStructure } from "@/shared/types/table-data";
 
 interface StructureTabProps {
@@ -44,9 +45,11 @@ function formatType(col: ColumnStructure): string {
   return `numeric(${String(col.numericPrecision)},${String(col.numericScale)})`;
 }
 
-function renderSample(value: unknown): string {
+// `dataType` is information_schema's label ("timestamp without time zone");
+// the udt name is the pg type name the date formatting keys on.
+function renderSample(value: unknown, udtName: string): string {
   if (value === null || value === undefined) return "NULL";
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return formatPgDate(value, udtName);
   if (typeof value === "object") return JSON.stringify(value);
   return String(value as string | number | boolean);
 }
@@ -159,9 +162,9 @@ export function StructureTab({
                             key={key}
                             variant="outline"
                             className="block max-w-30 truncate font-mono leading-5 font-normal"
-                            title={renderSample(val)}
+                            title={renderSample(val, col.udtName)}
                           >
-                            {renderSample(val)}
+                            {renderSample(val, col.udtName)}
                           </Badge>
                         );
                       })

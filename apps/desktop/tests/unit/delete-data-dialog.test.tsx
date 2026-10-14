@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeleteDataDialog } from "@/components/workspace/table-viewer/delete-data-dialog";
 import type { ColumnInfo } from "@/shared/types/table-data";
 
@@ -226,5 +226,46 @@ describe("DeleteDataDialog", () => {
       await screen.findByText('syntax error at or near "bad"'),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  });
+});
+
+describe("DeleteDataDialog date preview", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("previews date and timestamp values from their local fields", async () => {
+    // `pg` builds date/timestamp Dates from LOCAL fields; a zone east of UTC
+    // makes a UTC-based preview show the previous day.
+    vi.stubEnv("TZ", "Asia/Kolkata");
+    const localMidnight = new Date(2024, 0, 5);
+    expect(localMidnight.getTimezoneOffset()).toBe(-330);
+
+    installTableDataApiMock({
+      getRows: vi.fn(async () => ({
+        success: true,
+        data: {
+          columns: [
+            { name: "born_on", dataTypeId: 1082, dataType: "date" },
+            { name: "seen_at", dataTypeId: 1114, dataType: "timestamp" },
+            { name: "placed_at", dataTypeId: 1184, dataType: "timestamptz" },
+          ],
+          rows: [
+            {
+              born_on: localMidnight,
+              seen_at: new Date(2024, 0, 5, 0, 15, 30),
+              placed_at: new Date("2024-01-05T00:15:30.000Z"),
+            },
+          ],
+          totalCount: 1,
+          primaryKey: [],
+        },
+      })),
+    });
+    renderDialog();
+
+    expect(await screen.findByText("2024-01-05")).toBeInTheDocument();
+    expect(screen.getByText("2024-01-05T00:15:30")).toBeInTheDocument();
+    expect(screen.getByText("2024-01-05T00:15:30.000Z")).toBeInTheDocument();
   });
 });
