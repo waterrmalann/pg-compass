@@ -88,11 +88,17 @@ function initialWkt(
   return "";
 }
 
+interface GeometryMapEditorProps extends TypeEditorProps {
+  /** The column's PostGIS type, sent back as the write cast. */
+  pgCast: "geometry" | "geography";
+}
+
 export function GeometryMapEditor({
   initialValue,
   onSave,
   onCancel,
-}: Readonly<TypeEditorProps>) {
+  pgCast,
+}: Readonly<GeometryMapEditorProps>) {
   const parsed = useMemo(() => extractPoint(initialValue), [initialValue]);
   const [lat, setLat] = useState<string>(parsed ? String(parsed.lat) : "");
   const [lng, setLng] = useState<string>(parsed ? String(parsed.lng) : "");
@@ -161,7 +167,7 @@ export function GeometryMapEditor({
       setError("Geometry cannot be empty.");
       return;
     }
-    const result: EditResult = { value, pgCast: "geometry" };
+    const result: EditResult = { value, pgCast };
     onSave(result);
   }
 
@@ -259,10 +265,13 @@ export function GeometryMapEditor({
 export function registerPostGISEditor(): void {
   for (const pgType of ["geometry", "geography"] as const) {
     const current = editRegistry.get(pgType);
+    function PostGISMapEditor(props: Readonly<TypeEditorProps>) {
+      return <GeometryMapEditor {...props} pgCast={pgType} />;
+    }
     const withComponent: TypeEditor = {
       ...current,
       kind: "modal",
-      Component: GeometryMapEditor,
+      Component: PostGISMapEditor,
     };
     editRegistry.register(pgType, withComponent);
   }

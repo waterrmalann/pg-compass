@@ -59,8 +59,15 @@ vi.mock("leaflet", () => ({
 
 // Importing the component triggers the module-level Leaflet icon override; the
 // mocks above must be installed before this import runs.
-import { GeometryMapEditor } from "@/components/workspace/renderers/postgis-editor";
-import type { EditResult } from "@/components/workspace/renderers/edit-registry";
+import {
+  GeometryMapEditor,
+  registerPostGISEditor,
+} from "@/components/workspace/renderers/postgis-editor";
+import {
+  editRegistry,
+  registerDefaultEditors,
+  type EditResult,
+} from "@/components/workspace/renderers/edit-registry";
 
 beforeAll(() => {
   clickHandlers.length = 0;
@@ -77,6 +84,7 @@ function renderEditor(initialValue: unknown = ""): {
       initialValue={initialValue}
       onSave={onSave}
       onCancel={onCancel}
+      pgCast="geometry"
     />,
   );
   return { onSave, onCancel };
@@ -192,4 +200,32 @@ describe("GeometryMapEditor", () => {
       (screen.getByTestId("postgis-wkt") as HTMLTextAreaElement).value,
     ).toBe("SRID=0;POINT(0 0)");
   });
+});
+
+// The cell editor renders whatever Component the registry holds for the
+// column's type and sends `result.pgCast` as the UPDATE cast, so each type's
+// registered map editor must report its own type.
+describe("registered PostGIS map editors", () => {
+  beforeAll(() => {
+    registerDefaultEditors();
+    registerPostGISEditor();
+  });
+
+  it.each(["geometry", "geography"] as const)(
+    "the %s editor saves with its own type as the cast",
+    (pgType) => {
+      const Component = editRegistry.get(pgType).Component!;
+      const onSave = vi.fn();
+      render(
+        <Component
+          initialValue="SRID=4326;POINT(1 2)"
+          onSave={onSave}
+          onCancel={() => undefined}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /save/i }));
+      const result = onSave.mock.calls[0]?.[0] as EditResult;
+      expect(result.pgCast).toBe(pgType);
+    },
+  );
 });
