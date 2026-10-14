@@ -124,8 +124,10 @@ test("draws a 1,500-table schema, keeping off-screen tables out of the DOM", asy
   );
   const { app, page, openedAt } = await openDatabaseDiagram(testInfo);
 
-  // The largest schema opens by default when public has no tables.
-  await expect(page.getByLabel("Diagram schema")).toHaveValue(BULK_SCHEMA);
+  // Chosen explicitly: which schema opens by default is unit-tested, and here
+  // it depends on the server (the seed's PostGIS puts spatial_ref_sys in
+  // public, which then opens first).
+  await page.getByLabel("Diagram schema").selectOption(BULK_SCHEMA);
   await expect(
     page.getByText(
       `${count(BULK.tableCount)} tables · ${count(BULK.drawnRelationshipCount)} relationships`,

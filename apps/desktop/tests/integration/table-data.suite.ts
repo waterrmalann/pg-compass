@@ -301,6 +301,68 @@ export function runTableDataIntegrationSuite(
       });
     });
 
+    it("estimates table sizes from the catalog, including TOAST and indexes", async () => {
+      const { getSchemaTree } = await import("@/main/connection-ipc");
+      const { withPoolClient } = await import("@/main/pg-utils");
+      const sizeOf = async () => {
+        const schemas = await getSchemaTree(connectionId);
+        const app = schemas.find((schema) => schema.name === "app");
+        return app?.tableStats?.size_probe;
+      };
+      await withPoolClient(connectionId, async (client) => {
+        await client.query(
+          "CREATE TABLE app.size_probe (id int, body text, label text)",
+        );
+        // Wide values are stored in the TOAST table.
+        await client.query(
+          "INSERT INTO app.size_probe SELECT g, repeat(md5(g::text), 400), 'x' || g FROM generate_series(1, 300) g",
+        );
+      });
+
+      try {
+        // Never vacuumed or analyzed: the catalog has no figures yet.
+        expect(await sizeOf()).toEqual({
+          estimatedRowCount: null,
+          sizeOnDisk: null,
+        });
+
+        const actual = await withPoolClient(connectionId, async (client) => {
+          await client.query(
+            "CREATE INDEX size_probe_label ON app.size_probe (label)",
+          );
+          await client.query("VACUUM ANALYZE app.size_probe");
+          // Main forks only: the estimate counts data pages, not the free
+          // space and visibility maps.
+          const { rows } = await client.query<{ size: string }>(`
+            SELECT pg_size_pretty(sum(pg_relation_size(r))) AS size
+            FROM (
+              SELECT c.oid AS r FROM pg_class c
+              WHERE c.oid = 'app.size_probe'::regclass
+                 OR c.oid = (SELECT reltoastrelid FROM pg_class
+                             WHERE oid = 'app.size_probe'::regclass)
+              UNION ALL
+              SELECT x.indexrelid FROM pg_index x
+              WHERE x.indrelid IN (
+                'app.size_probe'::regclass,
+                (SELECT reltoastrelid FROM pg_class
+                 WHERE oid = 'app.size_probe'::regclass)
+              )
+            ) relations
+          `);
+          return rows[0]!.size;
+        });
+
+        expect(await sizeOf()).toEqual({
+          estimatedRowCount: 300,
+          sizeOnDisk: actual,
+        });
+      } finally {
+        await withPoolClient(connectionId, (client) =>
+          client.query("DROP TABLE app.size_probe"),
+        );
+      }
+    });
+
     it("reads the diagram catalog for the seeded schema", async () => {
       const { getSchemaDiagram } = await import("@/main/schema-diagram");
 

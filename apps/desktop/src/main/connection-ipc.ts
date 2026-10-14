@@ -124,6 +124,11 @@ export async function getSchemaTree(
       ORDER BY n.nspname, c.relname
     `);
 
+    // Sizes are catalog estimates, like the row counts: pages recorded by the
+    // last VACUUM/ANALYZE for the table, its TOAST table and all their
+    // indexes. pg_total_relation_size stats every file of every relation,
+    // which took minutes for a few thousand tables. Unknown until the table
+    // has been vacuumed or analyzed.
     const statsResult = await client.query<PgTableStatsRow>(`
       SELECT
         n.nspname AS schema_name,
@@ -132,9 +137,27 @@ export async function getSchemaTree(
           WHEN c.reltuples < 0 THEN NULL
           ELSE c.reltuples::bigint
         END AS estimated_row_count,
-        pg_size_pretty(pg_total_relation_size(c.oid)) AS size_on_disk
+        CASE
+          WHEN c.reltuples < 0 THEN NULL
+          ELSE pg_size_pretty(
+            (
+              c.relpages::bigint
+              + COALESCE(toast.relpages, 0)
+              + COALESCE(
+                  (
+                    SELECT sum(i.relpages)
+                    FROM pg_index x
+                    JOIN pg_class i ON i.oid = x.indexrelid
+                    WHERE x.indrelid IN (c.oid, c.reltoastrelid)
+                  ),
+                  0
+                )
+            ) * current_setting('block_size')::bigint
+          )
+        END AS size_on_disk
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
+      LEFT JOIN pg_class toast ON toast.oid = c.reltoastrelid
       WHERE c.relkind IN ('r', 'p')
       ${getSchemaFilterSql(includeInternalSchemas, "n.nspname")}
       ORDER BY n.nspname, c.relname

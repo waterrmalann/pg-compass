@@ -58,7 +58,7 @@ The diagram is loaded only when the tab is first opened, with two read-only `pg_
 
 ### Table Listing
 
-Clicking on a schema opens a new tab in the main area with the table listing. Clicking on a table (from this listing or from the sidebar) opens a new tab with the table viewer. The table listing has the following columns: name, storage size, row count, indexes count, and last vaccum time.
+Clicking on a schema opens a new tab in the main area with the table listing. Clicking on a table (from this listing or from the sidebar) opens a new tab with the table viewer. The table listing has the following columns: name, storage size, row count, indexes count, and last vaccum time. Size and row count are catalog estimates, so a database with thousands of tables opens quickly (see `docs/decisions/SCHEMA_TREE_STATS_ADR.md`).
 
 ### Table Viewer
 
