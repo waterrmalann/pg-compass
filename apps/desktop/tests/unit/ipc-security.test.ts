@@ -45,6 +45,34 @@ describe("IPC sender and file capability security", () => {
     );
   });
 
+  it("accepts the trusted page with a hash or query string", () => {
+    registerIpcHandler("test:channel", () => "ok");
+    const wrappedHandler = handle.mock.calls[0]?.[1] as (
+      event: unknown,
+    ) => unknown;
+
+    expect(
+      wrappedHandler(createEvent("file:///app/index.html?tab=1#/settings")),
+    ).toBe("ok");
+  });
+
+  it.each([
+    [
+      "a subframe showing the trusted page",
+      () => ({
+        ...createEvent(),
+        senderFrame: { url: "file:///app/index.html" },
+      }),
+    ],
+    ["another local page", () => createEvent("file:///app/other.html")],
+  ])("rejects %s", (_label, buildEvent) => {
+    registerIpcHandler("test:channel", () => "ok");
+    const wrappedHandler = handle.mock.calls[0]?.[1] as (
+      event: unknown,
+    ) => unknown;
+
+    expect(() => wrappedHandler(buildEvent())).toThrow(/untrusted renderer/);
+  });
   it("consumes an approved save path only once and only for its sender", () => {
     const event = createEvent();
     const approvedPath = approveSavePath(

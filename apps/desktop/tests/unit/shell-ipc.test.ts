@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   psqlPath: "/usr/bin/psql" as string | null,
   locatePsql: vi.fn(),
   spawn: vi.fn(),
+  cleanupTarget: vi.fn(async () => undefined),
 }));
 
 vi.mock("electron", () => ({
@@ -28,6 +29,20 @@ vi.mock("@/main/shell-process", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/main/shell-process")>()),
   locatePsql: mocks.locatePsql,
 }));
+
+// Keep the real target but observe its cleanup, which deletes temp TLS files.
+vi.mock("@/main/backup-process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/main/backup-process")>();
+  return {
+    ...actual,
+    resolvePgToolTarget: async (
+      ...args: Parameters<typeof actual.resolvePgToolTarget>
+    ) => ({
+      ...(await actual.resolvePgToolTarget(...args)),
+      cleanup: mocks.cleanupTarget,
+    }),
+  };
+});
 
 import { configureIpcSecurity } from "@/main/ipc-security";
 import { killAllShellSessions, registerShellHandlers } from "@/main/shell-ipc";
@@ -82,6 +97,7 @@ describe("shell IPC", () => {
   beforeEach(() => {
     mocks.handle.mockReset();
     mocks.spawn.mockReset();
+    mocks.cleanupTarget.mockClear();
     mocks.settings = { readOnlyMode: false, shellAccess: true, psqlPath: "" };
     mocks.psqlPath = "/usr/bin/psql";
     mocks.locatePsql.mockReset();
@@ -162,7 +178,7 @@ describe("shell IPC", () => {
     });
   });
 
-  it("wraps the located psql in a success envelope", async () => {
+  it("locates psql from the configured path", async () => {
     mocks.settings.psqlPath = "/opt/pg/bin/psql";
     mocks.psqlPath = "/opt/pg/bin/psql";
 
@@ -170,6 +186,9 @@ describe("shell IPC", () => {
       createEvent(),
       undefined,
     );
+    expect(mocks.locatePsql).toHaveBeenCalledWith({
+      configuredPath: "/opt/pg/bin/psql",
+    });
     expect(result).toEqual({
       success: true,
       data: { path: "/opt/pg/bin/psql", source: "path", platform: "linux" },
@@ -256,6 +275,67 @@ describe("shell IPC", () => {
 
     await handler(ShellChannels.KILL)(event, { sessionId: SESSION_ID });
     expect(fakePty.kill).toHaveBeenCalled();
+  });
+
+  it("cleans up the tool target when psql fails to spawn", async () => {
+    mocks.spawn.mockImplementation(() => {
+      throw new Error("spawn failed");
+    });
+
+    const result = await handler(ShellChannels.START)(
+      createEvent(),
+      startInput(),
+    );
+    expect(result).toEqual({ success: false, error: "spawn failed" });
+    expect(mocks.cleanupTarget).toHaveBeenCalledOnce();
+  });
+
+  it("refuses input to an open session once shell access is turned off", async () => {
+    const fakePty = createFakePty();
+    mocks.spawn.mockReturnValue(fakePty);
+    const event = createEvent();
+    await handler(ShellChannels.START)(event, startInput());
+
+    mocks.settings.shellAccess = false;
+    const result = await handler(ShellChannels.WRITE)(event, {
+      sessionId: SESSION_ID,
+      data: "DROP TABLE x;\r",
+    });
+    expect(result).toEqual({
+      success: false,
+      error: "Shell access is turned off.",
+    });
+    expect(fakePty.write).not.toHaveBeenCalled();
+  });
+
+  it("does not let another window write to, resize or kill a session", async () => {
+    const fakePty = createFakePty();
+    mocks.spawn.mockReturnValue(fakePty);
+    await handler(ShellChannels.START)(createEvent(31), startInput());
+    const otherWindow = createEvent(32);
+
+    const write = await handler(ShellChannels.WRITE)(otherWindow, {
+      sessionId: SESSION_ID,
+      data: "x",
+    });
+    const resize = await handler(ShellChannels.RESIZE)(otherWindow, {
+      sessionId: SESSION_ID,
+      cols: 100,
+      rows: 30,
+    });
+    await handler(ShellChannels.KILL)(otherWindow, { sessionId: SESSION_ID });
+
+    expect(write).toEqual({
+      success: false,
+      error: "Shell session not found.",
+    });
+    expect(resize).toEqual({
+      success: false,
+      error: "Shell session not found.",
+    });
+    expect(fakePty.write).not.toHaveBeenCalled();
+    expect(fakePty.resize).not.toHaveBeenCalled();
+    expect(fakePty.kill).not.toHaveBeenCalled();
   });
 
   it("kills a window's sessions when it reloads or closes", async () => {

@@ -1,22 +1,38 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import { createTempDir } from "../support/store";
 
 const encryptionAvailable = vi.hoisted(() => ({ value: false }));
+const storageBackend = vi.hoisted(() => ({ value: "dpapi" }));
 
 vi.mock("electron", () => ({
   safeStorage: {
     isEncryptionAvailable: () => encryptionAvailable.value,
-    getSelectedStorageBackend: () => "dpapi",
+    getSelectedStorageBackend: () => storageBackend.value,
     encryptString: (value: string) => Buffer.from(`encrypted:${value}`),
     decryptString: (value: Buffer) =>
       value.toString().replace(/^encrypted:/, ""),
   },
 }));
 
+function readConnectionsFile(): string {
+  const storeDir = process.env.PG_COMPASS_STORE_DIR ?? "";
+  return fs.readFileSync(path.join(storeDir, "connections.json"), "utf8");
+}
+
+const originalPlatform = process.platform;
+
 describe("connection-store", () => {
   beforeEach(() => {
     encryptionAvailable.value = false;
+    storageBackend.value = "dpapi";
     process.env.PG_COMPASS_STORE_DIR = createTempDir("pg-compass-store-");
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+    vi.restoreAllMocks();
   });
 
   it("creates, updates, toggles favourite, and deletes connections", async () => {
@@ -38,14 +54,14 @@ describe("connection-store", () => {
 
     expect(store.getAllConnections()).toHaveLength(1);
 
-    const updated = store.updateConnection(created.id, {
-      ...created,
-      label: "Renamed",
-    });
-    expect(updated?.label).toBe("Renamed");
+    store.updateConnection(created.id, { ...created, label: "Renamed" });
+    expect(store.getConnectionById(created.id)?.label).toBe("Renamed");
 
-    const toggled = store.toggleFavourite(created.id);
-    expect(toggled?.favourite).toBe(true);
+    store.toggleFavourite(created.id);
+    expect(store.getConnectionById(created.id)).toMatchObject({
+      label: "Renamed",
+      favourite: true,
+    });
 
     expect(store.deleteConnection(created.id)).toBe(true);
     expect(store.getAllConnections()).toHaveLength(0);
@@ -111,6 +127,55 @@ describe("connection-store", () => {
     });
     expect(store.getConnectionById(fieldsConnection.id)?.fields?.password).toBe(
       "field-secret",
+    );
+
+    // The mock cipher passes values through, so only the on-disk form shows
+    // whether each secret was actually encrypted before it was written.
+    const onDisk = readConnectionsFile();
+    expect(onDisk).toContain("esafe:");
+    expect(onDisk).not.toContain("user:updated@");
+    expect(onDisk).not.toContain("updated-ssh-secret");
+    expect(onDisk).not.toContain("updated-key-secret");
+    expect(onDisk).not.toContain("field-secret");
+  });
+
+  it("refuses to return credentials it cannot decrypt from getConnectionById", async () => {
+    encryptionAvailable.value = true;
+    vi.resetModules();
+    const store = await import("@/main/connection-store");
+    const created = store.createConnection({
+      label: "Encrypted URI",
+      favourite: false,
+      mode: "uri",
+      uri: "postgresql://user:secret@localhost:5432/database",
+    });
+
+    encryptionAvailable.value = false;
+    expect(() => store.getConnectionById(created.id)).toThrow(
+      "Saved credentials cannot be decrypted",
+    );
+  });
+
+  it("does not treat the Linux basic_text backend as secure encryption", async () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    encryptionAvailable.value = true;
+    storageBackend.value = "basic_text";
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.resetModules();
+    const store = await import("@/main/connection-store");
+
+    store.createConnection({
+      label: "Linux",
+      favourite: false,
+      mode: "uri",
+      uri: "postgresql://user:secret@localhost:5432/database",
+    });
+
+    // basic_text uses a hardcoded key, so the value is stored as plaintext
+    // (with a warning) rather than presented as encrypted.
+    expect(readConnectionsFile()).not.toContain("esafe:");
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("stored in plaintext"),
     );
   });
 

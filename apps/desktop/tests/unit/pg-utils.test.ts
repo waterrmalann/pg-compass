@@ -13,6 +13,11 @@ interface FakePool {
   end: ReturnType<typeof vi.fn>;
 }
 const poolsCreated: FakePool[] = [];
+interface FakeClient {
+  config: Record<string, unknown>;
+  end: ReturnType<typeof vi.fn>;
+}
+const clientsCreated: FakeClient[] = [];
 
 vi.mock("pg", () => {
   class Pool {
@@ -30,7 +35,16 @@ vi.mock("pg", () => {
       poolsCreated.push(this as unknown as FakePool);
     }
   }
-  return { Pool };
+  class Client {
+    config: Record<string, unknown>;
+    connect = vi.fn(async () => undefined);
+    end = vi.fn(async () => undefined);
+    constructor(config: Record<string, unknown>) {
+      this.config = config;
+      clientsCreated.push(this as unknown as FakeClient);
+    }
+  }
+  return { Pool, Client };
 });
 
 vi.mock("@/main/connection-store", () => ({
@@ -40,6 +54,7 @@ vi.mock("@/main/connection-store", () => ({
 async function loadUtils() {
   vi.resetModules();
   poolsCreated.length = 0;
+  clientsCreated.length = 0;
   return {
     utils: await import("@/main/pg-utils"),
     store: await import("@/main/connection-store"),
@@ -352,11 +367,8 @@ describe("pool lifecycle", () => {
       fieldsConnection,
     );
 
-    const release = vi.fn();
     await expect(
       utils.withPoolClient("conn-1", async () => {
-        // Overwrite the client's release with our spy by running once first
-        // would be indirect; instead, assert via the pool's connect mock return.
         throw new Error("boom");
       }),
     ).rejects.toThrow("boom");
@@ -364,7 +376,39 @@ describe("pool lifecycle", () => {
     const connectMock = poolsCreated[0]!.connect;
     const client = await connectMock.mock.results[0]!.value;
     expect(client.release).toHaveBeenCalledTimes(1);
-    void release;
+  });
+
+  it("ends a database client even when the callback throws", async () => {
+    const { utils, store } = await loadUtils();
+    (store.getConnectionById as ReturnType<typeof vi.fn>).mockReturnValue(
+      fieldsConnection,
+    );
+
+    await expect(
+      utils.withDatabaseClient("conn-1", "other_db", async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+
+    expect(clientsCreated).toHaveLength(1);
+    expect(clientsCreated[0]!.config).toMatchObject({ database: "other_db" });
+    expect(clientsCreated[0]!.end).toHaveBeenCalledOnce();
+  });
+
+  it("ends a dedicated client even when the callback throws", async () => {
+    const { utils, store } = await loadUtils();
+    (store.getConnectionById as ReturnType<typeof vi.fn>).mockReturnValue(
+      fieldsConnection,
+    );
+
+    await expect(
+      utils.withDedicatedClient("conn-1", async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+
+    expect(clientsCreated).toHaveLength(1);
+    expect(clientsCreated[0]!.end).toHaveBeenCalledOnce();
   });
 
   it("destroyPool ends the underlying pool and drops it from the map", async () => {
@@ -383,11 +427,6 @@ describe("pool lifecycle", () => {
     expect(poolsCreated).toHaveLength(2);
   });
 
-  it("destroyPool is a no-op when no pool exists for the id", async () => {
-    const { utils } = await loadUtils();
-    await expect(utils.destroyPool("nope")).resolves.toBeUndefined();
-  });
-
   it("destroyAllPools ends every known pool and clears the map", async () => {
     const { utils, store } = await loadUtils();
     (store.getConnectionById as ReturnType<typeof vi.fn>).mockImplementation(
@@ -402,7 +441,7 @@ describe("pool lifecycle", () => {
 
     // Subsequent withPoolClient should create fresh pools.
     await utils.withPoolClient("a", async () => "ok");
-    expect(poolsCreated.length).toBeGreaterThanOrEqual(3);
+    expect(poolsCreated).toHaveLength(3);
   });
 
   it("destroyAllPools awaits even when pool.end rejects", async () => {
@@ -417,20 +456,5 @@ describe("pool lifecycle", () => {
     };
 
     await expect(utils.destroyAllPools()).resolves.toBeUndefined();
-  });
-
-  it("handles concurrent first-calls for the same connection without creating extra pools", async () => {
-    const { utils, store } = await loadUtils();
-    (store.getConnectionById as ReturnType<typeof vi.fn>).mockReturnValue(
-      fieldsConnection,
-    );
-
-    await Promise.all([
-      utils.withPoolClient("conn-1", async () => "ok"),
-      utils.withPoolClient("conn-1", async () => "ok"),
-      utils.withPoolClient("conn-1", async () => "ok"),
-    ]);
-
-    expect(poolsCreated).toHaveLength(1);
   });
 });

@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   failOn: null as RegExp | null,
   unreachableDatabases: new Set<string>(),
   triggerExists: true,
+  schemas: ["public"],
+  sourceRoleIsSuperuser: false,
   client: null as FakeClient | null,
   logAudit: vi.fn(),
   handle: vi.fn(),
@@ -39,6 +41,23 @@ function createFakeClient(): FakeClient {
     if (sql.includes("quote_literal")) {
       const value = String(params[0]).replaceAll("'", "''");
       return { rows: [{ quoted: `'${value}'` }] };
+    }
+    if (sql.includes("FROM pg_roles WHERE rolname = $1")) {
+      return {
+        rows: [
+          {
+            rolsuper: mocks.sourceRoleIsSuperuser,
+            rolcanlogin: true,
+            rolcreaterole: false,
+            rolcreatedb: false,
+            rolinherit: true,
+            rolconnlimit: -1,
+          },
+        ],
+      };
+    }
+    if (sql.includes("FROM pg_namespace")) {
+      return { rows: mocks.schemas.map((nspname) => ({ nspname })) };
     }
     if (sql.includes("FROM pg_trigger")) {
       return { rows: [{ exists: mocks.triggerExists }] };
@@ -95,8 +114,11 @@ vi.mock("electron", () => ({ ipcMain: { handle: mocks.handle } }));
 import {
   alterRole,
   alterRolePassword,
+  cloneRole,
   createRole,
   runRoleMutation,
+  setDbAccessLevel,
+  setTableRestrictions,
 } from "@/main/roles-mutations";
 import { setTriggerEnabled } from "@/main/roles-triggers";
 import { getEffectivePermissions } from "@/main/roles-queries";
@@ -108,6 +130,11 @@ function statementsMatching(pattern: RegExp): string[] {
   return mocks.client!.statements.filter((sql) => pattern.test(sql));
 }
 
+/** The transaction and privilege DDL, without the catalog lookups. */
+function privilegeStatements(): string[] {
+  return statementsMatching(/^(BEGIN|COMMIT|ROLLBACK|GRANT|REVOKE|ALTER)/);
+}
+
 describe("roles mutations", () => {
   beforeEach(() => {
     mocks.readOnlyMode = false;
@@ -115,6 +142,8 @@ describe("roles mutations", () => {
     mocks.failOn = null;
     mocks.unreachableDatabases.clear();
     mocks.triggerExists = true;
+    mocks.schemas = ["public"];
+    mocks.sourceRoleIsSuperuser = false;
     mocks.client = createFakeClient();
     mocks.logAudit.mockReset();
   });
@@ -198,11 +227,111 @@ describe("roles mutations", () => {
     await alterRolePassword({
       connectionId: "c1",
       name: "reader",
-      password: "o'hara",
+      password: "plain-reset-secret",
     });
     const [alter] = statementsMatching(/^ALTER ROLE/);
     expect(alter).toMatch(/^ALTER ROLE "reader" PASSWORD 'SCRAM-SHA-256\$/);
-    expect(mocks.client!.statements.join("\n")).not.toContain("o'hara");
+    expect(mocks.client!.statements.join("\n")).not.toContain(
+      "plain-reset-secret",
+    );
+  });
+
+  it("refuses to clone a superuser role", async () => {
+    mocks.sourceRoleIsSuperuser = true;
+    await expect(
+      cloneRole({ connectionId: "c1", sourceName: "postgres", newName: "x" }),
+    ).rejects.toThrow("Refusing to clone a superuser role.");
+    expect(statementsMatching(/^CREATE ROLE/)).toEqual([]);
+  });
+
+  it("only revokes when setting database access to none", async () => {
+    await setDbAccessLevel({
+      connectionId: "c1",
+      userName: "reader",
+      databaseName: "app",
+      level: "none",
+      applyToFutureTables: true,
+    });
+    expect(privilegeStatements()).toEqual([
+      "BEGIN",
+      `REVOKE ALL PRIVILEGES ON DATABASE "app" FROM "reader"`,
+      `REVOKE ALL PRIVILEGES ON SCHEMA "public" FROM "reader"`,
+      `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "public" FROM "reader"`,
+      `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA "public" FROM "reader"`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA "public" REVOKE ALL ON TABLES FROM "reader"`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA "public" REVOKE ALL ON SEQUENCES FROM "reader"`,
+      "COMMIT",
+    ]);
+  });
+
+  it("grants read-only access to existing tables without write privileges", async () => {
+    await setDbAccessLevel({
+      connectionId: "c1",
+      userName: "reader",
+      databaseName: "app",
+      level: "readonly",
+      applyToFutureTables: false,
+    });
+    expect(statementsMatching(/^GRANT/)).toEqual([
+      `GRANT CONNECT ON DATABASE "app" TO "reader"`,
+      `GRANT USAGE ON SCHEMA "public" TO "reader"`,
+      `GRANT SELECT ON ALL TABLES IN SCHEMA "public" TO "reader"`,
+      `GRANT SELECT ON ALL SEQUENCES IN SCHEMA "public" TO "reader"`,
+    ]);
+    expect(statementsMatching(/^ALTER DEFAULT PRIVILEGES .* GRANT/)).toEqual(
+      [],
+    );
+  });
+
+  it("extends read-write access to future tables when asked", async () => {
+    await setDbAccessLevel({
+      connectionId: "c1",
+      userName: "writer",
+      databaseName: "app",
+      level: "readwrite",
+      applyToFutureTables: true,
+    });
+    expect(statementsMatching(/^ALTER DEFAULT PRIVILEGES .* GRANT/)).toEqual([
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA "public" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "writer"`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA "public" GRANT SELECT, USAGE ON SEQUENCES TO "writer"`,
+    ]);
+  });
+
+  it("rolls back every revoke when a later grant fails", async () => {
+    mocks.failOn = /^GRANT USAGE/;
+    await expect(
+      setDbAccessLevel({
+        connectionId: "c1",
+        userName: "reader",
+        databaseName: "app",
+        level: "readonly",
+        applyToFutureTables: false,
+      }),
+    ).rejects.toThrow("simulated failure");
+    expect(mocks.client!.statements.at(-1)).toBe("ROLLBACK");
+    expect(statementsMatching(/^COMMIT/)).toEqual([]);
+  });
+
+  it("grants per-table restrictions on schema-qualified, quoted table names", async () => {
+    await setTableRestrictions({
+      connectionId: "c1",
+      userName: "reader",
+      databaseName: "app",
+      tables: [
+        { schema: "Sales Data", name: "orders", level: "readonly" },
+        { schema: "Sales Data", name: 'line"items', level: "readwrite" },
+        { schema: "Sales Data", name: "secrets", level: "none" },
+      ],
+    });
+    expect(privilegeStatements()).toEqual([
+      "BEGIN",
+      `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA "Sales Data" FROM "reader"`,
+      `GRANT USAGE ON SCHEMA "Sales Data" TO "reader"`,
+      `GRANT SELECT ON "Sales Data"."orders" TO "reader"`,
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON "Sales Data"."line""items" TO "reader"`,
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA "Sales Data" REVOKE ALL ON TABLES FROM "reader"`,
+      "COMMIT",
+    ]);
   });
 
   it("requires a superuser for admin mutations", async () => {

@@ -98,8 +98,15 @@ describe("query cancellation lifecycle", () => {
     await vi.waitFor(() => expect(fakeClient.query).toHaveBeenCalled());
     const cancelling = cancelQuery("conn-1", "lease-query");
     countGate.resolve({ rows: [{ count: "0" }] });
-    await Promise.resolve();
+    let runningSettled = false;
+    void running.finally(() => {
+      runningSettled = true;
+    });
+    // Let every remaining step of the query finish; only the cancel handshake
+    // is still pending, so the lease must still be held.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(poolLeaseReleased).toBe(false);
+    expect(runningSettled).toBe(false);
     cancelGate.resolve(true);
     await expect(cancelling).resolves.toBe("cancel-requested");
     await expect(running).resolves.toMatchObject({ rows: [] });

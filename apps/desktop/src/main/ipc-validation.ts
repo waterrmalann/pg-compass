@@ -733,6 +733,13 @@ export function validateInsertRowParams(value: unknown): InsertRowParams {
     asString(record.column, `insertRow.changes[${index}].column`);
     asString(record.pgCast, `insertRow.changes[${index}].pgCast`);
     asBoolean(record.setNull, `insertRow.changes[${index}].setNull`);
+    // See validateUpdateCellParams: a dropped `newValue` would be bound as
+    // NULL, silently overriding the column default instead of failing.
+    if (!record.setNull && record.newValue === undefined) {
+      throw new TypeError(
+        `insertRow.changes[${index}].newValue is required when setNull is false.`,
+      );
+    }
   });
   return value as InsertRowParams;
 }

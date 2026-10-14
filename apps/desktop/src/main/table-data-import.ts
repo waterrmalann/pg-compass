@@ -11,7 +11,6 @@ import { pipeline } from "node:stream/promises";
 import {
   isLosslessNumber,
   LosslessNumber,
-  parse as parseLosslessJson,
   stringify as stringifyLosslessJson,
 } from "lossless-json";
 import parser from "stream-json/parser.js";
@@ -29,18 +28,13 @@ import { createProgressThrottle } from "./table-data-export";
 const MAX_BIND_PARAMS = 65_535;
 const MAX_ROWS_PER_BATCH = 1_000;
 
-export interface ParsedImport {
-  columns: string[];
-  rows: unknown[][];
-}
-
 interface CsvRecord {
   cells: string[];
   blank: boolean;
 }
 
 /** Incremental RFC 4180 parser. A quoted empty field is not a blank line. */
-class CsvRecordParser {
+export class CsvRecordParser {
   private readonly records: CsvRecord[] = [];
   private row: string[] = [];
   private field = "";
@@ -182,15 +176,6 @@ function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-function parseCsvRecords(text: string): CsvRecord[] {
-  const parserInstance = new CsvRecordParser();
-  return [...parserInstance.feed(stripBom(text)), ...parserInstance.finish()];
-}
-
-export function parseCsv(text: string): string[][] {
-  return parseCsvRecords(text).map((record) => record.cells);
-}
-
 function validateCsvHeader(header: string[]): void {
   const seen = new Set<string>();
   for (const name of header) {
@@ -220,24 +205,6 @@ function csvRecordToRow(
   });
 }
 
-export function parseCsvImport(text: string): ParsedImport {
-  const records = parseCsvRecords(text);
-  if (records.length === 0 || records.every((record) => record.blank)) {
-    throw new Error("The CSV file is empty — expected a header row.");
-  }
-  const headerIndex = records.findIndex((record) => !record.blank);
-  const columns = records[headerIndex]!.cells;
-  validateCsvHeader(columns);
-
-  const rows: unknown[][] = [];
-  for (let index = headerIndex + 1; index < records.length; index++) {
-    const record = records[index]!;
-    if (record.blank) continue;
-    rows.push(csvRecordToRow(record, columns, index + 1));
-  }
-  return { columns, rows };
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -251,43 +218,6 @@ function coerceJsonValue(value: unknown): unknown {
   if (isLosslessNumber(value)) return value.toString();
   if (typeof value === "object") return stringifyLosslessJson(value);
   return value;
-}
-
-/** Small-input helper retained for focused parser tests. Production uses streams. */
-export function parseJsonImport(text: string): ParsedImport {
-  if (text.trim() === "") throw new Error("The JSON file is empty.");
-
-  let parsed: unknown;
-  try {
-    parsed = parseLosslessJson(stripBom(text));
-  } catch (error) {
-    throw new Error(`Invalid JSON: ${(error as Error).message}`);
-  }
-
-  const items = Array.isArray(parsed) ? parsed : [parsed];
-  const columns: string[] = [];
-  const seen = new Set<string>();
-  for (const item of items) {
-    if (!isPlainObject(item)) {
-      throw new Error(
-        "JSON import expects an array of objects (one object per row).",
-      );
-    }
-    for (const key of Object.keys(item)) {
-      if (!seen.has(key)) {
-        seen.add(key);
-        columns.push(key);
-      }
-    }
-  }
-  const rows = items.map((item) =>
-    columns.map((column) =>
-      Object.prototype.hasOwnProperty.call(item, column)
-        ? coerceJsonValue((item as Record<string, unknown>)[column])
-        : null,
-    ),
-  );
-  return { columns, rows };
 }
 
 export function computeBatchSize(columnCount: number): number {

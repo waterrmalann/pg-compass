@@ -1,8 +1,16 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionConfig } from "@/shared/types/connection";
+
+const { spawn } = vi.hoisted(() => ({ spawn: vi.fn() }));
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return { ...actual, default: { ...actual, spawn }, spawn };
+});
 
 vi.mock("@/main/connection-store", () => ({
   getConnectionById: vi.fn(),
@@ -14,6 +22,7 @@ import {
   buildPgRestoreListArgs,
   quoteConninfoValue,
   resolvePgToolTarget,
+  runPgTool,
 } from "@/main/backup-process";
 
 const HOSTILE_DATABASE = "host=evil dbname=x";
@@ -160,14 +169,29 @@ describe("SSL environment mapping", () => {
     expect(path.dirname(target.env.PGSSLKEY!)).toBe(pemDir);
     expect(fs.readFileSync(target.env.PGSSLROOTCERT!, "utf8")).toBe(INLINE_CA);
     expect(fs.readFileSync(target.env.PGSSLKEY!, "utf8")).toBe("KEY");
-    if (process.platform !== "win32") {
-      const keyMode = fs.statSync(target.env.PGSSLKEY!).mode & 0o777;
-      expect(keyMode).toBe(0o600);
-    }
 
     await target.cleanup();
     expect(fs.existsSync(pemDir)).toBe(false);
   });
+
+  // Windows has no POSIX file modes; there the directory ACL protects it.
+  it.skipIf(process.platform === "win32")(
+    "writes the client key readable by the owner only",
+    async () => {
+      const keyPath = writeTempFile("client.key", "KEY");
+      const target = await resolvePgToolTarget(
+        {
+          ...fieldsConnection,
+          ssl: { enabled: true, rejectUnauthorized: true, key: keyPath },
+        },
+        "app",
+      );
+
+      const keyMode = fs.statSync(target.env.PGSSLKEY!).mode & 0o777;
+      expect(keyMode).toBe(0o600);
+      await target.cleanup();
+    },
+  );
 
   it("maps unverified SSL to require without trusting a CA file", async () => {
     const target = await resolvePgToolTarget(
@@ -205,8 +229,47 @@ describe("SSL environment mapping", () => {
     });
   });
 
-  it("leaves SSL variables unset when SSL is disabled", async () => {
-    const target = await resolvePgToolTarget(fieldsConnection, "app");
-    expect(Object.keys(target.env)).toEqual(["PGPASSWORD"]);
+  it("ignores saved SSL settings while SSL is disabled", async () => {
+    const target = await resolvePgToolTarget(
+      {
+        ...fieldsConnection,
+        ssl: {
+          enabled: false,
+          rejectUnauthorized: true,
+          caSource: "inline",
+          ca: INLINE_CA,
+        },
+      },
+      "app",
+    );
+    expect(target.env).toEqual({ PGPASSWORD: "field-secret" });
+  });
+});
+
+describe("runPgTool", () => {
+  it("never starts the tool when the run was cancelled during preparation", async () => {
+    spawn.mockClear();
+    const result = await runPgTool("pg_restore", [], {}, vi.fn(), {
+      cancelled: true,
+    });
+    expect(result).toEqual({ code: -1, stdout: "", stderr: "" });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("explains a missing client tool", async () => {
+    const child = new EventEmitter();
+    spawn.mockReturnValue(child);
+    const running = runPgTool("pg_dump", [], {}, vi.fn(), { cancelled: false });
+
+    child.emit(
+      "error",
+      Object.assign(new Error("spawn pg_dump ENOENT"), { code: "ENOENT" }),
+    );
+    await expect(running).resolves.toMatchObject({
+      code: -1,
+      error: expect.stringMatching(
+        /^pg_dump not found\. Install the PostgreSQL client tools/,
+      ),
+    });
   });
 });

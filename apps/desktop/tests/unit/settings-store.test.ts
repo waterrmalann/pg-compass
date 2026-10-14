@@ -9,19 +9,25 @@ describe("settings-store", () => {
     vi.resetModules();
   });
 
-  it("merges settings patches without dropping unrelated keys", async () => {
+  it("keeps earlier patches when a later patch changes other keys", async () => {
     const { getSettings, updateSettings } =
       await import("@/main/settings-store");
 
     updateSettings({
       appearance: { theme: "light" },
-      general: { hideInternalSchemas: false },
+      general: { shellAccess: true },
+      privacy: { automaticUpdates: false },
     });
+    updateSettings({ general: { hideInternalSchemas: false } });
 
     expect(getSettings()).toMatchObject({
-      appearance: { theme: "light" },
-      general: { hideInternalSchemas: false, enableDevTools: true },
-      privacy: { automaticUpdates: true },
+      appearance: { theme: "light", sidebarWidth: 256 },
+      general: {
+        shellAccess: true,
+        hideInternalSchemas: false,
+        enableDevTools: true,
+      },
+      privacy: { automaticUpdates: false },
     });
   });
 

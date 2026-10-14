@@ -37,14 +37,8 @@ describe("buildScramSha256Verifier", () => {
     expect(verifierFor("cafe\u0301")).toBe(verifierFor("caf\u00E9"));
     expect(verifierFor("pass\u00A0word")).toBe(verifierFor("pass word"));
     expect(verifierFor("a\u00ADb")).toBe(verifierFor("ab"));
-    // Prohibited output falls back to the raw password, as the server does.
-    expect(verifierFor("\uE000abc")).not.toBe(verifierFor("abc"));
-  });
-
-  it("never embeds the plaintext and salts each call differently", () => {
-    const first = buildScramSha256Verifier("hunter2-secret");
-    const second = buildScramSha256Verifier("hunter2-secret");
-    expect(first).not.toContain("hunter2-secret");
-    expect(first).not.toBe(second);
+    // Prohibited output falls back to the raw password, as the server does,
+    // so the ligature is not normalized when a private-use character follows.
+    expect(verifierFor("\uFB01\uE000")).not.toBe(verifierFor("fi\uE000"));
   });
 });

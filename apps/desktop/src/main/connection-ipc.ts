@@ -1,5 +1,4 @@
 import { BrowserWindow, dialog } from "electron";
-import { Client } from "pg";
 import { ConnectionChannels } from "../shared/constants/ipc-channels";
 import type {
   DatabaseView,
@@ -15,7 +14,7 @@ import {
   deleteConnection,
   toggleFavourite,
 } from "./connection-store";
-import { buildPgConfig, withPoolClient, destroyPool } from "./pg-utils";
+import { destroyPool, withDedicatedClient, withPoolClient } from "./pg-utils";
 import {
   validateConnectionId,
   validateConnectionInput,
@@ -309,12 +308,8 @@ export function registerConnectionHandlers(): void {
         if (!connection)
           return { success: false, error: "Connection not found." };
 
-        const pgConfig = buildPgConfig(connection);
-        const client = new Client(pgConfig);
-
-        await client.connect();
-        await client.query("SELECT 1");
-        await client.end();
+        // The dedicated client is ended even when the probe query fails.
+        await withDedicatedClient(id, (client) => client.query("SELECT 1"));
 
         return { success: true, data: true };
       } catch (err) {

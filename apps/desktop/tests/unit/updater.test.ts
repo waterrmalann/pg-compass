@@ -191,6 +191,24 @@ describe("updater", () => {
     expect(mocks.quitAndInstall).toHaveBeenCalled();
   });
 
+  it("keeps offering the restart when a later release check finishes", async () => {
+    setPlatform("win32");
+    const { checkForUpdatesNow, registerUpdateHandlers } = await loadUpdater();
+    registerUpdateHandlers();
+    const downloaded = mocks.autoUpdaterOn.mock.calls.find(
+      ([event]) => event === "update-downloaded",
+    )?.[1] as () => void;
+    downloaded();
+
+    await checkForUpdatesNow();
+
+    expect(lastBroadcastStatus()).toEqual({ kind: "ready", version: null });
+    expect(getHandler(UpdateChannels.INSTALL)()).toEqual({
+      success: true,
+      data: undefined,
+    });
+  });
+
   it("reports an up-to-date app from the menu check", async () => {
     const { checkForUpdatesNow } = await loadUpdater();
 

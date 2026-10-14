@@ -16,11 +16,16 @@ import {
   validateInsertRowParams,
   validateMembershipInput,
   validateRolesSnapshotInput,
+  validateSaveDialogOptions,
   validateSchemaDiagramParams,
   validateSetDbAccessLevelInput,
   validateSetTriggerEnabledInput,
   validateSettingsPatch,
+  validateShellResizeInput,
+  validateShellSessionInput,
+  validateShellWriteInput,
   validateTableRestrictionInput,
+  validateUpdateCellParams,
   validateUpdateRowParams,
 } from "@/main/ipc-validation";
 
@@ -286,6 +291,15 @@ describe("IPC runtime validation", () => {
         sql: "SELECT * FROM users",
       }),
     ).toThrow(/either sql or both schema and table/);
+
+    expect(() =>
+      validateExportDataParams({
+        connectionId: "connection",
+        format: "csv",
+        filePath: "export.csv",
+        table: "users",
+      }),
+    ).toThrow(/either sql or both schema and table/);
   });
 
   it("requires primary-key columns and values to align", () => {
@@ -357,14 +371,13 @@ describe("IPC runtime validation", () => {
       ...base,
       changes: [],
     });
-    expect(
-      validateInsertRowParams({
-        ...base,
-        changes: [
-          { column: "email", pgCast: "text", newValue: "a", setNull: false },
-        ],
-      }),
-    ).toBeTruthy();
+    const withChange = {
+      ...base,
+      changes: [
+        { column: "email", pgCast: "text", newValue: "a", setNull: false },
+      ],
+    };
+    expect(validateInsertRowParams(withChange)).toBe(withChange);
     expect(() =>
       validateInsertRowParams({
         ...base,
@@ -374,6 +387,80 @@ describe("IPC runtime validation", () => {
     expect(() =>
       validateInsertRowParams({ ...base, changes: [{ column: 1 }] }),
     ).toThrow(/column/);
+  });
+
+  // `pg` binds undefined as NULL, so a dropped value must fail loudly.
+  it.each([
+    [
+      "updateCell",
+      (change: object) =>
+        validateUpdateCellParams({
+          connectionId: "connection",
+          schema: "public",
+          table: "users",
+          pkColumns: ["id"],
+          pkValues: [1],
+          ...change,
+        }),
+    ],
+    [
+      "updateRow",
+      (change: object) =>
+        validateUpdateRowParams({
+          connectionId: "connection",
+          schema: "public",
+          table: "users",
+          pkColumns: ["id"],
+          pkValues: [1],
+          changes: [change],
+        }),
+    ],
+    [
+      "insertRow",
+      (change: object) =>
+        validateInsertRowParams({
+          connectionId: "connection",
+          schema: "public",
+          table: "users",
+          changes: [change],
+        }),
+    ],
+  ])("%s requires newValue unless setNull is true", (_name, validate) => {
+    const base = { column: "name", pgCast: "text" };
+    expect(() => validate({ ...base, setNull: false })).toThrow(
+      /newValue is required/,
+    );
+    expect(() => validate({ ...base, setNull: true })).not.toThrow();
+  });
+
+  it("only opens save dialogs for export and SQL dump grants", () => {
+    const options = { purpose: "export", title: "Export" };
+    expect(validateSaveDialogOptions(options)).toBe(options);
+    expect(() => validateSaveDialogOptions({ purpose: "restore" })).toThrow(
+      "saveDialogOptions.purpose is invalid.",
+    );
+    expect(() => validateSaveDialogOptions({ purpose: "import" })).toThrow(
+      "saveDialogOptions.purpose is invalid.",
+    );
+  });
+
+  it("bounds shell session ids, writes and terminal sizes", () => {
+    expect(() =>
+      validateShellSessionInput({ sessionId: "../session-1" }),
+    ).toThrow(/run identifier/);
+    expect(() =>
+      validateShellWriteInput({
+        sessionId: "session-1",
+        data: "x".repeat(1_000_001),
+      }),
+    ).toThrow(/shellWriteInput.data/);
+    expect(() =>
+      validateShellResizeInput({
+        sessionId: "session-1",
+        cols: 1_001,
+        rows: 24,
+      }),
+    ).toThrow(/cols/);
   });
 
   it("rejects malformed settings patches", () => {
@@ -452,7 +539,7 @@ describe("IPC runtime validation", () => {
       ).toThrow(/extra/);
     });
 
-    it("drops the removed restrictedTables option from db access input", () => {
+    it("rejects the removed restrictedTables option in db access input", () => {
       const input = {
         connectionId: "c1",
         userName: "reader",
@@ -502,7 +589,7 @@ describe("IPC runtime validation", () => {
       ).toThrow(/enabled/);
     });
 
-    it("drops unknown keys from drop-role payloads", () => {
+    it("rejects unknown keys in drop-role payloads", () => {
       expect(() =>
         validateDropRoleInput({
           connectionId: "c1",
