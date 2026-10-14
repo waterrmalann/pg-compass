@@ -49,7 +49,9 @@ export default async function globalSetup(config: FullConfig) {
     "utf8",
   );
 
-  process.on("exit", () => {
-    void seeded.cleanup();
-  });
+  // Playwright awaits a returned function as the global teardown. An "exit"
+  // handler can't run async work, so the database used to be left behind.
+  return async () => {
+    await seeded.cleanup();
+  };
 }

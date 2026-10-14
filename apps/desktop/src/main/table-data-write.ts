@@ -124,6 +124,39 @@ async function assertEnumCast(
   }
 }
 
+/**
+ * Runs an UPDATE that must touch exactly one row, inside its own transaction.
+ * A key can match more than one row (an inherited child table holds its own
+ * copy of the parent's key), so the row count is checked before COMMIT and
+ * any other count rolls the change back.
+ */
+async function updateSingleRow(
+  client: PoolClient,
+  sql: string,
+  values: unknown[],
+  description: string,
+): Promise<Record<string, unknown>> {
+  await client.query("BEGIN");
+  try {
+    const result = await client.query(sql, values);
+    if (result.rowCount === 0) {
+      throw new Error(
+        "Row not found: no rows matched the provided primary key.",
+      );
+    }
+    if (result.rowCount && result.rowCount > 1) {
+      throw new Error(
+        `Unexpected row count (${result.rowCount}) from ${description}.`,
+      );
+    }
+    await client.query("COMMIT");
+    return result.rows[0] as Record<string, unknown>;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function updateCell(
   params: UpdateCellParams,
 ): Promise<UpdateCellResult> {
@@ -166,20 +199,8 @@ export async function updateCell(
       : [params.newValue, ...params.pkValues];
 
     const sql = `UPDATE ${qualifiedTable} SET ${setClause} WHERE ${whereClause} RETURNING *`;
-    const result = await client.query(sql, values);
-
-    if (result.rowCount === 0) {
-      throw new Error(
-        "Row not found: no rows matched the provided primary key.",
-      );
-    }
-    if (result.rowCount && result.rowCount > 1) {
-      throw new Error(
-        `Unexpected row count (${result.rowCount}) from cell update.`,
-      );
-    }
-
-    return { row: result.rows[0] as Record<string, unknown> };
+    const row = await updateSingleRow(client, sql, values, "cell update");
+    return { row };
   });
 }
 
@@ -268,20 +289,8 @@ export async function updateRow(
     const values = [...setValues, ...params.pkValues];
 
     const sql = `UPDATE ${qualifiedTable} SET ${setParts.join(", ")} WHERE ${whereClause} RETURNING *`;
-    const result = await client.query(sql, values);
-
-    if (result.rowCount === 0) {
-      throw new Error(
-        "Row not found: no rows matched the provided primary key.",
-      );
-    }
-    if (result.rowCount && result.rowCount > 1) {
-      throw new Error(
-        `Unexpected row count (${result.rowCount}) from row update.`,
-      );
-    }
-
-    return { row: result.rows[0] as Record<string, unknown> };
+    const row = await updateSingleRow(client, sql, values, "row update");
+    return { row };
   });
 }
 

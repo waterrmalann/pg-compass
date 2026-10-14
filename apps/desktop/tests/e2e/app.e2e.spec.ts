@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { test, expect } from "@playwright/test";
 import { getRuntimeState, launchApp } from "./electron-app";
 
@@ -115,9 +116,16 @@ test("explores, queries, exports, and updates settings in the real Electron app"
   await page.getByRole("menuitem", { name: "Export selected query" }).click();
   await page.getByRole("button", { name: "Export" }).click();
 
-  await expect
-    .poll(() => fs.readdirSync(runtime.exportDir).length)
-    .toBeGreaterThan(0);
+  // The last successful query (the default LIMIT 100) is what gets exported.
+  // Wait for the result: the temporary file exists long before it is done.
+  await expect(page.getByText("Exported 100 rows")).toBeVisible();
+  const exportedLines = fs
+    .readFileSync(path.join(runtime.exportDir, "query-export.csv"), "utf8")
+    .trimEnd()
+    .split("\n");
+  expect(exportedLines).toHaveLength(101);
+  expect(exportedLines[0]).toMatch(/^id,email,display_name,/);
+  expect(exportedLines[1]).toMatch(/^1,user1@example\.com,User 1,/);
 
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Appearance" }).click();

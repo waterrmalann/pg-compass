@@ -6,7 +6,12 @@ import {
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
-import { getRuntimeState, launchApp } from "./electron-app";
+import { Client } from "pg";
+import {
+  getRuntimeState,
+  launchApp,
+  type E2ERuntimeState,
+} from "./electron-app";
 import { DEFAULT_APP_SETTINGS } from "@/shared/types/settings";
 
 async function launch(runtime: {
@@ -36,6 +41,23 @@ function writeSettings(storeDir: string, readOnlyMode: boolean): void {
     ),
     "utf8",
   );
+}
+
+async function readDisplayName(
+  runtime: E2ERuntimeState,
+  userId: number,
+): Promise<string> {
+  const client = new Client(runtime.connection.fields);
+  await client.connect();
+  try {
+    const result = await client.query<{ display_name: string }>(
+      "SELECT display_name FROM app.users WHERE id = $1",
+      [userId],
+    );
+    return result.rows[0]!.display_name;
+  } finally {
+    await client.end();
+  }
 }
 
 async function openUsersDataTab(page: Page): Promise<void> {
@@ -71,11 +93,15 @@ test("read-only mode hides every edit affordance", async ({
     await openUsersDataTab(page);
 
     // Table view
+    const dataCell = page.getByText("user2@example.com", { exact: true });
+    await expect(dataCell).toBeVisible();
     await expect(
       page.locator('[data-testid="cell-editor-target"]'),
     ).toHaveCount(0);
-    const firstCell = page.locator("td").first();
-    await firstCell.dblclick({ force: true });
+    await expect(page.getByRole("button", { name: "Edit row" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add data" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Delete" })).toBeDisabled();
+    await dataCell.dblclick();
     await expect(page.locator('[data-testid="cell-editor"]')).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -103,12 +129,22 @@ test("edits apply when read-only mode is off", async ({
   try {
     await openUsersDataTab(page);
 
-    // Table view: double-click should reveal an edit target and (eventually)
-    // an editor. This test fails until EditableCell is wired into table-data-view.
-    const targets = page.locator('[data-testid="cell-editor-target"]');
-    await expect(targets.first()).toBeVisible();
-    await targets.first().dblclick();
-    await expect(page.locator('[data-testid="cell-editor"]')).toBeVisible();
+    const target = page
+      .locator('[data-testid="cell-editor-target"]')
+      .filter({ hasText: /^User 2$/ });
+    await target.dblclick();
+    const editor = page.locator('[data-testid="cell-editor"]');
+    await expect(editor).toBeVisible();
+    await editor.getByRole("textbox").fill("Edited in E2E");
+    await editor.getByRole("button", { name: "Save" }).click();
+
+    await expect(editor).toHaveCount(0);
+    await expect(
+      page
+        .locator('[data-testid="cell-editor-target"]')
+        .filter({ hasText: /^Edited in E2E$/ }),
+    ).toBeVisible();
+    expect(await readDisplayName(runtime, 2)).toBe("Edited in E2E");
   } finally {
     await app.close();
   }

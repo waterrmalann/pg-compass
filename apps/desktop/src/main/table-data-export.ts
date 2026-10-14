@@ -271,9 +271,11 @@ export async function sqlDump(
 
     let rowCount = 0;
     copyStream.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf-8");
-      const lines = text.split("\n").filter((l) => l.length > 0);
-      rowCount += lines.length;
+      // COPY's text format ends every row with a newline (newlines inside
+      // values are escaped), but a chunk can end mid-row. Count line endings,
+      // not lines, so a row split across two chunks is counted once.
+      const lineEndings = chunk.toString("utf-8").split("\n").length - 1;
+      rowCount += lineEndings;
       progress.send(rowCount);
     });
 

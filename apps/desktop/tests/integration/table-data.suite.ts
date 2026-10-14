@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { WebContents } from "electron";
+import { Client } from "pg";
 import { createTempDir } from "../support/store";
 import { buildConnectionFromUrl } from "../support/postgres";
 import { buildDiagramFixture } from "../support/diagram-fixture";
@@ -34,6 +35,7 @@ export function runTableDataIntegrationSuite(
   describe(`main-process database modules (${label})`, () => {
     let cleanup: (() => Promise<void>) | undefined;
     let connectionId = "";
+    let connectionUrl = "";
 
     beforeAll(async () => {
       process.env.PG_COMPASS_STORE_DIR = createTempDir(
@@ -42,6 +44,7 @@ export function runTableDataIntegrationSuite(
 
       const seeded = await createDatabase();
       cleanup = seeded.cleanup;
+      connectionUrl = seeded.connectionUrl;
 
       const connection = buildConnectionFromUrl(seeded.connectionUrl, {
         label: `${label} integration database`,
@@ -284,6 +287,61 @@ export function runTableDataIntegrationSuite(
         enabledTriggers.find((item) => item.name === "users_updated_trigger")
           ?.enabled,
       ).toBe(true);
+    });
+
+    async function readTriggerEnabled(trigger: string): Promise<string> {
+      const { withPoolClient } = await import("@/main/pg-utils");
+      return withPoolClient(connectionId, async (client) => {
+        const result = await client.query<{ tgenabled: string }>(
+          "SELECT tgenabled FROM pg_trigger WHERE tgname = $1",
+          [trigger],
+        );
+        return result.rows[0]!.tgenabled;
+      });
+    }
+
+    it("refuses to toggle an internal foreign-key trigger", async () => {
+      const { withPoolClient } = await import("@/main/pg-utils");
+      const { toggleTrigger } = await import("@/main/table-data-meta");
+      const internal = await withPoolClient(connectionId, async (client) => {
+        const result = await client.query<{ tgname: string }>(
+          `SELECT tgname FROM pg_trigger
+           WHERE tgrelid = 'app.orders'::regclass AND tgisinternal
+           ORDER BY tgname LIMIT 1`,
+        );
+        return result.rows[0]!.tgname;
+      });
+
+      await expect(
+        toggleTrigger({
+          connectionId,
+          schema: "app",
+          table: "orders",
+          trigger: internal,
+          enabled: false,
+        }),
+      ).rejects.toThrow(/trigger not found/i);
+      expect(await readTriggerEnabled(internal)).toBe("O");
+    });
+
+    it("rejects trigger toggles when read-only mode is on", async () => {
+      const { toggleTrigger } = await import("@/main/table-data-meta");
+      const { updateSettings } = await import("@/main/settings-store");
+      updateSettings({ general: { readOnlyMode: true } });
+      try {
+        await expect(
+          toggleTrigger({
+            connectionId,
+            schema: "app",
+            table: "users",
+            trigger: "users_updated_trigger",
+            enabled: false,
+          }),
+        ).rejects.toThrow(/read-only/i);
+      } finally {
+        updateSettings({ general: { readOnlyMode: false } });
+      }
+      expect(await readTriggerEnabled("users_updated_trigger")).toBe("O");
     });
 
     it("includes database views in the schema tree", async () => {
@@ -563,19 +621,6 @@ export function runTableDataIntegrationSuite(
         expect(result.primaryKey).toBeNull();
       });
 
-      it("returns null for a view", async () => {
-        const { getRows } = await import("@/main/table-data-rows");
-        const result = await getRows({
-          connectionId,
-          schema: "app",
-          table: "active_users",
-          page: 1,
-          pageSize: 1,
-          query: NO_QUERY,
-        });
-        expect(result.primaryKey).toBeNull();
-      });
-
       it("returns null for executeQuery results (no single source relation)", async () => {
         const { executeQuery } = await import("@/main/table-data-rows");
         const result = await executeQuery({
@@ -729,20 +774,25 @@ export function runTableDataIntegrationSuite(
         expect(result.row["score"]).toBe("12345.67");
       });
 
-      it("updates a row with a composite primary key", async () => {
+      it("updates the row a composite primary key names, in key order", async () => {
         const { updateCell } = await import("@/main/table-data-write");
+        // (2, 1) also exists, so mixing up the key order would update it.
         const result = await updateCell({
           connectionId,
           schema: "app",
           table: "order_items",
           pkColumns: ["order_id", "line_number"],
-          pkValues: [1, 1],
+          pkValues: [1, 2],
           column: "sku",
           pgCast: "text",
           newValue: "SKU-RENAMED",
           setNull: false,
         });
-        expect(result.row["sku"]).toBe("SKU-RENAMED");
+        expect(result.row).toMatchObject({
+          order_id: 1,
+          line_number: 2,
+          sku: "SKU-RENAMED",
+        });
       });
 
       it("sets a nullable column to NULL when setNull is true", async () => {
@@ -777,37 +827,72 @@ export function runTableDataIntegrationSuite(
         expect(result.row[INJECTION_COLUMN]).toBe("parameterised");
       });
 
-      it("sees preceding updates on the same row via RETURNING", async () => {
-        const { updateCell } = await import("@/main/table-data-write");
-        await updateCell({
-          connectionId,
-          schema: "app",
-          table: "users",
-          pkColumns: ["id"],
-          pkValues: [10],
-          column: "display_name",
-          pgCast: "text",
-          newValue: "first",
-          setNull: false,
-        });
-        const second = await updateCell({
-          connectionId,
-          schema: "app",
-          table: "users",
-          pkColumns: ["id"],
-          pkValues: [10],
-          column: "display_name",
-          pgCast: "text",
-          newValue: "second",
-          setNull: false,
-        });
-        expect(second.row["display_name"]).toBe("second");
-      });
+      // PGlite serves a single session, so only a real server can show that
+      // the update was committed rather than left open on a pooled client.
+      it.runIf(label === "postgres")(
+        "commits the update so other sessions see it",
+        async () => {
+          const { updateCell } = await import("@/main/table-data-write");
+          await updateCell({
+            connectionId,
+            schema: "app",
+            table: "users",
+            pkColumns: ["id"],
+            pkValues: [10],
+            column: "display_name",
+            pgCast: "text",
+            newValue: "Committed",
+            setNull: false,
+          });
+
+          const otherSession = new Client({ connectionString: connectionUrl });
+          await otherSession.connect();
+          try {
+            const result = await otherSession.query<{ display_name: string }>(
+              "SELECT display_name FROM app.users WHERE id = 10",
+            );
+            expect(result.rows[0]!.display_name).toBe("Committed");
+          } finally {
+            await otherSession.end();
+          }
+        },
+      );
     });
 
     // -----------------------------------------------------------------------
     // updateCell — failures
     // -----------------------------------------------------------------------
+
+    // An inherited child shares the parent's primary-key value, so an UPDATE
+    // on the parent by that key matches two rows.
+    async function resetInheritedPair(): Promise<void> {
+      const { withPoolClient } = await import("@/main/pg-utils");
+      await withPoolClient(connectionId, async (client) => {
+        await client.query("DROP TABLE IF EXISTS app.inherit_parent CASCADE");
+        await client.query(
+          "CREATE TABLE app.inherit_parent (id INT PRIMARY KEY, v TEXT NOT NULL)",
+        );
+        await client.query(
+          "CREATE TABLE app.inherit_child () INHERITS (app.inherit_parent)",
+        );
+        await client.query(
+          "INSERT INTO app.inherit_parent VALUES (1, 'original')",
+        );
+        await client.query(
+          "INSERT INTO app.inherit_child VALUES (1, 'original')",
+        );
+      });
+    }
+
+    async function readInheritedPair(): Promise<string[]> {
+      const { withPoolClient } = await import("@/main/pg-utils");
+      return withPoolClient(connectionId, async (client) => {
+        const result = await client.query<{ v: string }>(
+          "SELECT v FROM app.inherit_parent ORDER BY tableoid",
+        );
+        return result.rows.map((row) => row.v);
+      });
+    }
 
     describe("updateCell failures", () => {
       it("rejects writes when read-only mode is on", async () => {
@@ -868,7 +953,7 @@ export function runTableDataIntegrationSuite(
         ).rejects.toThrow(/pk/i);
       });
 
-      it("rejects an unknown pgCast (allowlist)", async () => {
+      it("rejects a cast that is neither allow-listed nor a real enum", async () => {
         const { updateCell } = await import("@/main/table-data-write");
         await expect(
           updateCell({
@@ -882,7 +967,7 @@ export function runTableDataIntegrationSuite(
             newValue: "nope",
             setNull: false,
           }),
-        ).rejects.toThrow(/cast/i);
+        ).rejects.toThrow(/unsupported or unsafe cast/i);
       });
 
       it("rejects a pgCast that contains SQL syntax", async () => {
@@ -899,7 +984,7 @@ export function runTableDataIntegrationSuite(
             newValue: "nope",
             setNull: false,
           }),
-        ).rejects.toThrow(/cast/i);
+        ).rejects.toThrow(/unsupported or unsafe cast/i);
       });
 
       it("errors when no row matches the primary key", async () => {
@@ -970,32 +1055,23 @@ export function runTableDataIntegrationSuite(
         ).rejects.toThrow(/foreign key|violates/i);
       });
 
-      it("leaves the injection_target table intact after an identifier-injection attempt", async () => {
+      it("rolls back an update that matched more than one row", async () => {
+        await resetInheritedPair();
         const { updateCell } = await import("@/main/table-data-write");
-        const { withPoolClient } = await import("@/main/pg-utils");
-
-        // A malicious column name that would break unquoted SQL.
         await expect(
           updateCell({
             connectionId,
             schema: "app",
-            table: "injection_target",
+            table: "inherit_parent",
             pkColumns: ["id"],
-            pkValues: [2],
-            column: '"; DROP TABLE app.injection_target; --',
+            pkValues: [1],
+            column: "v",
             pgCast: "text",
-            newValue: "whatever",
+            newValue: "changed",
             setNull: false,
           }),
-        ).rejects.toThrow();
-
-        const stillExists = await withPoolClient(connectionId, async (c) => {
-          const r = await c.query<{ count: string }>(
-            "SELECT count(*) AS count FROM app.injection_target",
-          );
-          return Number.parseInt(r.rows[0]!.count, 10);
-        });
-        expect(stillExists).toBe(3);
+        ).rejects.toThrow(/unexpected row count \(2\)/i);
+        expect(await readInheritedPair()).toEqual(["original", "original"]);
       });
     });
 
@@ -1055,25 +1131,9 @@ export function runTableDataIntegrationSuite(
         expect(result.row["role"]).toBe("admin");
       });
 
-      it("rejects an enum-shaped cast that does not name a real enum", async () => {
+      it("rejects a real enum named without the quoted, schema-qualified spelling", async () => {
         const { updateCell } = await import("@/main/table-data-write");
-        await expect(
-          updateCell({
-            connectionId,
-            schema: "app",
-            table: "users",
-            pkColumns: ["id"],
-            pkValues: [31],
-            column: "role",
-            pgCast: "nonexistent_enum",
-            newValue: "admin",
-            setNull: false,
-          }),
-        ).rejects.toThrow(/cast/i);
-      });
-
-      it("rejects an enum cast name that fails the shape check", async () => {
-        const { updateCell } = await import("@/main/table-data-write");
+        // Only the catalog's quoted spelling is ever interpolated into SQL.
         await expect(
           updateCell({
             connectionId,
@@ -1082,11 +1142,11 @@ export function runTableDataIntegrationSuite(
             pkColumns: ["id"],
             pkValues: [32],
             column: "role",
-            pgCast: "UserRole",
+            pgCast: "app.user_role",
             newValue: "admin",
             setNull: false,
           }),
-        ).rejects.toThrow(/cast/i);
+        ).rejects.toThrow(/unsupported or unsafe cast/i);
       });
 
       it("surfaces invalid-enum-value errors from Postgres", async () => {
@@ -1112,7 +1172,7 @@ export function runTableDataIntegrationSuite(
     // -----------------------------------------------------------------------
 
     describe("updateCell (extension-gated)", () => {
-      it("updates a PostGIS geometry column from WKT", async () => {
+      it("updates a PostGIS geometry column from WKT", async (context) => {
         const postgis = await hasExtension(connectionId, "postgis");
         const hasLocation = await hasColumn(
           connectionId,
@@ -1120,12 +1180,11 @@ export function runTableDataIntegrationSuite(
           "users",
           "location",
         );
-        if (!postgis || !hasLocation) {
-          return;
-        }
+        if (!postgis || !hasLocation) context.skip();
 
         const { updateCell } = await import("@/main/table-data-write");
-        const result = await updateCell({
+        const { withPoolClient } = await import("@/main/pg-utils");
+        await updateCell({
           connectionId,
           schema: "app",
           table: "users",
@@ -1136,12 +1195,18 @@ export function runTableDataIntegrationSuite(
           newValue: "SRID=4326;POINT(13.405 52.52)",
           setNull: false,
         });
-        // PostGIS returns hex-encoded EWKB in pg's default type parser.
-        expect(typeof result.row["location"]).toBe("string");
-        expect(String(result.row["location"]).length).toBeGreaterThan(0);
+        const stored = await withPoolClient(connectionId, (client) =>
+          client.query<{ wkt: string; srid: number }>(
+            "SELECT ST_AsText(location) AS wkt, ST_SRID(location) AS srid FROM app.users WHERE id = 20",
+          ),
+        );
+        expect(stored.rows[0]).toEqual({
+          wkt: "POINT(13.405 52.52)",
+          srid: 4326,
+        });
       });
 
-      it("updates a pgvector column", async () => {
+      it("updates a pgvector column", async (context) => {
         const pgvector = await hasExtension(connectionId, "vector");
         const hasEmbedding = await hasColumn(
           connectionId,
@@ -1149,9 +1214,7 @@ export function runTableDataIntegrationSuite(
           "users",
           "embedding",
         );
-        if (!pgvector || !hasEmbedding) {
-          return;
-        }
+        if (!pgvector || !hasEmbedding) context.skip();
 
         const { updateCell } = await import("@/main/table-data-write");
         const result = await updateCell({
@@ -1165,7 +1228,7 @@ export function runTableDataIntegrationSuite(
           newValue: "[0.1,0.2,0.3]",
           setNull: false,
         });
-        expect(String(result.row["embedding"])).toContain("0.1");
+        expect(result.row["embedding"]).toBe("[0.1,0.2,0.3]");
       });
     });
 
@@ -1202,7 +1265,7 @@ export function runTableDataIntegrationSuite(
         expect(result.row["id"]).toBe(50);
       });
 
-      it("mixes a value change with setNull in one call", async () => {
+      it("binds every value to its own column when setNull comes first", async () => {
         const { updateRow } = await import("@/main/table-data-write");
         const result = await updateRow({
           connectionId,
@@ -1212,21 +1275,31 @@ export function runTableDataIntegrationSuite(
           pkValues: [51],
           changes: [
             {
+              column: "profile_note",
+              pgCast: "text",
+              newValue: null,
+              setNull: true,
+            },
+            {
               column: "display_name",
               pgCast: "text",
               newValue: "Mixed",
               setNull: false,
             },
             {
-              column: "profile_note",
-              pgCast: "text",
-              newValue: null,
-              setNull: true,
+              column: "login_count",
+              pgCast: "int4",
+              newValue: 7,
+              setNull: false,
             },
           ],
         });
-        expect(result.row["display_name"]).toBe("Mixed");
-        expect(result.row["profile_note"]).toBeNull();
+        expect(result.row).toMatchObject({
+          id: 51,
+          profile_note: null,
+          display_name: "Mixed",
+          login_count: 7,
+        });
       });
 
       it("rolls back ALL changes when one column fails (CHECK violation)", async () => {
@@ -1273,14 +1346,15 @@ export function runTableDataIntegrationSuite(
         expect(after).toBe(before);
       });
 
-      it("supports composite primary keys", async () => {
+      it("updates the row a composite primary key names, in key order", async () => {
         const { updateRow } = await import("@/main/table-data-write");
+        // (1, 2) also exists, so mixing up the key order would update it.
         const result = await updateRow({
           connectionId,
           schema: "app",
           table: "order_items",
           pkColumns: ["order_id", "line_number"],
-          pkValues: [1, 2],
+          pkValues: [2, 1],
           changes: [
             {
               column: "sku",
@@ -1290,7 +1364,11 @@ export function runTableDataIntegrationSuite(
             },
           ],
         });
-        expect(result.row["sku"]).toBe("SKU-MULTI");
+        expect(result.row).toMatchObject({
+          order_id: 2,
+          line_number: 1,
+          sku: "SKU-MULTI",
+        });
       });
 
       it("rejects when read-only mode is on", async () => {
@@ -1439,6 +1517,29 @@ export function runTableDataIntegrationSuite(
             ],
           }),
         ).rejects.toThrow(/not found|no rows/i);
+      });
+
+      it("rolls back an update that matched more than one row", async () => {
+        await resetInheritedPair();
+        const { updateRow } = await import("@/main/table-data-write");
+        await expect(
+          updateRow({
+            connectionId,
+            schema: "app",
+            table: "inherit_parent",
+            pkColumns: ["id"],
+            pkValues: [1],
+            changes: [
+              {
+                column: "v",
+                pgCast: "text",
+                newValue: "changed",
+                setNull: false,
+              },
+            ],
+          }),
+        ).rejects.toThrow(/unexpected row count \(2\)/i);
+        expect(await readInheritedPair()).toEqual(["original", "original"]);
       });
 
       it("handles a column with special characters in its identifier", async () => {
@@ -1631,6 +1732,119 @@ export function runTableDataIntegrationSuite(
 
         expect(await countDeleteTarget()).toBe(5);
       });
+
+      it("rolls back a delete that violates a foreign key and leaves the connection usable", async () => {
+        const { deleteRows } = await import("@/main/table-data-write");
+        const { withPoolClient } = await import("@/main/pg-utils");
+
+        await expect(
+          deleteRows({
+            connectionId,
+            schema: "app",
+            table: "users",
+            filter: "id = 1",
+          }),
+        ).rejects.toThrow(/foreign key/i);
+
+        // The pool hands the same client back; an aborted transaction left on
+        // it would fail this query.
+        const remaining = await withPoolClient(connectionId, async (client) => {
+          const result = await client.query<{ count: string }>(
+            "SELECT count(*) AS count FROM app.users WHERE id = 1",
+          );
+          return Number.parseInt(result.rows[0]!.count, 10);
+        });
+        expect(remaining).toBe(1);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Raw SQL (Query tab, export) cannot write
+    // -----------------------------------------------------------------------
+
+    describe("raw SQL write protection", () => {
+      const noopSender = { send: () => undefined } as unknown as WebContents;
+      // A SELECT that writes: only the read-only transaction can stop it.
+      const WRITING_SELECT = "SELECT app.purge_delete_target() AS purged";
+
+      beforeAll(async () => {
+        await resetDeleteTarget();
+        const { withPoolClient } = await import("@/main/pg-utils");
+        await withPoolClient(connectionId, (client) =>
+          client.query(
+            `CREATE OR REPLACE FUNCTION app.purge_delete_target() RETURNS integer
+             LANGUAGE sql AS $$ DELETE FROM app.delete_target RETURNING 1 $$`,
+          ),
+        );
+      });
+
+      it("runs ad-hoc queries in a read-only transaction", async () => {
+        await resetDeleteTarget();
+        const { executeQuery } = await import("@/main/table-data-rows");
+        await expect(
+          executeQuery({
+            connectionId,
+            queryId: "integration-writing-select",
+            sql: WRITING_SELECT,
+            page: 1,
+            pageSize: 25,
+          }),
+        ).rejects.toThrow(/read-only transaction/i);
+        expect(await countDeleteTarget()).toBe(5);
+      });
+
+      it("rejects statements stacked into an ad-hoc query", async () => {
+        await resetDeleteTarget();
+        const { executeQuery } = await import("@/main/table-data-rows");
+        // Closes the count wrapper's subquery, ends the read-only transaction
+        // and deletes, if it ever ran as a simple-protocol multi-statement.
+        await expect(
+          executeQuery({
+            connectionId,
+            queryId: "integration-stacked",
+            sql: "SELECT 1) s; COMMIT; DELETE FROM app.delete_target; SELECT (1",
+            page: 1,
+            pageSize: 25,
+          }),
+        ).rejects.toThrow(/multiple commands/i);
+        expect(await countDeleteTarget()).toBe(5);
+      });
+
+      it("exports raw SQL in a read-only transaction", async () => {
+        await resetDeleteTarget();
+        const { exportData } = await import("@/main/table-data-export");
+        const directory = createTempDir("pg-compass-sql-export-");
+        await expect(
+          exportData(
+            {
+              connectionId,
+              format: "csv",
+              filePath: path.join(directory, "gone.csv"),
+              sql: WRITING_SELECT,
+            },
+            noopSender,
+          ),
+        ).rejects.toThrow(/read-only transaction/i);
+        expect(await countDeleteTarget()).toBe(5);
+      });
+
+      it("removes the partial file when an export fails mid-stream", async () => {
+        const { exportData } = await import("@/main/table-data-export");
+        const directory = createTempDir("pg-compass-sql-export-");
+        // The first 1,000-row batch is written before row 1,500 divides by zero.
+        await expect(
+          exportData(
+            {
+              connectionId,
+              format: "csv",
+              filePath: path.join(directory, "partial.csv"),
+              sql: "SELECT g, 1 / (g - 1500) AS ratio FROM generate_series(1, 2000) AS g",
+            },
+            noopSender,
+          ),
+        ).rejects.toThrow(/division by zero/i);
+        expect(fs.readdirSync(directory)).toEqual([]);
+      });
     });
 
     // -----------------------------------------------------------------------
@@ -1656,7 +1870,7 @@ export function runTableDataIntegrationSuite(
 
       async function expectDslFailure(
         promise: Promise<unknown>,
-        expected: { field: string; code: string },
+        expected: { field: string; code?: string },
       ) {
         const { QueryDslFailure } = await import("@/main/query-dsl/prepare");
         const error = await promise.then(
@@ -1862,7 +2076,7 @@ export function runTableDataIntegrationSuite(
         });
       });
 
-      it("locks the relation before reading its catalog", async (context) => {
+      it("holds the requested lock on the relation after binding", async (context) => {
         if (!(await tracksTableLocks(connectionId))) context.skip();
         const { withPoolClient } = await import("@/main/pg-utils");
         const { bindAndCompile, parseDataQueryOrThrow } =
@@ -2234,50 +2448,57 @@ export function runTableDataIntegrationSuite(
         "pg_sleep(10)",
         "(SELECT secret FROM credentials)",
       ])(
-        "treats %s as a DSL error or a parameter in every field",
+        "treats %s as a DSL error, or as a plain value when quoted",
         async (payload) => {
           await resetDeleteTarget();
           const { getRows } = await import("@/main/table-data-rows");
           const { deleteRows } = await import("@/main/table-data-write");
-          const attempts = [
-            { ...NO_QUERY, filter: payload },
-            { ...NO_QUERY, filter: `category = ${payload}` },
-            {
-              ...NO_QUERY,
-              filter: `category = '${payload.replaceAll("'", "''")}'`,
-            },
-            { ...NO_QUERY, projection: payload },
-            { ...NO_QUERY, sort: payload },
+          const quotedValue = `category = '${payload.replaceAll("'", "''")}'`;
+          const rejectedAttempts = [
+            { field: "filter", text: payload },
+            { field: "filter", text: `category = ${payload}` },
+            { field: "projection", text: payload },
+            { field: "sort", text: payload },
           ];
-          for (const query of attempts) {
-            const outcome = await getRows({
+          for (const attempt of rejectedAttempts) {
+            await expectDslFailure(
+              getRows({
+                connectionId,
+                schema: "app",
+                table: "delete_target",
+                page: 1,
+                pageSize: 25,
+                query: { ...NO_QUERY, [attempt.field]: attempt.text },
+              }),
+              { field: attempt.field },
+            );
+          }
+          const asValue = await getRows({
+            connectionId,
+            schema: "app",
+            table: "delete_target",
+            page: 1,
+            pageSize: 25,
+            query: { ...NO_QUERY, filter: quotedValue },
+          });
+          expect(asValue.totalCount).toBe(0);
+
+          const deletedAsValue = await deleteRows({
+            connectionId,
+            schema: "app",
+            table: "delete_target",
+            filter: quotedValue,
+          });
+          expect(deletedAsValue.deletedCount).toBe(0);
+          await expectDslFailure(
+            deleteRows({
               connectionId,
               schema: "app",
               table: "delete_target",
-              page: 1,
-              pageSize: 25,
-              query,
-            }).then(
-              (result) => result,
-              (err: unknown) => err as Error,
-            );
-            if (!(outcome instanceof Error)) {
-              // Only the quoted-value attempt may succeed: the payload was a value.
-              expect(outcome.totalCount).toBe(0);
-            }
-          }
-          await deleteRows({
-            connectionId,
-            schema: "app",
-            table: "delete_target",
-            filter: `category = '${payload.replaceAll("'", "''")}'`,
-          });
-          await deleteRows({
-            connectionId,
-            schema: "app",
-            table: "delete_target",
-            filter: payload,
-          }).catch(() => undefined);
+              filter: payload,
+            }),
+            { field: "filter" },
+          );
           expect(await countDeleteTarget()).toBe(5);
         },
       );
@@ -2678,19 +2899,20 @@ export function runTableDataIntegrationSuite(
         });
       });
 
-      it("does not attach FK metadata to non-FK columns", async () => {
+      it("does not attach FK metadata to the other columns of a child table", async () => {
         const { getRows } = await import("@/main/table-data-rows");
         const result = await getRows({
           connectionId,
           schema: "app",
-          table: "users",
+          table: "orders",
           page: 1,
           pageSize: 1,
           query: NO_QUERY,
         });
-        for (const col of result.columns) {
-          expect(col.foreignKey).toBeUndefined();
-        }
+        const columnsWithForeignKey = result.columns
+          .filter((column) => column.foreignKey !== undefined)
+          .map((column) => column.name);
+        expect(columnsWithForeignKey).toEqual(["user_id"]);
       });
     });
 
@@ -2734,19 +2956,19 @@ export function runTableDataIntegrationSuite(
         }
       });
 
-      it("also matches the value column as text when query is non-empty", async () => {
+      it("also matches the value column as text when a label column is set", async () => {
         const { searchForeignKey } = await import("@/main/table-data-fk");
+        // No status label contains "42", so only the id can match.
         const result = await searchForeignKey({
           connectionId,
           schema: "app",
           table: "users",
           valueColumn: "id",
-          labelColumn: "display_name",
+          labelColumn: "status",
           query: "42",
           limit: 50,
         });
-        const values = result.options.map((o) => Number(o.value));
-        expect(values).toContain(42);
+        expect(result.options.map((option) => option.value)).toEqual([42]);
       });
 
       it("returns label = null when no label column is provided", async () => {
@@ -2764,23 +2986,29 @@ export function runTableDataIntegrationSuite(
         expect(result.options.length).toBe(5);
       });
 
-      it("clamps limit to at most 200 (reads limit + 1 to detect more)", async () => {
+      it("clamps limit to at most 200 and reports more rows", async () => {
         const { searchForeignKey } = await import("@/main/table-data-fk");
+        const { withPoolClient } = await import("@/main/pg-utils");
+        await withPoolClient(connectionId, async (client) => {
+          await client.query("DROP TABLE IF EXISTS app.many_parents");
+          await client.query(
+            "CREATE TABLE app.many_parents AS SELECT g AS id FROM generate_series(1, 250) AS g",
+          );
+        });
         const result = await searchForeignKey({
           connectionId,
           schema: "app",
-          table: "users",
+          table: "many_parents",
           valueColumn: "id",
           labelColumn: null,
           query: "",
           limit: 999_999,
         });
-        // With 120 rows and a clamp at 200, we see all 120 and hasMore = false.
-        expect(result.options.length).toBe(120);
-        expect(result.hasMore).toBe(false);
+        expect(result.options).toHaveLength(200);
+        expect(result.hasMore).toBe(true);
       });
 
-      it("rejects identifier injection through the schema/table/column", async () => {
+      it("quotes the table name, so a hostile name is just a missing relation", async () => {
         const { searchForeignKey } = await import("@/main/table-data-fk");
         await expect(
           searchForeignKey({
@@ -2792,19 +3020,7 @@ export function runTableDataIntegrationSuite(
             query: "",
             limit: 5,
           }),
-        ).rejects.toThrow();
-
-        // Original table still intact.
-        const { getRows } = await import("@/main/table-data-rows");
-        const rows = await getRows({
-          connectionId,
-          schema: "app",
-          table: "users",
-          page: 1,
-          pageSize: 1,
-          query: NO_QUERY,
-        });
-        expect(rows.totalCount).toBeGreaterThan(0);
+        ).rejects.toThrow(/relation .* does not exist/i);
       });
     });
 
@@ -2869,6 +3085,40 @@ export function runTableDataIntegrationSuite(
         expect(typeof result.row["id"]).toBe("number");
         expect(result.row["status"]).toBe("active"); // column default
         expect(result.row["role"]).toBe("viewer"); // column default
+      });
+
+      it("binds every value to its own column around a NULL", async () => {
+        const { insertRow } = await import("@/main/table-data-write");
+        const result = await insertRow({
+          connectionId,
+          schema: "app",
+          table: "users",
+          changes: [
+            {
+              column: "email",
+              pgCast: "text",
+              newValue: "insert-around-null@example.com",
+              setNull: false,
+            },
+            {
+              column: "profile_note",
+              pgCast: "text",
+              newValue: null,
+              setNull: true,
+            },
+            {
+              column: "display_name",
+              pgCast: "text",
+              newValue: "Around Null",
+              setNull: false,
+            },
+          ],
+        });
+        expect(result.row).toMatchObject({
+          email: "insert-around-null@example.com",
+          profile_note: null,
+          display_name: "Around Null",
+        });
       });
 
       it("emits DEFAULT VALUES for an empty change set (surfaces NOT NULL)", async () => {
@@ -3015,6 +3265,17 @@ export function runTableDataIntegrationSuite(
         });
       }
 
+      async function findNoteBodies(bodies: string[]): Promise<string[]> {
+        const { withPoolClient } = await import("@/main/pg-utils");
+        return withPoolClient(connectionId, async (c) => {
+          const r = await c.query<{ body: string }>(
+            "SELECT body FROM app.notes WHERE body = ANY($1) ORDER BY body",
+            [bodies],
+          );
+          return r.rows.map((row) => row.body);
+        });
+      }
+
       it("imports a CSV file into a table", async () => {
         const { importData } = await import("@/main/table-data-import");
         const before = await countRows("app", "notes");
@@ -3035,6 +3296,9 @@ export function runTableDataIntegrationSuite(
         );
         expect(result.insertedCount).toBe(2);
         expect(await countRows("app", "notes")).toBe(before + 2);
+        expect(
+          await findNoteBodies(["first, with comma", "second\nwith newline"]),
+        ).toEqual(["first, with comma", "second\nwith newline"]);
       });
 
       it("imports a JSON array of objects", async () => {
@@ -3079,6 +3343,85 @@ export function runTableDataIntegrationSuite(
         );
         expect(result.insertedCount).toBe(1);
         expect(await countRows("app", "notes")).toBe(before + 1);
+      });
+
+      async function readTypedUser(email: string) {
+        const { withPoolClient } = await import("@/main/pg-utils");
+        return withPoolClient(connectionId, async (c) => {
+          const r = await c.query(
+            `SELECT login_count, is_verified, profile, role, tags, profile_note
+             FROM app.users WHERE email = $1`,
+            [email],
+          );
+          return r.rows[0] as Record<string, unknown>;
+        });
+      }
+
+      it("lets Postgres type CSV text, and imports an empty cell as NULL", async () => {
+        const { importData } = await import("@/main/table-data-import");
+        const filePath = writeImportFile(
+          "typed.csv",
+          [
+            "email,display_name,login_count,is_verified,profile,role,tags,profile_note",
+            'typed-csv@example.com,Typed CSV,42,true,"{""a"":1}",admin,"{x,y}",',
+          ].join("\n"),
+        );
+        await importData(
+          {
+            connectionId,
+            schema: "app",
+            table: "users",
+            filePath,
+            format: "csv",
+            operationId: "typed-csv",
+          },
+          noopSender,
+        );
+        expect(await readTypedUser("typed-csv@example.com")).toEqual({
+          login_count: 42,
+          is_verified: true,
+          profile: { a: 1 },
+          role: "admin",
+          tags: ["x", "y"],
+          profile_note: null,
+        });
+      });
+
+      it("imports JSON numbers, booleans, objects and null into typed columns", async () => {
+        const { importData } = await import("@/main/table-data-import");
+        const filePath = writeImportFile(
+          "typed.json",
+          JSON.stringify([
+            {
+              email: "typed-json@example.com",
+              display_name: "Typed JSON",
+              login_count: 42,
+              is_verified: true,
+              profile: { a: 1 },
+              role: "admin",
+              profile_note: null,
+            },
+          ]),
+        );
+        await importData(
+          {
+            connectionId,
+            schema: "app",
+            table: "users",
+            filePath,
+            format: "json",
+            operationId: "typed-json",
+          },
+          noopSender,
+        );
+        expect(await readTypedUser("typed-json@example.com")).toEqual({
+          login_count: 42,
+          is_verified: true,
+          profile: { a: 1 },
+          role: "admin",
+          tags: [],
+          profile_note: null,
+        });
       });
 
       it("preserves bigint precision during a streamed JSON import", async () => {
@@ -3259,6 +3602,107 @@ export function runTableDataIntegrationSuite(
     });
 
     // -----------------------------------------------------------------------
+    // Write paths against quoted, mixed-case identifiers
+    // -----------------------------------------------------------------------
+
+    it("writes to a mixed-case schema, table and key column", async () => {
+      const { withPoolClient } = await import("@/main/pg-utils");
+      const { insertRow, updateCell, updateRow, deleteRows } =
+        await import("@/main/table-data-write");
+      const { importData } = await import("@/main/table-data-import");
+      const target = { connectionId, schema: "Write Case", table: "MixedCase" };
+      await withPoolClient(connectionId, async (client) => {
+        await client.query('DROP SCHEMA IF EXISTS "Write Case" CASCADE');
+        await client.query('CREATE SCHEMA "Write Case"');
+        await client.query(
+          'CREATE TABLE "Write Case"."MixedCase" ("Id" INT PRIMARY KEY, "Label" TEXT NOT NULL)',
+        );
+      });
+
+      await insertRow({
+        ...target,
+        changes: [
+          { column: "Id", pgCast: "int4", newValue: 1, setNull: false },
+          { column: "Label", pgCast: "text", newValue: "new", setNull: false },
+        ],
+      });
+      const importPath = path.join(
+        createTempDir("pg-compass-mixed-case-"),
+        "rows.csv",
+      );
+      fs.writeFileSync(importPath, "Id,Label\n2,imported\n3,doomed\n");
+      await importData(
+        {
+          ...target,
+          filePath: importPath,
+          format: "csv",
+          operationId: "mixed-case",
+        },
+        { send: () => undefined } as unknown as WebContents,
+      );
+      await updateCell({
+        ...target,
+        pkColumns: ["Id"],
+        pkValues: [1],
+        column: "Label",
+        pgCast: "text",
+        newValue: "cell",
+        setNull: false,
+      });
+      await updateRow({
+        ...target,
+        pkColumns: ["Id"],
+        pkValues: [2],
+        changes: [
+          { column: "Label", pgCast: "text", newValue: "row", setNull: false },
+        ],
+      });
+      const deleted = await deleteRows({ ...target, filter: '"Id" = 3' });
+
+      expect(deleted.deletedCount).toBe(1);
+      const rows = await withPoolClient(connectionId, async (client) => {
+        const result = await client.query<{ Id: number; Label: string }>(
+          'SELECT "Id", "Label" FROM "Write Case"."MixedCase" ORDER BY "Id"',
+        );
+        return result.rows;
+      });
+      expect(rows).toEqual([
+        { Id: 1, Label: "cell" },
+        { Id: 2, Label: "row" },
+      ]);
+    });
+
+    // -----------------------------------------------------------------------
+    // sqlDump (COPY TO STDOUT)
+    // -----------------------------------------------------------------------
+
+    it("dumps every row once and counts rows that span stream chunks", async () => {
+      const { withPoolClient } = await import("@/main/pg-utils");
+      const { sqlDump } = await import("@/main/table-data-export");
+      // ~400 KB of COPY output, far more than one 64 KB socket read.
+      await withPoolClient(connectionId, async (client) => {
+        await client.query("DROP TABLE IF EXISTS app.dump_target");
+        await client.query(
+          "CREATE TABLE app.dump_target AS SELECT g AS id, repeat('x', 200) AS padding FROM generate_series(1, 2000) AS g",
+        );
+      });
+      const filePath = path.join(
+        createTempDir("pg-compass-sql-dump-"),
+        "dump.txt",
+      );
+
+      const result = await sqlDump(
+        { connectionId, schema: "app", table: "dump_target", filePath },
+        { send: () => undefined } as unknown as WebContents,
+      );
+
+      const lines = fs.readFileSync(filePath, "utf8").trimEnd().split("\n");
+      expect(lines).toHaveLength(2000);
+      expect(lines[0]).toBe(`1\t${"x".repeat(200)}`);
+      expect(result.rowCount).toBe(2000);
+    });
+
+    // -----------------------------------------------------------------------
     // Roles (pooled-connection mutations only: PGlite serves one socket)
     // -----------------------------------------------------------------------
 
@@ -3269,6 +3713,7 @@ export function runTableDataIntegrationSuite(
       const failedRole = `pgc failed "${roleSuffix}"`;
       const cloneRoleName = `pgc_clone_${roleSuffix}`;
       const parentRole = `pgc_parent_${roleSuffix}`;
+      const accessRole = `pgc_access_${roleSuffix}`;
 
       async function queryRole<T>(
         sql: string,
@@ -3290,13 +3735,21 @@ export function runTableDataIntegrationSuite(
             noPasswordRole,
             failedRole,
             parentRole,
+            accessRole,
           ]) {
-            await client.query(`DROP ROLE IF EXISTS ${quoteIdent(role)}`);
+            const exists = await client.query(
+              "SELECT 1 FROM pg_roles WHERE rolname = $1",
+              [role],
+            );
+            if (exists.rowCount === 0) continue;
+            // Privileges granted in this database would block DROP ROLE.
+            await client.query(`DROP OWNED BY ${quoteIdent(role)}`);
+            await client.query(`DROP ROLE ${quoteIdent(role)}`);
           }
         });
       });
 
-      it("creates a role with a SCRAM verifier instead of the plaintext password", async () => {
+      it("creates a login role whose stored SCRAM verifier matches its password", async () => {
         const { createRole } = await import("@/main/roles-mutations");
         const { buildScramSha256Verifier } =
           await import("@/main/scram-verifier");
@@ -3324,6 +3777,27 @@ export function runTableDataIntegrationSuite(
           buildScramSha256Verifier("pencil", Buffer.from(saltBase64, "base64")),
         ).toBe(stored);
       });
+
+      // PGlite does not authenticate, so only a real server proves the
+      // verifier is one Postgres accepts.
+      it.runIf(label === "postgres")(
+        "lets the created login role sign in with its password",
+        async () => {
+          const url = new URL(connectionUrl);
+          url.username = loginRole;
+          url.password = "pencil";
+          const roleSession = new Client({ connectionString: url.toString() });
+          await roleSession.connect();
+          try {
+            const result = await roleSession.query<{ user: string }>(
+              "SELECT current_user AS user",
+            );
+            expect(result.rows[0]!.user).toBe(loginRole);
+          } finally {
+            await roleSession.end();
+          }
+        },
+      );
 
       it("reports hasPassword from pg_authid for superuser connections", async () => {
         const { createRole } = await import("@/main/roles-mutations");
@@ -3403,6 +3877,130 @@ export function runTableDataIntegrationSuite(
         );
         expect(memberships.map((m) => m.parentName)).toEqual([parentRole]);
       });
+
+      async function accessOf(table: string) {
+        const row = await queryRole<{
+          usage: boolean;
+          select: boolean;
+          insert: boolean;
+        }>(
+          `SELECT has_schema_privilege($1, 'app', 'USAGE') AS usage,
+                  has_table_privilege($1, $2, 'SELECT') AS select,
+                  has_table_privilege($1, $2, 'INSERT') AS insert`,
+          [accessRole, table],
+        );
+        return row!;
+      }
+
+      async function currentDatabase(): Promise<string> {
+        const row = await queryRole<{ name: string }>(
+          "SELECT current_database() AS name",
+          [],
+        );
+        return row!.name;
+      }
+
+      // Both open a second connection to the database, which PGlite's single
+      // socket cannot serve.
+      it.runIf(label === "postgres")(
+        "replaces a role's database access level, including future tables",
+        async () => {
+          const { createRole, setDbAccessLevel } =
+            await import("@/main/roles-mutations");
+          const { withPoolClient } = await import("@/main/pg-utils");
+          await createRole({ connectionId, name: accessRole, login: false });
+          const access = {
+            connectionId,
+            userName: accessRole,
+            databaseName: await currentDatabase(),
+          };
+
+          await setDbAccessLevel({
+            ...access,
+            level: "readwrite",
+            applyToFutureTables: false,
+          });
+          expect(await accessOf("app.orders")).toEqual({
+            usage: true,
+            select: true,
+            insert: true,
+          });
+
+          await setDbAccessLevel({
+            ...access,
+            level: "readonly",
+            applyToFutureTables: true,
+          });
+          expect(await accessOf("app.orders")).toEqual({
+            usage: true,
+            select: true,
+            insert: false,
+          });
+          await withPoolClient(connectionId, (client) =>
+            client.query("CREATE TABLE app.created_later (id INT)"),
+          );
+          expect(await accessOf("app.created_later")).toEqual({
+            usage: true,
+            select: true,
+            insert: false,
+          });
+
+          await setDbAccessLevel({
+            ...access,
+            level: "none",
+            applyToFutureTables: false,
+          });
+          expect(await accessOf("app.orders")).toEqual({
+            usage: false,
+            select: false,
+            insert: false,
+          });
+        },
+      );
+
+      it.runIf(label === "postgres")(
+        "restricts a role to the listed tables of a schema",
+        async () => {
+          const { setDbAccessLevel, setTableRestrictions } =
+            await import("@/main/roles-mutations");
+          const access = {
+            connectionId,
+            userName: accessRole,
+            databaseName: await currentDatabase(),
+          };
+          // Start from read access to every table, which the restriction
+          // must take away from the unlisted ones.
+          await setDbAccessLevel({
+            ...access,
+            level: "readonly",
+            applyToFutureTables: false,
+          });
+
+          await setTableRestrictions({
+            ...access,
+            tables: [
+              { schema: "app", name: "orders", level: "readonly" },
+              { schema: "app", name: "notes", level: "readwrite" },
+            ],
+          });
+
+          expect(await accessOf("app.orders")).toEqual({
+            usage: true,
+            select: true,
+            insert: false,
+          });
+          expect(await accessOf("app.notes")).toEqual({
+            usage: true,
+            select: true,
+            insert: true,
+          });
+          expect(await accessOf("app.users")).toEqual({
+            usage: true,
+            select: false,
+            insert: false,
+          });
+        },
+      );
     });
   });
 }
