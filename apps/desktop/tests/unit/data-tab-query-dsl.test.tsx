@@ -7,11 +7,25 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DataTab } from "@/components/workspace/table-viewer/data-tab";
-import type { DataQueryInput, QueryDslError } from "@/shared/query-dsl/types";
+import type {
+  BoundPathSegment,
+  DataQueryInput,
+  QueryDslError,
+} from "@/shared/query-dsl/types";
+import {
+  DEFAULT_RELATION_SESSION,
+  type RelationSessionState,
+} from "@/shared/types/workspace";
+
+type LoadJsonKeys = (
+  column: string,
+  path: BoundPathSegment[],
+) => Promise<string[]>;
 
 const settingsState = { readOnlyMode: false };
 const exportProps = vi.fn();
 const deleteProps = vi.fn();
+const editorProps: { loadJsonKeys?: LoadJsonKeys } = {};
 
 vi.mock("@/hooks/use-settings", () => ({
   useSettings: () => ({ settings: { general: settingsState } }),
@@ -24,23 +38,28 @@ vi.mock("@/components/workspace/table-viewer/query-dsl-editor", () => ({
     onChange,
     onSubmit,
     errors,
+    loadJsonKeys,
   }: {
     ariaLabel: string;
     value: string;
     onChange: (value: string) => void;
     onSubmit: () => void;
     errors: QueryDslError[];
-  }) => (
-    <input
-      aria-label={ariaLabel}
-      aria-invalid={errors.length > 0}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") onSubmit();
-      }}
-    />
-  ),
+    loadJsonKeys?: LoadJsonKeys;
+  }) => {
+    editorProps.loadJsonKeys = loadJsonKeys;
+    return (
+      <input
+        aria-label={ariaLabel}
+        aria-invalid={errors.length > 0}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") onSubmit();
+        }}
+      />
+    );
+  },
 }));
 vi.mock("@/components/workspace/export-dropdown", () => ({
   ExportDropdown: (props: unknown) => {
@@ -93,10 +112,11 @@ const QUERY_COLUMNS = [
   { name: "name", typeName: "text", family: "text" },
 ];
 
-function installApi(getRows: ReturnType<typeof vi.fn>) {
+function installApi(getRows: ReturnType<typeof vi.fn>, getJsonKeys = vi.fn()) {
   Object.assign(window, {
     tableDataApi: {
       getRows,
+      getJsonKeys,
       getQueryColumns: vi
         .fn()
         .mockResolvedValue({ success: true, data: QUERY_COLUMNS }),
@@ -104,13 +124,14 @@ function installApi(getRows: ReturnType<typeof vi.fn>) {
   });
 }
 
-function renderTab(onSessionChange = vi.fn()) {
+function renderTab(onSessionChange = vi.fn(), session?: RelationSessionState) {
   render(
     <DataTab
       connectionId="c1"
       schema="app"
       table="users"
       relationType="table"
+      session={session}
       onSessionChange={onSessionChange}
     />,
   );
@@ -352,7 +373,7 @@ describe("DataTab query DSL", () => {
       },
     });
     installApi(getRows);
-    renderTab();
+    const { onSessionChange } = renderTab();
     await screen.findByText("rows: 1");
 
     type("Filter", "id > 1");
@@ -365,8 +386,104 @@ describe("DataTab query DSL", () => {
     await waitFor(() => expect(getRows).toHaveBeenCalledTimes(3));
     expect(lastGetRowsQuery(getRows)).toMatchObject({
       page: 2,
+      pageSize: 50,
       query: { filter: "id > 1" },
     });
+
+    fireEvent.change(screen.getByLabelText("Rows per page"), {
+      target: { value: "25" },
+    });
+    await waitFor(() => expect(getRows).toHaveBeenCalledTimes(4));
+    expect(lastGetRowsQuery(getRows)).toMatchObject({
+      page: 1,
+      pageSize: 25,
+      query: { filter: "id > 1" },
+    });
+    expect(onSessionChange).toHaveBeenLastCalledWith({ dataPageSize: 25 });
+  });
+
+  it("restores the session's query and opens the options row it uses", async () => {
+    const getRows = vi.fn().mockResolvedValue(rowsResult([3, 2, 1]));
+    installApi(getRows);
+    renderTab(vi.fn(), {
+      ...DEFAULT_RELATION_SESSION,
+      dataQuery: { ...EMPTY, sort: "id DESC" },
+    });
+    await screen.findByText("rows: 3,2,1");
+
+    expect(getRows).toHaveBeenCalledTimes(1);
+    expect(lastGetRowsQuery(getRows)).toMatchObject({
+      page: 1,
+      query: { ...EMPTY, sort: "id DESC" },
+    });
+    expect(screen.getByLabelText("Sort")).toBeVisible();
+    expect(screen.getByLabelText("Sort")).toHaveValue("id DESC");
+    expect(
+      screen.getByRole("button", { name: "Query options, 1 active" }),
+    ).toBeVisible();
+  });
+
+  it("makes a valid query active even when the database rejects it", async () => {
+    // A query that parses and binds can still fail at run time (say an
+    // invalid date literal). It becomes the active query, so paging,
+    // export and delete follow what the user applied.
+    const getRows = vi
+      .fn()
+      .mockResolvedValueOnce(rowsResult([1, 2]))
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'invalid input syntax for type date: "2026-13-01"',
+      });
+    installApi(getRows);
+    const { onSessionChange } = renderTab();
+    await screen.findByText("rows: 1,2");
+
+    type("Filter", "id > 1");
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(await screen.findByText("No rows to display.")).toBeVisible();
+    expect(
+      screen.getByText('invalid input syntax for type date: "2026-13-01"'),
+    ).toBeVisible();
+    const applied = { ...EMPTY, filter: "id > 1" };
+    expect(onSessionChange).toHaveBeenCalledWith({ dataQuery: applied });
+    expect(deleteProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: applied }),
+    );
+  });
+
+  it("samples each JSON path once and retries a failed sample", async () => {
+    const getJsonKeys = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: ["city", "zip"] })
+      .mockResolvedValueOnce({ success: false, error: "timeout" })
+      .mockResolvedValueOnce({ success: true, data: ["en"] });
+    installApi(vi.fn().mockResolvedValue(rowsResult([1])), getJsonKeys);
+    renderTab();
+    await screen.findByText("rows: 1");
+    const loadJsonKeys = editorProps.loadJsonKeys!;
+    const address: BoundPathSegment[] = [{ kind: "key", value: "address" }];
+
+    await expect(loadJsonKeys("profile", address)).resolves.toEqual([
+      "city",
+      "zip",
+    ]);
+    await expect(loadJsonKeys("profile", address)).resolves.toEqual([
+      "city",
+      "zip",
+    ]);
+    expect(getJsonKeys).toHaveBeenCalledTimes(1);
+    expect(getJsonKeys).toHaveBeenCalledWith({
+      connectionId: "c1",
+      schema: "app",
+      table: "users",
+      column: "profile",
+      path: address,
+    });
+
+    await expect(loadJsonKeys("profile", [])).resolves.toEqual([]);
+    await expect(loadJsonKeys("profile", [])).resolves.toEqual(["en"]);
+    expect(getJsonKeys).toHaveBeenCalledTimes(3);
   });
 
   it("treats an unchanged Apply as a no-op and Clear as a reset", async () => {

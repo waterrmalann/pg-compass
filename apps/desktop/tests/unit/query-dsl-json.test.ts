@@ -163,6 +163,14 @@ describe("parse paths", () => {
     });
   });
 
+  it("accepts paths at the segment and index limits", () => {
+    const sixteen = ok(parseFilter(`p${".k".repeat(16)} = 1`));
+    expect(sixteen).toMatchObject({ path: { length: 16 } });
+    expect(ok(parseFilter("p.2147483647 = 1"))).toMatchObject({
+      path: [{ kind: "index", value: 2_147_483_647 }],
+    });
+  });
+
   it("parses paths in Sort with directions", () => {
     expect(ok(parseSort("p.rank -1, p.name"))).toMatchObject([
       { path: [{ value: "rank" }], direction: "DESC" },
@@ -185,7 +193,8 @@ describe("parse paths", () => {
     ["sort", "p.a, p.a DESC", "duplicate-column", "already sorted"],
     ["filter", "p.a", "unexpected-token", 'after "p.a"'],
     ["filter", "p.a(1) = 2", "unsupported-syntax", "Functions"],
-    ["filter", "p.99999999999 = 1", "limit-exceeded", "Quote the segment"],
+    // One past int4: the index is cast with ::int when the query runs.
+    ["filter", "p.2147483648 = 1", "limit-exceeded", "Quote the segment"],
     [
       "filter",
       `p${".k".repeat(17)} = 1`,

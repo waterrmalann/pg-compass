@@ -208,16 +208,19 @@ describe("bindDataQuery", () => {
     expect(error?.message).toContain(hint);
   });
 
-  it("limits projection and sort items to the relation's column count", () => {
-    const few: QueryColumnMetadata[] = [
-      { name: "a", typeName: "text", family: "text" },
-    ];
-    // The count check runs before column resolution, so it reports first.
-    const result = prepareDataQuery(input({ sort: "a, b" }), few);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.errors[0]?.code).toBe("limit-exceeded");
-  });
+  it.each(["sort", "projection"] as const)(
+    "limits %s items to the relation's column count",
+    (field) => {
+      const few: QueryColumnMetadata[] = [
+        { name: "a", typeName: "text", family: "text" },
+      ];
+      // The count check runs before column resolution, so it reports first.
+      const result = prepareDataQuery(input({ [field]: "a, b" }), few);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.errors[0]?.code).toBe("limit-exceeded");
+    },
+  );
 });
 
 describe("bindDataQuery exclusions and Skip/Limit", () => {
@@ -566,15 +569,20 @@ describe("bindAndCompile relation lock", () => {
     return parsed.value;
   };
 
-  it("locks inside a savepoint before reading the catalog", async () => {
-    const { client, statements } = fakeClient();
-    await bindAndCompile(client, "app", "t", ast(), "ROW EXCLUSIVE");
-    expect(statements.slice(0, 3)).toEqual([
-      "SAVEPOINT pg_compass_relation_lock",
-      'LOCK TABLE "app"."t" IN ROW EXCLUSIVE MODE',
-      "RELEASE SAVEPOINT pg_compass_relation_lock",
-    ]);
-  });
+  // Reads must take ACCESS SHARE: ROW EXCLUSIVE needs write privileges, so a
+  // read-only role would be refused and silently lose the lock.
+  it.each(["ACCESS SHARE", "ROW EXCLUSIVE"] as const)(
+    "locks in %s mode inside a savepoint before reading the catalog",
+    async (lockMode) => {
+      const { client, statements } = fakeClient();
+      await bindAndCompile(client, "app", "t", ast(), lockMode);
+      expect(statements.slice(0, 3)).toEqual([
+        "SAVEPOINT pg_compass_relation_lock",
+        `LOCK TABLE "app"."t" IN ${lockMode} MODE`,
+        "RELEASE SAVEPOINT pg_compass_relation_lock",
+      ]);
+    },
+  );
 
   it.each(["42809", "42501"])(
     "falls back without a lock when LOCK fails with %s",
@@ -588,9 +596,13 @@ describe("bindAndCompile relation lock", () => {
         "ACCESS SHARE",
       );
       expect(prepared.compiled.whereSql).toBe('"id" = $1');
-      expect(statements).toContain(
+      // The savepoint is rolled back and released, not leaked.
+      expect(statements.slice(0, 4)).toEqual([
+        "SAVEPOINT pg_compass_relation_lock",
+        'LOCK TABLE "app"."mv" IN ACCESS SHARE MODE',
         "ROLLBACK TO SAVEPOINT pg_compass_relation_lock",
-      );
+        "RELEASE SAVEPOINT pg_compass_relation_lock",
+      ]);
     },
   );
 

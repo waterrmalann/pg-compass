@@ -71,6 +71,27 @@ describe("QueryDslEditor", () => {
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });
 
+  it("replaces the document when the value changes from outside", () => {
+    // Clear resets the draft through the value prop, not through typing.
+    const { editorView, view } = renderEditor([], "id = 1");
+    expect(editorView.state.doc.toString()).toBe("id = 1");
+
+    view.rerender(
+      <QueryDslEditor
+        field="filter"
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        placeholder="Filter"
+        ariaLabel="Filter"
+        columns={[]}
+        errors={[]}
+        errorId="filter-error"
+      />,
+    );
+    expect(editorView.state.doc.toString()).toBe("");
+  });
+
   it("flattens pasted newlines into spaces", () => {
     const { editorView, onChange } = renderEditor([], "");
     act(() => {

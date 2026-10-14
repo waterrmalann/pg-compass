@@ -119,6 +119,7 @@ describe("tokenize", () => {
   });
 
   it("enforces the per-field length limit", () => {
+    expect(tokenize("sort", "a".repeat(10_000)).ok).toBe(true);
     const error = firstError(tokenize("sort", "a".repeat(10_001)));
     expect(error).toMatchObject({
       code: "limit-exceeded",
@@ -238,7 +239,7 @@ describe("parseFilter", () => {
     ["and = 1", "keyword-as-identifier", "Quote it", 0],
     ["select = 1", "unsupported-syntax", "Quote it", 0],
     ["id = 1 OR TRUE", "keyword-as-identifier", "TRUE is a keyword", 10],
-    ["id = -", "unsupported-syntax", "", 5],
+    ["id = -", "unsupported-syntax", "Arithmetic", 5],
   ])("rejects %j", (input, code, message, from) => {
     const error = firstError(parseFilter(input));
     expect(error).toMatchObject({ code, field: "filter", from });
@@ -316,8 +317,8 @@ describe("parseProjection", () => {
     ["-id, name", "mixed-projection", "not both", 5],
     ["-id AS x", "unsupported-syntax", "can't have an alias", 4],
     ["-id, -id", "duplicate-column", "already excluded", 6],
-    ["- id", "unsupported-syntax", "", 0],
-    ["-", "unsupported-syntax", "", 0],
+    ["- id", "unsupported-syntax", "Arithmetic", 0],
+    ["-", "unsupported-syntax", "Arithmetic", 0],
     ["-1", "unexpected-token", "Expected a column name", 0],
   ])("rejects the exclusion %j", (input, code, message, from) => {
     const error = firstError(parseProjection(input));
@@ -336,12 +337,12 @@ describe("parseProjection", () => {
     [`id "Name"`, "unexpected-token", "Use AS", 3],
     ["id AS", "unexpected-token", "an alias", 5],
     ["id,", "unexpected-token", 'after ","', 3],
-    ["id, , name", "unexpected-token", "", 4],
+    ["id, , name", "unexpected-token", "Expected a column name", 4],
     [`id, "id"`, "duplicate-column", "already projected", 4],
     ["id AS a, name AS A", "duplicate-output", "both be named", 17],
     ["id, name AS id", "duplicate-output", "both be named", 12],
     ["upper(name)", "unsupported-syntax", "Functions", 0],
-    ["id + 1", "unsupported-syntax", "", 3],
+    ["id + 1", "unsupported-syntax", "Arithmetic", 3],
     ["'id'", "unexpected-token", "double quotes", 0],
     ["1", "unexpected-token", "Expected a column name", 0],
   ])("rejects %j", (input, code, message, from) => {
@@ -371,7 +372,7 @@ describe("parseSort", () => {
     ["a up", "unexpected-token", "ASC, DESC, 1, or -1", 2],
     ["a, A", "duplicate-column", "already sorted", 3],
     ["a NULLS FIRST", "unsupported-syntax", "NULLS", 2],
-    ["a AS b", "unexpected-token", "", 2],
+    ["a AS b", "unexpected-token", "ASC, DESC, 1, or -1", 2],
     ["desc", "keyword-as-identifier", "Quote it", 0],
     ["a,", "unexpected-token", 'after ","', 2],
   ])("rejects %j", (input, code, message, from) => {

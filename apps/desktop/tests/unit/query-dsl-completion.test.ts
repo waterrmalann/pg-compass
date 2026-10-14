@@ -171,6 +171,8 @@ describe("suggestDslCompletions for JSON columns", () => {
   it("doesn't treat a key named like a column as that column", () => {
     expect(jsonLabels("filter", "profile.is_active = ")).toBeNull();
     expect(jsonLabels("filter", "profile CONTAINS ")).toBeNull();
+    // A path below a boolean column is no longer that boolean.
+    expect(jsonLabels("filter", "is_active.x = ")).toBeNull();
   });
 
   it("asks for keys right after a dot on a JSON column", () => {

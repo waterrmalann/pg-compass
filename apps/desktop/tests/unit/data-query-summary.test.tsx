@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DataQuerySummary,
@@ -92,6 +98,48 @@ describe("DataQuerySummary", () => {
       expect(
         screen.getByText('Column "notes" does not exist.'),
       ).toBeInTheDocument(),
+    );
+  });
+
+  it("shows the message when the preview call itself throws", async () => {
+    previewQuerySql.mockRejectedValue(new Error("No handler registered"));
+    renderSummary();
+    fireEvent.click(screen.getByRole("button", { name: "Show SQL" }));
+    expect(await screen.findByText("No handler registered")).toBeVisible();
+  });
+
+  it("ignores the SQL of a query that changed while it was building", async () => {
+    let resolveOld: (value: unknown) => void = () => undefined;
+    previewQuerySql
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        success: true,
+        data: { sql: "SELECT new", values: [] },
+      });
+    const view = renderSummary();
+    fireEvent.click(screen.getByRole("button", { name: "Show SQL" }));
+    view.rerender(
+      <DataQuerySummary
+        connectionId="c1"
+        schema="app"
+        table="users"
+        query={{ ...QUERY, sort: "id ASC" }}
+      />,
+    );
+    expect(await screen.findByTestId("export-sql-preview")).toHaveTextContent(
+      "SELECT new",
+    );
+
+    await act(async () => {
+      resolveOld({ success: true, data: { sql: "SELECT old", values: [] } });
+    });
+    expect(screen.getByTestId("export-sql-preview")).toHaveTextContent(
+      "SELECT new",
     );
   });
 });

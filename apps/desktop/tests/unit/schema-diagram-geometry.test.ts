@@ -70,27 +70,35 @@ describe("edgeGeometry", () => {
       target,
       { x: 600, y: 300 },
     );
-    expect(geometry.start).toEqual({
-      x: NODE_WIDTH,
-      y: rowCenterY({ x: 0, y: 0 }, 2),
-    });
-    expect(geometry.end).toEqual({
-      x: 600,
-      y: rowCenterY({ x: 600, y: 300 }, 0),
-    });
-    expect(geometry.path.startsWith(`M ${NODE_WIDTH} `)).toBe(true);
+    const startY = rowCenterY({ x: 0, y: 0 }, 2);
+    const endY = rowCenterY({ x: 600, y: 300 }, 0);
+    expect(geometry.start).toEqual({ x: NODE_WIDTH, y: startY });
+    expect(geometry.end).toEqual({ x: 600, y: endY });
+    // Far apart, both control points sit half way between the cards.
+    const midX = (NODE_WIDTH + 600) / 2;
+    expect(geometry.path).toBe(
+      `M ${NODE_WIDTH} ${startY} C ${midX} ${startY}, ${midX} ${endY}, 600 ${endY}`,
+    );
   });
 
   it("runs from the facing sides when the target is to the left", () => {
+    const sourceX = NODE_WIDTH + 20;
     const geometry = edgeGeometry(
       edge("orders", "users"),
       source,
-      { x: 600, y: 0 },
+      { x: sourceX, y: 0 },
       target,
       { x: 0, y: 0 },
     );
-    expect(geometry.start.x).toBe(600);
-    expect(geometry.end.x).toBe(NODE_WIDTH);
+    const startY = rowCenterY({ x: 0, y: 0 }, 2);
+    const endY = rowCenterY({ x: 0, y: 0 }, 0);
+    expect(geometry.start).toEqual({ x: sourceX, y: startY });
+    expect(geometry.end).toEqual({ x: NODE_WIDTH, y: endY });
+    // Too close for a half-way bend: the line still leaves each side 40px
+    // straight, heading left out of the source and right out of the target.
+    expect(geometry.path).toBe(
+      `M ${sourceX} ${startY} C ${sourceX - 40} ${startY}, ${NODE_WIDTH + 40} ${endY}, ${NODE_WIDTH} ${endY}`,
+    );
   });
 
   it("loops out on the right when the cards are stacked", () => {
@@ -101,11 +109,15 @@ describe("edgeGeometry", () => {
       target,
       { x: 100, y: 0 },
     );
-    expect(geometry.start.x).toBe(NODE_WIDTH);
-    expect(geometry.end.x).toBe(100 + NODE_WIDTH);
-    // The loop reaches past both right edges, and the bounds cover it.
-    expect(geometry.bounds.x + geometry.bounds.width).toBeGreaterThan(
-      100 + NODE_WIDTH + 40,
+    const startY = rowCenterY({ x: 0, y: 400 }, 2);
+    const endY = rowCenterY({ x: 100, y: 0 }, 0);
+    const outerX = 100 + NODE_WIDTH + 40;
+    expect(geometry.path).toBe(
+      `M ${NODE_WIDTH} ${startY} C ${outerX} ${startY}, ${outerX} ${endY}, ${100 + NODE_WIDTH} ${endY}`,
+    );
+    // The bounds must cover the loop's bulge, or culling would clip it.
+    expect(geometry.bounds.x + geometry.bounds.width).toBeGreaterThanOrEqual(
+      outerX,
     );
   });
 
@@ -119,9 +131,12 @@ describe("edgeGeometry", () => {
       employees,
       { x: 0, y: 0 },
     );
-    expect(geometry.start.x).toBe(NODE_WIDTH);
-    expect(geometry.end.x).toBe(NODE_WIDTH);
-    expect(geometry.start.y).toBeGreaterThan(geometry.end.y);
+    const startY = rowCenterY({ x: 0, y: 0 }, 3);
+    const endY = rowCenterY({ x: 0, y: 0 }, 0);
+    const outerX = NODE_WIDTH + 40;
+    expect(geometry.path).toBe(
+      `M ${NODE_WIDTH} ${startY} C ${outerX} ${startY}, ${outerX} ${endY}, ${NODE_WIDTH} ${endY}`,
+    );
   });
 });
 
