@@ -8,7 +8,11 @@ import {
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { RowEditDialog } from "@/components/workspace/table-viewer/row-edit-dialog";
 import { registerDefaultRenderers } from "@/components/workspace/renderers/default-renderers";
-import { registerDefaultEditors } from "@/components/workspace/renderers/edit-registry";
+import {
+  editRegistry,
+  registerDefaultEditors,
+  type TypeEditorProps,
+} from "@/components/workspace/renderers/edit-registry";
 import type { ColumnInfo } from "@/shared/types/table-data";
 
 beforeAll(() => {
@@ -452,6 +456,114 @@ describe("RowEditDialog — insert mode", () => {
 
     await act(async () => {
       resolveInsert({ success: true, data: { row: { id: 1 } } });
+    });
+  });
+
+  describe("geography fields", () => {
+    const geoColumns: ColumnInfo[] = [
+      {
+        name: "location",
+        dataTypeId: 99999,
+        dataType: "geography",
+        isNullable: true,
+      },
+    ];
+
+    // Stands in for the Leaflet map editor, which jsdom can't render.
+    function StubMapEditor(props: Readonly<TypeEditorProps>) {
+      return (
+        <div>
+          <span data-testid="stub-initial">{String(props.initialValue)}</span>
+          <button
+            type="button"
+            onClick={() =>
+              props.onSave({
+                value: "SRID=4326;POINT(76.27 9.93)",
+                pgCast: "geometry",
+              })
+            }
+          >
+            Stub save
+          </button>
+        </div>
+      );
+    }
+
+    function renderGeoInsert() {
+      render(
+        <RowEditDialog
+          mode="insert"
+          columns={geoColumns}
+          row={{}}
+          primaryKey={[]}
+          schema="app"
+          table="places"
+          connectionId="c1"
+          onRowUpdated={() => {}}
+          onClose={() => {}}
+        />,
+      );
+    }
+
+    it("shows the WKT format as a placeholder", () => {
+      setupInsertRowMock();
+      renderGeoInsert();
+      const textarea = screen
+        .getByTestId("row-field-location")
+        .querySelector("textarea")!;
+      expect(textarea).toHaveAttribute(
+        "placeholder",
+        "SRID=4326;POINT(lng lat)",
+      );
+    });
+
+    it("fills the field from the map editor and inserts it with the column's cast", async () => {
+      const geographyEditor = editRegistry.get("geography");
+      editRegistry.register("geography", {
+        ...geographyEditor,
+        Component: StubMapEditor,
+      });
+      try {
+        const { fn } = setupInsertRowMock();
+        renderGeoInsert();
+        const textarea = screen
+          .getByTestId("row-field-location")
+          .querySelector("textarea")!;
+        fireEvent.change(textarea, { target: { value: "POINT(1 2)" } });
+
+        fireEvent.click(screen.getByTestId("map-trigger-location"));
+        // The map opens on whatever is already typed.
+        expect(screen.getByTestId("stub-initial")).toHaveTextContent(
+          "POINT(1 2)",
+        );
+        fireEvent.click(screen.getByText("Stub save"));
+
+        await waitFor(() =>
+          expect(screen.queryByTestId("map-editor-dialog-location")).toBeNull(),
+        );
+        expect(textarea).toHaveValue("SRID=4326;POINT(76.27 9.93)");
+
+        fireEvent.click(screen.getByTestId("row-editor-save"));
+        await waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+        expect(fn.mock.calls[0]![0]).toMatchObject({
+          changes: [
+            {
+              column: "location",
+              pgCast: "geography",
+              newValue: "SRID=4326;POINT(76.27 9.93)",
+              setNull: false,
+            },
+          ],
+        });
+      } finally {
+        editRegistry.register("geography", geographyEditor);
+      }
+    });
+
+    it("has no map button when no map editor is registered", () => {
+      setupInsertRowMock();
+      renderGeoInsert();
+      expect(screen.queryByTestId("map-trigger-location")).toBeNull();
     });
   });
 });

@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
+import { MapPin } from "lucide-react";
 import {
   editRegistry,
   type TypeEditor,
+  type TypeEditorProps,
 } from "@/components/workspace/renderers/edit-registry";
 import { ForeignKeyPicker } from "@/components/workspace/renderers/foreign-key-editor";
 import {
@@ -19,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { fieldClassName, Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { ColumnInfo } from "@/shared/types/table-data";
@@ -37,6 +46,12 @@ const MULTILINE_TYPES = new Set([
   "geometry",
   "geography",
 ]);
+
+// Hints for types whose input syntax isn't obvious from the type name.
+const FIELD_PLACEHOLDERS: Record<string, string> = {
+  geometry: "SRID=4326;POINT(lng lat)",
+  geography: "SRID=4326;POINT(lng lat)",
+};
 
 export interface FieldDraft {
   raw: string;
@@ -186,17 +201,33 @@ export function FieldEditor(props: Readonly<FieldEditorProps>): ReactNode {
         />
       );
     }
-    return (
+    const textarea = (
       <textarea
         value={props.rawValue}
         onChange={(event) => props.onChange(event.target.value)}
         disabled={props.disabled}
+        placeholder={FIELD_PLACEHOLDERS[props.column.dataType]}
         className={cn(
           fieldClassName,
-          "min-h-16 resize-y px-2.5 py-1.5 font-mono text-xs",
+          "min-h-16 w-full resize-y px-2.5 py-1.5 font-mono text-xs",
         )}
         spellCheck={false}
       />
+    );
+    // Types with a dedicated modal editor (PostGIS map) offer it beside the
+    // raw text, which stays the value that gets sent.
+    const ModalEditor = editRegistry.get(props.column.dataType).Component;
+    if (!ModalEditor) return textarea;
+    return (
+      <ModalEditorField
+        column={props.column}
+        rawValue={props.rawValue}
+        disabled={props.disabled}
+        onChange={props.onChange}
+        ModalEditor={ModalEditor}
+      >
+        {textarea}
+      </ModalEditorField>
     );
   }
 
@@ -219,6 +250,72 @@ export function FieldEditor(props: Readonly<FieldEditorProps>): ReactNode {
       className="h-8 font-mono text-xs"
       spellCheck={false}
     />
+  );
+}
+
+interface ModalEditorFieldProps {
+  column: ColumnInfo;
+  rawValue: string;
+  disabled: boolean;
+  onChange: (raw: string) => void;
+  ModalEditor: ComponentType<TypeEditorProps>;
+  children: ReactNode;
+}
+
+function ModalEditorField(props: Readonly<ModalEditorFieldProps>) {
+  const [open, setOpen] = useState(false);
+  const ModalEditor = props.ModalEditor;
+  const label = `Pick ${props.column.name} on map`;
+
+  return (
+    <div className="flex items-start gap-1">
+      <div className="min-w-0 flex-1">{props.children}</div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        disabled={props.disabled}
+        onClick={() => setOpen(true)}
+        aria-label={label}
+        title={label}
+        data-testid={`map-trigger-${props.column.name}`}
+      >
+        <MapPin />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          data-testid={`map-editor-dialog-${props.column.name}`}
+          className="sm:max-w-2xl"
+          onKeyDown={(event) => {
+            // Keep the row dialog's Ctrl+Enter save from firing through the
+            // portal while this editor is open.
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.stopPropagation();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="font-mono">{props.column.name}</span>
+              <span className="rounded border border-border/70 bg-muted/55 px-1.5 py-0.5 font-mono text-[11px] font-normal text-subtle-foreground">
+                {props.column.dataType}
+              </span>
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Pick a value for column {props.column.name} on the map.
+            </DialogDescription>
+          </DialogHeader>
+          <ModalEditor
+            initialValue={props.rawValue}
+            onSave={(result) => {
+              props.onChange(String(result.value));
+              setOpen(false);
+            }}
+            onCancel={() => setOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
