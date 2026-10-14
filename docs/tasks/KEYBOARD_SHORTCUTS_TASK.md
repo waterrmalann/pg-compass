@@ -27,7 +27,7 @@ You should also ensure not to cause conflicts with any existing shortcuts in Ele
 | Close tab          | Ctrl+W         | Cmd+W          | Electron menu accelerator (`CmdOrCtrl+W`) → IPC → renderer                                             |
 | Next tab           | Ctrl+Tab       | Ctrl+Tab       | `before-input-event` in main process → IPC → renderer                                                  |
 | Previous tab       | Ctrl+Shift+Tab | Ctrl+Shift+Tab | `before-input-event` in main process → IPC → renderer                                                  |
-| Reload             | Ctrl+R         | Cmd+R          | Already handled by Electron's `reload` menu role                                                       |
+| Refresh view       | Ctrl+R         | Cmd+R          | Renderer-side `keydown` listener clicks the active view's Refresh. Skipped in editors and the psql terminal, where Ctrl+R stays with them. The menu has no `reload`/`forceReload` roles, so the key never reloads the window. |
 | Focus query editor | Ctrl+F         | Cmd+F          | Renderer-side `keydown` listener (skips if CodeMirror already focused, so CM's own search still works) |
 
 ### Files Changed

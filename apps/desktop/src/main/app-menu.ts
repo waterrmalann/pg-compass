@@ -55,13 +55,12 @@ export function buildAppMenu(): Menu {
       ],
     },
 
-    // View menu
+    // View menu. No reload roles: their CmdOrCtrl+R accelerator would reload
+    // the window (losing tabs, unsaved SQL and shells) whenever the renderer
+    // leaves Ctrl+R unhandled, as in editors and the psql terminal.
     {
       label: "View",
       submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
-        { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
         { role: "zoomOut" },

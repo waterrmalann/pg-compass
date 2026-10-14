@@ -150,3 +150,85 @@ test("filters and sorts by JSON paths with key completion", async ({
 
   await app.close();
 });
+
+test("Ctrl+R in an editor does not reload the window", async ({
+  browserName,
+}, testInfo) => {
+  test.skip(
+    browserName !== "chromium",
+    "Electron tests only run with Chromium",
+  );
+
+  const runtime = getRuntimeState(testInfo);
+  const app = await launchApp({ PG_COMPASS_STORE_DIR: runtime.storeDir });
+  const page = await app.firstWindow();
+
+  await page.getByRole("button", { name: "Open E2E Database" }).click();
+  await page.getByRole("row", { name: /app/i }).click();
+  await page.getByRole("row", { name: /^users/i }).click();
+  await expect(page.locator('[data-slot="panel-count"]')).toHaveText("120");
+
+  // Count page loads in the main process, so a reload is caught even if the
+  // window comes back looking the same.
+  const window = await app.browserWindow(page);
+  await window.evaluate((browserWindow) => {
+    const state = globalThis as { pageLoads?: number };
+    state.pageLoads = 0;
+    browserWindow.webContents.on("did-start-loading", () => {
+      state.pageLoads = (state.pageLoads ?? 0) + 1;
+    });
+  });
+  // Count the shortcut in the renderer: psql and the refresh shortcut rely
+  // on still receiving it.
+  await page.evaluate(() => {
+    const state = window as unknown as { reloadKeys: number };
+    state.reloadKeys = 0;
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "r" && (event.ctrlKey || event.metaKey)) {
+        state.reloadKeys += 1;
+      }
+    });
+  });
+
+  // page.keyboard dispatches through DevTools, which never reaches menu
+  // accelerators. sendInputEvent takes the same path as a real key press.
+  async function pressReloadShortcut() {
+    const modifier = process.platform === "darwin" ? "meta" : "control";
+    await window.evaluate((browserWindow, modifierKey) => {
+      const webContents = browserWindow.webContents;
+      const modifiers = [modifierKey] as Array<"meta" | "control">;
+      webContents.sendInputEvent({ type: "keyDown", keyCode: "R", modifiers });
+      webContents.sendInputEvent({ type: "keyUp", keyCode: "R", modifiers });
+    }, modifier);
+  }
+
+  const filter = page.getByRole("textbox", { name: "Filter" });
+  await filter.click();
+  await page.keyboard.type("id > 1");
+  await pressReloadShortcut();
+  await page.keyboard.type("0");
+  await expect(filter).toHaveText("id > 10");
+
+  await page.getByRole("tab", { name: "Query" }).click();
+  const queryEditor = page.locator("[data-query-editor] .cm-content");
+  await queryEditor.click();
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+A" : "Control+A",
+  );
+  await page.keyboard.type("SELECT 'unsaved' AS draft");
+  await pressReloadShortcut();
+  await page.keyboard.type(";");
+
+  await expect(queryEditor).toHaveText("SELECT 'unsaved' AS draft;");
+  await expect(page.getByRole("tab", { name: "Query" })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { reloadKeys: number }).reloadKeys,
+    ),
+  ).toBe(2);
+  expect(
+    await app.evaluate(() => (globalThis as { pageLoads?: number }).pageLoads),
+  ).toBe(0);
+
+  await app.close();
+});
