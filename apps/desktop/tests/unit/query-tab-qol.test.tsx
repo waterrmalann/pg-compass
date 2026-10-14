@@ -34,6 +34,8 @@ vi.mock("@/components/workspace/export-dropdown", () => ({
   ExportDropdown: () => null,
 }));
 
+const DEFAULT_SQL = 'SELECT * FROM "app"."users" LIMIT 100;';
+
 describe("QueryTab QOL controls", () => {
   beforeEach(() => {
     Object.assign(window, {
@@ -58,10 +60,12 @@ describe("QueryTab QOL controls", () => {
     await user.click(screen.getByRole("button", { name: "Run query" }));
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
+    const executingQueryId = vi.mocked(window.tableDataApi.executeQuery).mock
+      .calls[0]![0].queryId;
     await waitFor(() =>
       expect(window.tableDataApi.cancelQuery).toHaveBeenCalledWith({
         connectionId: "conn-1",
-        queryId: expect.any(String),
+        queryId: executingQueryId,
       }),
     );
   });
@@ -98,8 +102,105 @@ describe("QueryTab QOL controls", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByText(/returned/);
+
+    const editor = screen.getByRole("textbox", { name: "SQL" });
+    await user.clear(editor);
+    await user.type(editor, "SELECT 2");
+
+    view.rerender(
+      <QueryTab
+        connectionId="conn-1"
+        schema="app"
+        table="users"
+        refreshSignal={1}
+        onRefreshComplete={onRefreshComplete}
+      />,
+    );
+    await waitFor(() => expect(onRefreshComplete).toHaveBeenCalledWith(true));
+    expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(window.tableDataApi.executeQuery).mock.calls[1]![0].sql,
+    ).toBe(DEFAULT_SQL);
+    expect(editor).toHaveValue("SELECT 2");
+  });
+
+  it("pages through the last run SQL, not unsubmitted editor text", async () => {
+    const user = userEvent.setup();
+    vi.mocked(window.tableDataApi.executeQuery).mockResolvedValue({
+      success: true,
+      data: { columns: [], rows: [], totalCount: 120, primaryKey: null },
+    });
+    render(<QueryTab connectionId="conn-1" schema="app" table="users" />);
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByText(/returned/);
+
+    const editor = screen.getByRole("textbox", { name: "SQL" });
+    await user.clear(editor);
+    await user.type(editor, "SELECT 2");
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
     await waitFor(() =>
-      expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(1),
+      expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("combobox")).not.toBeDisabled(),
+    );
+    await user.selectOptions(screen.getByRole("combobox"), "100");
+    await waitFor(() =>
+      expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(3),
+    );
+
+    const calls = vi.mocked(window.tableDataApi.executeQuery).mock.calls;
+    expect(calls[1]![0]).toMatchObject({ sql: DEFAULT_SQL, page: 2 });
+    expect(calls[2]![0]).toMatchObject({
+      sql: DEFAULT_SQL,
+      page: 1,
+      pageSize: 100,
+    });
+  });
+
+  it("reports a failed refresh without executing while a query is running", async () => {
+    const user = userEvent.setup();
+    vi.mocked(window.tableDataApi.executeQuery).mockReturnValue(
+      new Promise(() => undefined),
+    );
+    const onRefreshComplete = vi.fn();
+    const view = render(
+      <QueryTab
+        connectionId="conn-1"
+        schema="app"
+        table="users"
+        refreshSignal={0}
+        onRefreshComplete={onRefreshComplete}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByRole("button", { name: "Cancel" });
+
+    view.rerender(
+      <QueryTab
+        connectionId="conn-1"
+        schema="app"
+        table="users"
+        refreshSignal={1}
+        onRefreshComplete={onRefreshComplete}
+      />,
+    );
+    await waitFor(() => expect(onRefreshComplete).toHaveBeenCalledWith(false));
+    expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes a refresh without executing when nothing has run yet", async () => {
+    const onRefreshComplete = vi.fn();
+    const view = render(
+      <QueryTab
+        connectionId="conn-1"
+        schema="app"
+        table="users"
+        refreshSignal={0}
+        onRefreshComplete={onRefreshComplete}
+      />,
     );
 
     view.rerender(
@@ -111,9 +212,7 @@ describe("QueryTab QOL controls", () => {
         onRefreshComplete={onRefreshComplete}
       />,
     );
-    await waitFor(() =>
-      expect(window.tableDataApi.executeQuery).toHaveBeenCalledTimes(2),
-    );
-    expect(onRefreshComplete).toHaveBeenCalledWith(true);
+    await waitFor(() => expect(onRefreshComplete).toHaveBeenCalledWith(true));
+    expect(window.tableDataApi.executeQuery).not.toHaveBeenCalled();
   });
 });

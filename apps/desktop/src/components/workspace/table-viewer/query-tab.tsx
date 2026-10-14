@@ -221,17 +221,19 @@ export function QueryTab({
     executeQuery(1, pageSize);
   }
 
+  // Pagination belongs to the visible result, so it re-runs the last
+  // successful SQL rather than whatever is currently in the editor.
   function handlePageChange(p: number) {
     if (loading) return;
     setPage(p);
-    executeQuery(p, pageSize);
+    executeQuery(p, pageSize, lastSuccessfulSql ?? sql);
   }
 
   function handlePageSizeChange(ps: number) {
     if (loading) return;
     setPageSize(ps);
     setPage(1);
-    executeQuery(1, ps);
+    executeQuery(1, ps, lastSuccessfulSql ?? sql);
   }
 
   async function handleCancel() {

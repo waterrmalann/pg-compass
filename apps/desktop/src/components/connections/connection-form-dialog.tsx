@@ -80,7 +80,7 @@ export function tryParsePostgresUrl(value: string): ConnectionFields | null {
     return {
       host: parsed.hostname,
       port: parsed.port ? Number.parseInt(parsed.port, 10) : 5432,
-      database: parsed.pathname.replace(/^\//, ""),
+      database: decodeURIComponent(parsed.pathname.replace(/^\//, "")),
       user: parsed.username ? decodeURIComponent(parsed.username) : "postgres",
       password: parsed.password ? decodeURIComponent(parsed.password) : "",
     };

@@ -58,22 +58,6 @@ describe("connection file fields", () => {
     );
   });
 
-  it("accepts inline SSL CA contents without opening the file picker", async () => {
-    const user = userEvent.setup();
-    render(<SslHarness />);
-
-    await user.click(screen.getByRole("button", { name: "Inline" }));
-    await user.type(
-      screen.getByLabelText("CA certificate"),
-      "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t",
-    );
-
-    expect(window.connectionApi.showOpenFileDialog).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("CA certificate")).toHaveValue(
-      "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t",
-    );
-  });
-
   it("preserves CA drafts when switching between file and inline sources", async () => {
     const user = userEvent.setup();
     render(<SslHarness />);

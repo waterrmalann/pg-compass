@@ -44,11 +44,20 @@ describe("usePsqlLocation", () => {
     await waitFor(() => expect(result.current.location).toEqual(missing));
   });
 
-  it("stays unknown when the lookup fails", async () => {
-    mocks.locatePsql.mockRejectedValue(new Error("ipc down"));
+  it("keeps the last known location when a later lookup fails", async () => {
     const { result } = renderHook(() => usePsqlLocation());
+    await waitFor(() => expect(result.current.location).toEqual(found));
 
-    await waitFor(() => expect(mocks.locatePsql).toHaveBeenCalled());
-    expect(result.current.location).toBeNull();
+    mocks.locatePsql.mockRejectedValueOnce(new Error("ipc down"));
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    mocks.locatePsql.mockResolvedValueOnce({ success: false, error: "boom" });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(mocks.locatePsql).toHaveBeenCalledTimes(3);
+    expect(result.current.location).toEqual(found);
   });
 });

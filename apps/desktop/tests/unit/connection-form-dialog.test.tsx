@@ -19,6 +19,52 @@ describe("ConnectionFormDialog helpers", () => {
     });
   });
 
+  it("decodes percent-encoded user, password and database in pasted URLs", () => {
+    expect(
+      tryParsePostgresUrl("postgresql://app%40corp:p%40ss@db.local/app%20db"),
+    ).toEqual({
+      host: "db.local",
+      port: 5432,
+      database: "app db",
+      user: "app@corp",
+      password: "p@ss",
+    });
+  });
+
+  it("returns no errors for a valid URI or complete fields", () => {
+    expect(
+      validateConnectionInput("uri", "postgres://localhost/app", {
+        host: "",
+        port: 0,
+        database: "",
+        user: "",
+        password: "",
+      }),
+    ).toEqual({});
+
+    expect(
+      validateConnectionInput("fields", "", {
+        host: "localhost",
+        port: 5432,
+        database: "app",
+        user: "postgres",
+        password: "",
+      }),
+    ).toEqual({});
+  });
+
+  it("rejects a URI without a postgres scheme", () => {
+    expect(
+      validateConnectionInput("uri", "mysql://localhost/app", {
+        host: "localhost",
+        port: 5432,
+        database: "app",
+        user: "postgres",
+        password: "",
+      }),
+    ).toEqual({ uri: "URI must start with postgres:// or postgresql://" });
+  });
+
   it("validates both URI and individual-field modes", () => {
     expect(
       validateConnectionInput("uri", "", {

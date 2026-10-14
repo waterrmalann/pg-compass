@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -151,5 +151,24 @@ describe("Open shell button", () => {
     expect(mocks.updateSettings).toHaveBeenCalledWith({
       general: { shellAccess: true },
     });
+  });
+
+  it("does not open a shell when turning shell access on fails", async () => {
+    withSettings({ shellAccess: false });
+    psqlAt({ path: "/usr/bin/psql", source: "path" });
+    // updateSettings resolves null when the save fails.
+    mocks.updateSettings.mockResolvedValue(null);
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole("button", { name: "Open shell" }));
+    const options = mocks.toast.mock.calls[0]?.[1] as {
+      action: { onClick: () => void };
+    };
+    options.action.onClick();
+
+    await waitFor(() => expect(mocks.updateSettings).toHaveBeenCalled());
+    await act(async () => {});
+    expect(mocks.forceOpenTab).not.toHaveBeenCalled();
   });
 });

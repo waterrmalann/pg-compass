@@ -101,4 +101,27 @@ describe("sidebar search loading", () => {
       expect(refreshSchemaTreeWithStatus).toHaveBeenCalledTimes(2),
     );
   });
+
+  it("reuses a successful search load until the instance disconnects", async () => {
+    const user = userEvent.setup();
+    refreshSchemaTreeWithStatus.mockResolvedValue({ ok: true, data: [] });
+
+    const view = render(<SidebarContent search="" onEdit={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Connect conn-1" }));
+    view.rerender(<SidebarContent search="missing" onEdit={vi.fn()} />);
+    await screen.findByText("No matching relations");
+
+    view.rerender(<SidebarContent search="" onEdit={vi.fn()} />);
+    view.rerender(<SidebarContent search="other" onEdit={vi.fn()} />);
+    await screen.findByText("No matching relations");
+    expect(refreshSchemaTreeWithStatus).toHaveBeenCalledTimes(1);
+
+    view.rerender(<SidebarContent search="" onEdit={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Disconnect conn-1" }));
+    await user.click(screen.getByRole("button", { name: "Connect conn-1" }));
+    view.rerender(<SidebarContent search="missing" onEdit={vi.fn()} />);
+    await waitFor(() =>
+      expect(refreshSchemaTreeWithStatus).toHaveBeenCalledTimes(2),
+    );
+  });
 });

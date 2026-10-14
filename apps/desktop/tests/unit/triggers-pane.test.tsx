@@ -9,8 +9,10 @@ import type { PgTriggerInfo } from "@/shared/types/roles";
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
+const settings = { general: { readOnlyMode: false } };
+
 vi.mock("@/hooks/use-settings", () => ({
-  useSettings: () => ({ settings: { general: { readOnlyMode: false } } }),
+  useSettings: () => ({ settings }),
 }));
 
 function trigger(tableName: string, triggerName: string): PgTriggerInfo {
@@ -38,6 +40,7 @@ function deferred<T>() {
 
 describe("TriggersPane", () => {
   beforeEach(() => {
+    settings.general.readOnlyMode = false;
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
     vi.stubGlobal(
@@ -148,5 +151,60 @@ describe("TriggersPane", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(window.rolesApi.setTriggerEnabled).not.toHaveBeenCalled();
+  });
+
+  it("toggles a single trigger without confirmation and reloads the list", async () => {
+    Object.assign(window, {
+      rolesApi: {
+        listTriggers: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: [trigger("users", "t1")] }),
+        setTriggerEnabled: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: undefined }),
+      },
+    });
+    const user = userEvent.setup();
+    render(<TriggersPane connectionId="conn-1" databaseNames={["shop"]} />);
+    await screen.findByText("t1");
+
+    await user.click(screen.getByRole("switch", { name: "Toggle trigger t1" }));
+
+    expect(window.rolesApi.setTriggerEnabled).toHaveBeenCalledWith({
+      connectionId: "conn-1",
+      databaseName: "shop",
+      schemaName: "public",
+      tableName: "users",
+      triggerName: "t1",
+      enabled: false,
+    });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Disabled trigger "t1"'),
+    );
+    await waitFor(() =>
+      expect(window.rolesApi.listTriggers).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it("disables every trigger switch in read-only mode", async () => {
+    settings.general.readOnlyMode = true;
+    Object.assign(window, {
+      rolesApi: {
+        listTriggers: vi
+          .fn()
+          .mockResolvedValue({ success: true, data: [trigger("users", "t1")] }),
+        setTriggerEnabled: vi.fn(),
+      },
+    });
+    render(<TriggersPane connectionId="conn-1" databaseNames={["shop"]} />);
+    await screen.findByText("t1");
+
+    expect(screen.getByText(/Read-only mode is on/)).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Toggle trigger t1" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("switch", { name: "All triggers enabled" }),
+    ).toBeDisabled();
   });
 });

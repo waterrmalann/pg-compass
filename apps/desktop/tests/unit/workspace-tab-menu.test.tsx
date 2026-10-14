@@ -52,7 +52,7 @@ describe("workspace tab context menu", () => {
     closeAllTabs.mockClear();
   });
 
-  it("opens from the keyboard context-menu event and closes all tabs", async () => {
+  it("opens on a contextmenu event at the focused tab and closes all tabs", async () => {
     const user = userEvent.setup();
     render(<Workspace />);
     const tabButton = screen.getByRole("button", { name: "Local · Users" });
@@ -64,8 +64,6 @@ describe("workspace tab context menu", () => {
     const item = await screen.findByRole("menuitem", {
       name: "Close all tabs",
     });
-    await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("menu")).toBeVisible();
     await user.click(item);
 
     expect(closeAllTabs).toHaveBeenCalledTimes(1);

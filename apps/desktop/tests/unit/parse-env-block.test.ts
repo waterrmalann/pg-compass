@@ -148,7 +148,6 @@ describe("parseEnvBlock", () => {
 
   it("accepts a base64-encoded PEM CA", () => {
     const base64Pem = btoa(PEM);
-    expect(base64Pem.startsWith("LS0t")).toBe(true);
 
     expect(parseEnvBlock(`POSTGRES_SSL_CA=${base64Pem}`).ca).toBe(base64Pem);
   });

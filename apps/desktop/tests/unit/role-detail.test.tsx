@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -54,6 +54,7 @@ function renderDetail({
   user?: CurrentUser;
 } = {}) {
   const onAfterMutation = vi.fn();
+  const onSelectRole = vi.fn();
   render(
     <TooltipProvider>
       <RoleDetail
@@ -62,15 +63,19 @@ function renderDetail({
         memberships={[]}
         databases={[]}
         accessTargetUser={selected.name}
-        allRoles={[role("postgres", { isSuperuser: true }), selected]}
+        allRoles={[
+          role("postgres", { isSuperuser: true }),
+          role("auditors", { canLogin: false }),
+          selected,
+        ]}
         isAdmin={isAdmin}
         currentUser={user}
-        onSelectRole={vi.fn()}
+        onSelectRole={onSelectRole}
         onAfterMutation={onAfterMutation}
       />
     </TooltipProvider>,
   );
-  return { onAfterMutation };
+  return { onAfterMutation, onSelectRole };
 }
 
 describe("RoleDetail", () => {
@@ -92,6 +97,7 @@ describe("RoleDetail", () => {
         alterRolePassword: vi
           .fn()
           .mockResolvedValue({ success: true, data: undefined }),
+        dropRole: vi.fn().mockResolvedValue({ success: true, data: undefined }),
       },
       clipboardApi: { writeText: vi.fn() },
     });
@@ -201,7 +207,28 @@ describe("RoleDetail", () => {
     expect(screen.getByText("unknown")).toBeVisible();
   });
 
-  it("disables role mutations in read-only mode and says why", () => {
+  it("drops a role only after confirming, then selects the current user", async () => {
+    const user = userEvent.setup();
+    const { onSelectRole, onAfterMutation } = renderDetail();
+
+    await user.click(screen.getByRole("button", { name: "Drop role" }));
+    const dialog = screen.getByRole("dialog");
+    expect(window.rolesApi.dropRole).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Drop role" }));
+
+    await waitFor(() =>
+      expect(window.rolesApi.dropRole).toHaveBeenCalledWith("conn-1", "alice"),
+    );
+    await waitFor(() => expect(onSelectRole).toHaveBeenCalledWith("postgres"));
+    expect(onAfterMutation).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("disables role mutations in read-only mode and says why", async () => {
+    const user = userEvent.setup();
     settings.general.readOnlyMode = true;
     renderDetail();
 
@@ -213,9 +240,16 @@ describe("RoleDetail", () => {
       "Edit role attributes",
       "Reset password",
       "Drop role",
+      "Edit",
+      "Edit attributes",
     ]) {
       expect(screen.getByRole("button", { name })).toBeDisabled();
     }
+
+    await user.click(screen.getByRole("tab", { name: "Roles" }));
+    expect(
+      screen.getByRole("switch", { name: "Toggle membership in auditors" }),
+    ).toBeDisabled();
   });
 });
 

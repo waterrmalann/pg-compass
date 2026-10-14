@@ -5,6 +5,20 @@ import { RestoreTab } from "@/components/workspace/database-manager/restore-tab"
 import type { BackupFileInfo } from "@/shared/types/backup";
 
 const settings = { general: { readOnlyMode: false } };
+// Mutable so a test can relabel a connection while the tab is open.
+const devConnection = vi.hoisted(() => ({
+  id: "dev-conn",
+  label: "Local dev",
+  mode: "fields",
+  favourite: false,
+  fields: {
+    host: "localhost",
+    port: 5432,
+    database: "",
+    user: "",
+    password: "",
+  },
+}));
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -28,19 +42,7 @@ vi.mock("@/hooks/use-connections", () => ({
           password: "",
         },
       },
-      {
-        id: "dev-conn",
-        label: "Local dev",
-        mode: "fields",
-        favourite: false,
-        fields: {
-          host: "localhost",
-          port: 5432,
-          database: "",
-          user: "",
-          password: "",
-        },
-      },
+      devConnection,
     ],
   }),
 }));
@@ -84,6 +86,7 @@ async function chooseTarget(connectionLabel: string) {
 describe("RestoreTab", () => {
   beforeEach(() => {
     settings.general.readOnlyMode = false;
+    devConnection.label = "Local dev";
     Object.assign(window, {
       backupApi: {
         listDatabases: vi
@@ -169,6 +172,86 @@ describe("RestoreTab", () => {
         }),
       ),
     );
+  });
+
+  it("clears the target and keeps Run disabled when the production prompt is declined", async () => {
+    vi.mocked(window.backupApi.listBackups).mockResolvedValue({
+      success: true,
+      data: [backupFile("/backups/a.dump")],
+    });
+    renderRestoreTab("/backups/a.dump");
+
+    const user = await chooseTarget("Billing prod");
+    await screen.findByText("Production database selected");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Target database" }),
+      ).toHaveValue(""),
+    );
+    expect(screen.queryByLabelText(/to confirm/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run restore" })).toBeDisabled();
+    expect(window.backupApi.restore).not.toHaveBeenCalled();
+  });
+
+  it("enables Run only once the target database name is typed exactly", async () => {
+    vi.mocked(window.backupApi.listBackups).mockResolvedValue({
+      success: true,
+      data: [backupFile("/backups/a.dump")],
+    });
+    renderRestoreTab("/backups/a.dump");
+
+    const user = await chooseTarget("Local dev");
+    const confirmInput = screen.getByLabelText(/to confirm/);
+    const run = screen.getByRole("button", { name: "Run restore" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Backup to restore" }),
+      ).toHaveValue("/backups/a.dump"),
+    );
+    expect(run).toBeDisabled();
+
+    await user.type(confirmInput, "ap");
+    expect(run).toBeDisabled();
+
+    await user.type(confirmInput, "p");
+    expect(run).toBeEnabled();
+  });
+
+  it("keeps Run disabled when a confirmed target turns out to be production", async () => {
+    // The typed name only resets when the target changes. Relabelling the
+    // connection makes the same target production-like, so only the
+    // production confirmation stands between the user and Run.
+    vi.mocked(window.backupApi.listBackups).mockResolvedValue({
+      success: true,
+      data: [backupFile("/backups/a.dump")],
+    });
+    const { view } = renderRestoreTab("/backups/a.dump");
+    const user = await chooseTarget("Local dev");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Backup to restore" }),
+      ).toHaveValue("/backups/a.dump"),
+    );
+    await user.type(screen.getByLabelText(/to confirm/), "app");
+    expect(screen.getByRole("button", { name: "Run restore" })).toBeEnabled();
+
+    devConnection.label = "Billing prod (renamed)";
+    view.rerender(
+      <RestoreTab
+        prefillPath={null}
+        onConsumePrefill={vi.fn()}
+        backupsRevision={0}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Production database selected"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Run restore", hidden: true }),
+    ).toBeDisabled();
   });
 
   it("does not claim production confirmation for other targets", async () => {

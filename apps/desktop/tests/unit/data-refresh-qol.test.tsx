@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DataTab } from "@/components/workspace/table-viewer/data-tab";
 
@@ -144,8 +144,9 @@ describe("DataTab background refresh", () => {
         primaryKey: ["id"],
       },
     });
-    await waitFor(() =>
-      expect(screen.getByText("visible rows: 1")).toBeVisible(),
-    );
+    // Let the stale response settle before asserting it was ignored.
+    await act(async () => {});
+    expect(screen.getByText("visible rows: 1")).toBeVisible();
+    expect(screen.queryByText("visible rows: 2")).toBeNull();
   });
 });

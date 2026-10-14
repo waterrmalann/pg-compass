@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_APP_SETTINGS } from "@/shared/types/settings";
 import { TableDetailsViewer } from "@/components/workspace/table-details-viewer";
@@ -15,6 +16,10 @@ const detailLoader = vi.fn();
 // The Open shell button looks psql up over IPC; not under test here.
 vi.mock("@/hooks/use-psql-location", () => ({
   usePsqlLocation: () => ({ location: null, recheck: () => undefined }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
 vi.mock("@/hooks/use-settings", () => ({
@@ -57,6 +62,7 @@ describe("detail refresh contract", () => {
     refreshSchemaTree.mockClear();
     refreshSchemaTreeWithStatus.mockClear();
     detailLoader.mockClear();
+    vi.mocked(toast.success).mockClear();
   });
 
   it("refreshes the schema tree and the active detail loader", async () => {
@@ -80,5 +86,30 @@ describe("detail refresh contract", () => {
       expect(refreshSchemaTreeWithStatus).toHaveBeenCalledWith("conn-1", true),
     );
     await waitFor(() => expect(detailLoader).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Updated/)).toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalledWith("Table view refreshed");
+  });
+
+  it("still reloads the detail but reports no success when metadata refresh fails", async () => {
+    const user = userEvent.setup();
+    refreshSchemaTreeWithStatus.mockResolvedValueOnce({ ok: false, data: [] });
+    render(
+      <TableDetailsViewer
+        tabId="table-tab"
+        path={{
+          connectionId: "conn-1",
+          connectionLabel: "Local",
+          schemaName: "app",
+          tableName: "users",
+        }}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /refresh data and table metadata/i }),
+    );
+    await waitFor(() => expect(detailLoader).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

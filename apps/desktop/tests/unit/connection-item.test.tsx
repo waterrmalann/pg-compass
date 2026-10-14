@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildConnectionString,
@@ -97,22 +98,15 @@ describe("ConnectionItem", () => {
     });
   });
 
-  it("copies the saved URI connection string from the context menu", async () => {
+  it("copies the stored URI, not the redacted list copy, from the context menu", async () => {
     const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(window, {
-      clipboardApi: {
-        writeText: vi.fn().mockImplementation(async (text: string) => {
-          await writeText(text);
-          return { success: true };
-        }),
-      },
-    });
+    // The sidebar list strips secrets, so the item must fetch the stored copy.
+    const listedConnection: ConnectionConfig = { ...uriConnection, uri: "" };
 
     render(
       <TooltipProvider>
         <ConnectionItem
-          connection={uriConnection}
+          connection={listedConnection}
           onEdit={vi.fn()}
           connected={false}
           onConnectedChange={vi.fn()}
@@ -128,10 +122,11 @@ describe("ConnectionItem", () => {
     );
 
     await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(
+      expect(window.clipboardApi.writeText).toHaveBeenCalledWith(
         "postgresql://postgres:secret@localhost:5432/app",
       ),
     );
+    expect(window.connectionApi.getById).toHaveBeenCalledWith("conn-1");
   });
 
   it("builds a PostgreSQL URL from individual connection fields", () => {
@@ -172,5 +167,45 @@ describe("ConnectionItem", () => {
     );
     await waitFor(() => expect(remove).toHaveBeenCalledWith("conn-1"));
     expect(closeConnectionTabs).toHaveBeenCalledWith("conn-1");
+  });
+
+  it("keeps the delete dialog open and tabs intact when deleting fails", async () => {
+    const user = userEvent.setup();
+    const remove = vi.fn().mockResolvedValue(false);
+    const closeConnectionTabs = vi.fn();
+    const onConnectedChange = vi.fn();
+    vi.mocked(useConnections).mockReturnValue({
+      ...vi.mocked(useConnections)(),
+      remove,
+    });
+    vi.mocked(useWorkspace).mockReturnValue({
+      ...vi.mocked(useWorkspace)(),
+      closeConnectionTabs,
+    });
+
+    render(
+      <TooltipProvider>
+        <ConnectionItem
+          connection={uriConnection}
+          onEdit={vi.fn()}
+          connected={true}
+          onConnectedChange={onConnectedChange}
+        />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      screen.getByRole("button", { name: "Delete saved connection" }),
+    );
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Failed to delete "Local"'),
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete saved connection" }),
+    ).toBeEnabled();
+    expect(closeConnectionTabs).not.toHaveBeenCalled();
+    expect(onConnectedChange).not.toHaveBeenCalled();
   });
 });

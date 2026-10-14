@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_APP_SETTINGS } from "@/shared/types/settings";
@@ -99,6 +99,29 @@ describe("SchemaViewer", () => {
       }),
     );
     await waitFor(() => expect(refreshSchemaTreeWithStatus).toHaveBeenCalled());
+    // Let the failed result settle before asserting nothing was stamped.
+    await act(async () => {});
     expect(screen.queryByText(/Updated/)).not.toBeInTheDocument();
+  });
+
+  it("shows a refresh timestamp after metadata refresh succeeds", async () => {
+    const user = userEvent.setup();
+    render(
+      <SchemaViewer
+        path={{
+          connectionId: "conn-1",
+          connectionLabel: "Local",
+          schemaName: "app",
+        }}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /refresh schema app and visible relation list/i,
+      }),
+    );
+    expect(await screen.findByText(/Updated/)).toBeInTheDocument();
+    expect(refreshSchemaTreeWithStatus).toHaveBeenCalledWith("conn-1", true);
   });
 });

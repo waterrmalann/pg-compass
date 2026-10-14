@@ -1,5 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ComponentProps } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeleteDataDialog } from "@/components/workspace/table-viewer/delete-data-dialog";
 import type { ColumnInfo } from "@/shared/types/table-data";
@@ -226,6 +233,93 @@ describe("DeleteDataDialog", () => {
       await screen.findByText('syntax error at or near "bad"'),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  });
+
+  it.each([
+    [
+      "an error result",
+      vi.fn(async () => ({ success: false, error: "permission denied" })),
+    ],
+    [
+      "a thrown error",
+      vi.fn(async () => {
+        throw new Error("permission denied");
+      }),
+    ],
+  ])(
+    "keeps the dialog open and the rows untouched when delete fails with %s",
+    async (_label, deleteRows) => {
+      vi.mocked(toast.error).mockClear();
+      installTableDataApiMock({ deleteRows });
+      const { onOpenChange, onDeleted } = renderDialog();
+      await screen.findByText("Alice");
+
+      const deleteButton = screen.getByRole("button", { name: "Delete" });
+      fireEvent.click(deleteButton);
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith("Delete failed", {
+          description: "permission denied",
+        }),
+      );
+      await waitFor(() => expect(deleteButton).toBeEnabled());
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+      expect(onDeleted).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores a preview response for a filter that has since changed", async () => {
+    let resolveFirst: (value: unknown) => void = () => undefined;
+    const getRows = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        success: true,
+        data: { columns, rows: [rows[1]], totalCount: 1, primaryKey: ["id"] },
+      });
+    installTableDataApiMock({ getRows });
+    const query = { filter: "", projection: "", sort: "", skip: "", limit: "" };
+    const view = render(
+      <DeleteDataDialog
+        open
+        onOpenChange={vi.fn()}
+        connectionId="c1"
+        schema="app"
+        table="users"
+        query={{ ...query, filter: "id = 1" }}
+        initialPreviewMode="table"
+        onDeleted={vi.fn()}
+      />,
+    );
+    view.rerender(
+      <DeleteDataDialog
+        open
+        onOpenChange={vi.fn()}
+        connectionId="c1"
+        schema="app"
+        table="users"
+        query={{ ...query, filter: "id = 2" }}
+        initialPreviewMode="table"
+        onDeleted={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText("Bob")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveFirst({
+        success: true,
+        data: { columns, rows, totalCount: 2, primaryKey: ["id"] },
+      });
+    });
+
+    expect(screen.queryByText("Alice")).not.toBeInTheDocument();
+    expect(screen.getByText("Delete 1 document")).toBeInTheDocument();
   });
 });
 

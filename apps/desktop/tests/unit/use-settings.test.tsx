@@ -42,12 +42,20 @@ describe("useSettings", () => {
   });
 
   it("loads settings, saves a theme change and applies it to the page", async () => {
+    // "system" differs from the default, so seeing it proves the load applied.
+    vi.mocked(window.settingsApi.get).mockResolvedValue({
+      success: true,
+      data: {
+        ...DEFAULT_APP_SETTINGS,
+        appearance: { ...DEFAULT_APP_SETTINGS.appearance, theme: "system" },
+      },
+    });
     const { result } = renderHook(() => useSettings(), {
       wrapper: SettingsProvider,
     });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.settings.appearance.theme).toBe("dark");
+    expect(result.current.settings.appearance.theme).toBe("system");
 
     await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
 

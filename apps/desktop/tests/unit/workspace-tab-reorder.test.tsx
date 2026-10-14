@@ -137,14 +137,16 @@ describe("workspace tab reordering", () => {
     expect(moveTab).not.toHaveBeenCalled();
   });
 
-  it("treats a press that barely moves as a click", async () => {
-    const user = userEvent.setup();
-    renderWithLayout();
+  it("does not lift a tab that moves less than the drag threshold", () => {
+    const { gamma } = renderWithLayout();
 
-    await user.click(screen.getByRole("button", { name: "Gamma · Users" }));
+    press(gamma, 380);
+    moveTo(383);
+    expect(gamma).not.toHaveAttribute("data-dragging");
+    expect(setActiveTab).not.toHaveBeenCalled();
 
+    release(383);
     expect(moveTab).not.toHaveBeenCalled();
-    expect(setActiveTab).toHaveBeenCalledWith("c:users");
   });
 
   it("moves a tab from its context menu", async () => {

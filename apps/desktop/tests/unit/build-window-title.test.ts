@@ -31,6 +31,27 @@ describe("buildWindowTitle", () => {
     expect(buildWindowTitle(tableView)).toBe("PG Compass - Local/app/users");
   });
 
+  it("builds titles for the connection root and view details", () => {
+    const schemaListView: WorkspaceTabView = {
+      type: "schema-list",
+      path: { connectionId: "c1", connectionLabel: "Local" },
+    };
+    const viewDetails: WorkspaceTabView = {
+      type: "view-details",
+      path: {
+        connectionId: "c1",
+        connectionLabel: "Local",
+        schemaName: "app",
+        viewName: "active_users",
+      },
+    };
+
+    expect(buildWindowTitle(schemaListView)).toBe("PG Compass - Local");
+    expect(buildWindowTitle(viewDetails)).toBe(
+      "PG Compass - Local/app/active_users",
+    );
+  });
+
   it("builds a title for the users view", () => {
     const usersView: WorkspaceTabView = {
       type: "users",
